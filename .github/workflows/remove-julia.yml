@@ -1,0 +1,15 @@
+name: Remove Julia Installation
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: 0 0 * * 1
+  push:
+  
+jobs:
+  Clean:
+    runs-on: self-hosted, ubuntu-24
+    steps:
+      - name: "Remove Julia installation"
+      - run: /usr/bin/rm -fr /builds/actions-runner/_work/_tool/julia /builds/.julia || /usr/bin/true
+        shell: bash
