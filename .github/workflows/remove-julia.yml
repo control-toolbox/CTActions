@@ -11,7 +11,7 @@ on:
   
 jobs:
   Clean:
-    runs-on: self-hosted, ubuntu-24
+    runs-on: self-hosted
     steps:
       - name: "Remove Julia installation"
         run: /usr/bin/rm -fr /builds/actions-runner/_work/_tool/julia /builds/.julia || /usr/bin/true
