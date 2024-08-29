@@ -3,7 +3,7 @@ name: Remove Julia Installation
 on:
   workflow_dispatch:
   schedule:
-    - cron: 12 3 * * 1
+    - cron: 23 1 * * 1
   
 jobs:
   Clean:
