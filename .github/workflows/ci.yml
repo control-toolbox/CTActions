@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      os:
+        required: true
+        type: string
+      arch:
+        required: true
+        type: string
+
+jobs:
+  test:
+    name: Julia ${{ inputs.version }} - ${{ inputs.os }} - ${{ inputs.arch }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: julia-actions/setup-julia@latest
+        with:
+          version: ${{ inputs.version }}
+          arch: ${{ inputs.arch }}
+      - uses: julia-actions/julia-runtest@latest

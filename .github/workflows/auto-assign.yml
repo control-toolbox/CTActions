@@ -1,0 +1,25 @@
+name: Auto Assign
+
+on:
+  workflow_call:
+    inputs:
+      assignees:
+        required: true
+        type: string
+      numOfAssignee:
+        required: true
+        type: number
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: 'Auto-assign issue'
+        uses: pozil/auto-assign-issue@v2
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          assignees: ${{ inputs.assignee }}
+          numOfAssignee: ${{ inputs.numOfAssignee }}
