@@ -9,6 +9,9 @@ on:
       pkgversion:
         required: true
         type: string
+      caller:
+        required: false
+        type: string
 
 jobs:
   break:
@@ -34,7 +37,7 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
 
       # Breakage test
-      - name: 'Breakage of ${{ inputs.pkg }}, ${{ inputs.pkgversion }} version'
+      - name: 'Breakage of ${{ inputs.pkg }}, ${{ inputs.pkgversion }} version, from ${{ inputs.caller }}'
         env:
           URL: ${{ inputs.pkg }}
           VERSION: ${{ inputs.pkgversion }}
@@ -86,7 +89,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: pr
+          name: pr-${{ inputs.caller }}
           path: pr/
 
   upload:
@@ -97,8 +100,9 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: pr
           path: pr/
+          pattern: pr-*
+          merge-multiple: true
 
       - run: ls
       - run: |
@@ -130,5 +134,5 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: pr
+          name: pr-${{ inputs.caller }}
           path: pr/
