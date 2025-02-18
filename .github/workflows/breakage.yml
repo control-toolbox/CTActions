@@ -1,3 +1,8 @@
+# test if the current PR breaks compatibility with OptimalControl.jl
+# the workflow has 2 steps
+# break: clone repo, build and test OptimalControl, and create artifact from the breakage/ folder
+# upload: download artifact, create summary, and add a comment on the PR
+
 name: Breakage
 
 on:
@@ -43,8 +48,8 @@ jobs:
           VERSION: ${{ inputs.pkgversion }}
         run: |
           set -v
-          mkdir -p ./pr
-          echo "${{ github.event.number }}" > ./pr/NR
+          mkdir -p ./breakage
+          echo "${{ github.event.number }}" > ./breakage/NR
           #
           PKG_SRC_PATH=`pwd`
           PKG_SRC_NAME=`basename -s ".jl" $PKG_SRC_PATH`
@@ -70,7 +75,7 @@ jobs:
           julia -e 'using Pkg;
             PKG, TAG, VERSION, PKG_SRC_VERSION = ENV["PKG"], ENV["TAG"], ENV["VERSION"], ENV["PKG_SRC_VERSION"]
             joburl = joinpath(ENV["GITHUB_SERVER_URL"], ENV["GITHUB_REPOSITORY"], "actions/runs", ENV["GITHUB_RUN_ID"])
-            open("../pr/$PKG-$VERSION", "w") do io
+            open("../breakage/$PKG-$VERSION", "w") do io
               try
                 TAG == "no_tag" && error("Not tag for $VERSION")
                 pkg"activate .";
@@ -89,8 +94,8 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: pr-${{ inputs.pkgversion }}-${{ inputs.caller }}
-          path: pr/
+          name: breakage-${{ inputs.pkgversion }}-${{ inputs.caller }}
+          path: breakage/
 
   upload:
     needs: break
@@ -104,20 +109,20 @@ jobs:
           pattern: pr-*
           merge-multiple: true
 
-      - run: ls
+      - run: ls -R
       - run: |
-          cd pr
-          echo "Breakage test results" > MSG
-          echo "Date: $(TZ=UTC-2 date '+%Y-%m-%d %H:%M:%S')" >> MSG
-          echo "| Package name | latest | stable |" >> MSG
-          echo "|--|--|--|" >> MSG
+          cd breakage
+          echo "Breakage test results" > summary.md
+          echo "Date: $(TZ=UTC-2 date '+%Y-%m-%d %H:%M:%S')" >> summary.md
+          echo "| Package name | latest | stable |" >> summary.md
+          echo "|--|--|--|" >> summary.md
           count=0
-          for file in *
+          for file in breakage-*
           do
-            [ "$file" == "NR" ] && continue
-            [ "$file" == "MSG" ] && continue
+            # [ "$file" == "NR" ] && continue
+            # [ "$file" == "summary.md" ] && continue
             if [ $count == "0" ]; then
-              name=$(echo $file | cut -f1 -d-)
+              name=$(echo $file | cut -f2 -d-)
               echo -n "| $name | "
             else
               echo -n "| "
@@ -130,9 +135,48 @@ jobs:
               echo " |"
               count=0
             fi
-          done >> MSG
+          done >> summary.md
 
-      - uses: actions/upload-artifact@v4
+      - name: PR comment with file
+        uses: actions/github-script@v6
         with:
-          name: pr-${{ inputs.pkgversion }}-${{ inputs.caller }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // Import file content from summary.md
+            const fs = require('fs')
+            const filePath = 'breakage/summary.md'
+            const msg = fs.readFileSync(filePath, 'utf8')
+
+            // Get the current PR number from context
+            const prNumber = context.payload.pull_request.number
+
+            // Fetch existing comments on the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber
+            })
+
+            // Find a previous comment by the bot to update
+            const botComment = comments.find(comment => comment.user.id === 41898282)
+
+            if (botComment) {
+              // Update the existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: msg
+              })
+            } else {
+              // Create a new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body: msg
+              })
+            }
+            
+              
           path: pr/
