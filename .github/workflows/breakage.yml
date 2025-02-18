@@ -1,7 +1,7 @@
 # test if the current PR breaks compatibility with OptimalControl.jl
 # the workflow has 2 steps
 # break: clone repo, build and test OptimalControl, and create artifact from the breakage/ folder
-# upload: download artifact, create summary, and add a comment on the PR
+# comment: download artifact, create summary, and add a comment on the PR
 
 name: Breakage
 
@@ -72,7 +72,7 @@ jobs:
           julia -e 'using Pkg;
             PKG, TAG, VERSION, PKG_SRC_VERSION = ENV["PKG"], ENV["TAG"], ENV["VERSION"], ENV["PKG_SRC_VERSION"]
             joburl = joinpath(ENV["GITHUB_SERVER_URL"], ENV["GITHUB_REPOSITORY"], "actions/runs", ENV["GITHUB_RUN_ID"])
-            open("../breakage/$PKG-$VERSION", "w") do io
+            open("../breakage/breakage-$PKG-$VERSION", "w") do io
               try
                 TAG == "no_tag" && error("Not tag for $VERSION")
                 pkg"activate .";
@@ -94,7 +94,7 @@ jobs:
           name: breakage-${{ inputs.pkgversion }}
           path: breakage/
 
-  upload:
+  comment:
     needs: break
     runs-on: ubuntu-latest
     steps:
