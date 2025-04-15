@@ -91,7 +91,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: breakage-${{ inputs.pkgversion }}
+          name: breakage-${{ inputs.pkg }}-${{ inputs.pkgversion }}
           path: breakage/
 
   comment:
