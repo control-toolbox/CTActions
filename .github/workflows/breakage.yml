@@ -41,7 +41,7 @@ jobs:
       # Breakage test
       - name: 'Breakage of ${{ inputs.pkg }}, ${{ inputs.pkgversion }} version, from ${{ inputs.caller }}'
         env:
-          URL: ${{ inputs.pkg }}
+          URL: ${{ inputs.pkg.path }}/${{ inputs.pkg.name }}.jl
           VERSION: ${{ inputs.pkgversion }}
         run: |
           set -v
@@ -91,7 +91,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: ${{ breakage-$(basename "inputs.pkg" .jl)-inputs.pkgversion }}
+          name: breakage-${{ inputs.pkg.name }}-${{ inputs.pkgversion }}
           #name: breakage-OptimalControl-${{ inputs.pkgversion }}
           path: breakage/
 
