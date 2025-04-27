@@ -91,7 +91,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: breakage-$(basename "${{ inputs.pkg }}" .jl)-${{ inputs.pkgversion }}
+          name: ${{ breakage-$(basename "inputs.pkg" .jl)-inputs.pkgversion }}
           #name: breakage-OptimalControl-${{ inputs.pkgversion }}
           path: breakage/
 
