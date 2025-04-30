@@ -44,8 +44,8 @@ jobs:
           VERSION: ${{ inputs.pkgversion }}
         run: |
           set -v
-          mkdir -p ./pr
-          echo "${{ github.event.number }}" > ./pr/NR
+          mkdir -p ./breakage
+          #echo "${{ github.event.number }}" > ./breakage/NR
           #
           PKG_SRC_PATH=`pwd`
           PKG_SRC_NAME=`basename -s ".jl" $PKG_SRC_PATH`
