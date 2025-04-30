@@ -42,7 +42,7 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
 
       # Breakage test
-      - name: 'Breakage of ${{ inputs.pkgname }}, ${{ inputs.pkgversion }} version, from ${{ inputs.caller }}'
+      - name: 'Breakage of ${{ inputs.pkgname }}, ${{ inputs.pkgversion }} version'
         env:
           URL: ${{ inputs.pkgpath }}/${{ inputs.pkgname }}.jl
           VERSION: ${{ inputs.pkgversion }}
