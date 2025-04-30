@@ -16,7 +16,7 @@ on:
 jobs:
   break:
     runs-on: ubuntu-latest
-    if: contains(github.event.pull_request.labels.*.name, 'run breakage applications')
+#    if: contains(github.event.pull_request.labels.*.name, 'run breakage applications')
     steps:
       - uses: actions/checkout@v4
 
