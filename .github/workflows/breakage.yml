@@ -69,8 +69,15 @@ jobs:
           fi
           export TAG
           #
-          #PKG_SRC_VERSION=$(julia --project=@. -e 'using Pkg, Logging; with_logger(NullLogger()) do; Pkg.instantiate(); Pkg.installed()["'$PKG_SRC_NAME'"] |> println; end')
-          PKG_SRC_VERSION=""
+          PKG_SRC_VERSION=$(julia --project=@. -e 'using Pkg, Logging;
+            with_logger(NullLogger()) do
+            Pkg.instantiate()
+            try
+              version=Pkg.installed()["'$PKG_SRC_NAME'"]
+              println("compat: v", version)
+            catch e
+              println("")
+            end')
           export PKG_SRC_VERSION
           #
           julia -e 'using Pkg;
