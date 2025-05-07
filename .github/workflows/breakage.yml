@@ -17,6 +17,10 @@ on:
       pkgversion:
         required: true
         type: string
+      pkgbreak: # test or doc
+        required: false
+        default: 'test'
+        type: string
 
 jobs:
   break:
@@ -42,10 +46,11 @@ jobs:
       - uses: julia-actions/julia-buildpkg@v1
 
       # Breakage test
-      - name: 'Breakage of ${{ inputs.pkgname }}, ${{ inputs.pkgversion }} version'
+      - name: 'Breakage of ${{ inputs.pkgname }}, ${{ inputs.pkgversion }} version, ${{ inputs.pkgbreak }}'
         env:
           URL: ${{ inputs.pkgpath }}/${{ inputs.pkgname }}.jl
           VERSION: ${{ inputs.pkgversion }}
+          BREAK: ${{ inputs.pkgbreak }}
         run: |
           set -v
           mkdir -p ./breakage
@@ -82,29 +87,42 @@ jobs:
           export PKG_SRC_VERSION
           #
           julia -e 'using Pkg;
-            PKG, TAG, VERSION, PKG_SRC_VERSION = ENV["PKG"], ENV["TAG"], ENV["VERSION"], ENV["PKG_SRC_VERSION"]
+            PKG = ENV["PKG"]
+            TAG = ENV["TAG"]
+            VERSION = ENV["VERSION"]
+            PKG_SRC_VERSION = ENV["PKG_SRC_VERSION"]
+            BREAK = ENV["BREAK"]
             joburl = joinpath(ENV["GITHUB_SERVER_URL"], ENV["GITHUB_REPOSITORY"], "actions/runs", ENV["GITHUB_RUN_ID"])
             open("../breakage/breakage-$PKG-$VERSION", "w") do io
               try
                 TAG == "no_tag" && error("Not tag for $VERSION")
-                pkg"activate .";
-                pkg"instantiate";
-                pkg"status";
-                pkg"dev ../";
-                pkg"build";
-                pkg"test";
-
-                print(io, "[![](https://img.shields.io/badge/$TAG-Pass-green)]($joburl) ", PKG_SRC_VERSION);
+                if BREAK == "test"
+                  pkg"activate .";
+                  pkg"instantiate";
+                  pkg"status";
+                  pkg"dev ../";
+                  pkg"build";
+                  pkg"test";
+                elseif BREAK == "doc"
+                  pkg"activate docs";
+                  pkg"instantiate";
+                  pkg"status";
+                  pkg"dev ../";
+                  pkg"build";
+                  include("docs/make.jl");
+                else
+                  error("pkgbreak should be test or doc, not " * BREAK)
+                end
+                print(io, "[![](https://img.shields.io/badge/$BREAK%20$TAG-✅-grey)]($joburl) ", PKG_SRC_VERSION);
               catch e
                 @error e;
-                print(io, "[![](https://img.shields.io/badge/$TAG-Fail-red)]($joburl) ", PKG_SRC_VERSION);
+                print(io, "[![](https://img.shields.io/badge/$BREAK%20$TAG-❌-grey)]($joburl) ", PKG_SRC_VERSION);
               end;
             end'
 
       - uses: actions/upload-artifact@v4
         with:
           name: breakage-${{ inputs.pkgname }}-${{ inputs.pkgversion }}
-          #name: breakage-OptimalControl-${{ inputs.pkgversion }}
           path: breakage/
 
   comment:
@@ -124,7 +142,7 @@ jobs:
           cd breakage
           echo "Breakage test results" > summary.md
           echo "Date: $(TZ=UTC-2 date '+%Y-%m-%d %H:%M:%S')" >> summary.md
-          echo "| Package name | latest | stable |" >> summary.md
+          echo "| Name | Latest | Stable |" >> summary.md
           echo "|--|--|--|" >> summary.md
           count=0
           for file in breakage-*
