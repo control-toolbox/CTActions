@@ -3,6 +3,10 @@ name: Compat Helper
 on:
   workflow_call:
 
+permissions:
+  contents: write
+  pull-requests: write
+  
 jobs:
   CompatHelper:
     runs-on: ubuntu-latest
