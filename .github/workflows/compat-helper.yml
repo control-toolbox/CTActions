@@ -44,8 +44,7 @@ jobs:
           import CompatHelper
           CompatHelper.main(
               subdirs=["", "docs", "test"],
-              entry_type=CompatHelper.DropEntry(),
-              ignore=["SparseArrays", "LinearAlgebra", "Statistics", "Random"]
+              entry_type=CompatHelper.DropEntry()
           )
         shell: julia --color=yes {0}
         env:
