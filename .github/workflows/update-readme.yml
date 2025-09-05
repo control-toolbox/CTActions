@@ -1,0 +1,40 @@
+name: Update README with ABOUT.md
+on:
+  workflow_call:
+    inputs:
+      template_file:
+        description: 'Path to README template file'
+        required: true
+        type: string
+      output_file:
+        description: 'Path to generated README'
+        required: true
+        type: string
+
+jobs:
+  generate-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Fetch ABOUT.md from central repo
+        run: |
+          curl -sL "https://raw.githubusercontent.com/control-toolbox/meta/main/ABOUT.md" -o ABOUT.md
+
+      - name: Generate README
+        run: |
+          sed '/<!-- INCLUDE_ABOUT -->/ {
+            r ABOUT.md
+            d
+          }' "${{ inputs.template_file }}" > "${{ inputs.output_file }}"
+
+      - name: Commit README
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git add "${{ inputs.output_file }}"
+          git commit -m "Update README with latest ABOUT.md" || echo "No changes to commit"
+          git push
