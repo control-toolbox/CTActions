@@ -1,4 +1,4 @@
-name: Update README with ABOUT.md
+name: Update README with ABOUT.md and INSTALL.md
 
 on:
   workflow_call:
@@ -9,6 +9,10 @@ on:
         type: string
       output_file:
         description: 'Path to generated README'
+        required: true
+        type: string
+      package_name:
+        description: 'Name of the Julia package for Installation section'
         required: true
         type: string
 
@@ -28,12 +32,28 @@ jobs:
         run: |
           curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/ABOUT.md" -o ABOUT.md
 
-      - name: Generate README
+      - name: Fetch INSTALL.md from central repo (temporary file)
         run: |
+          curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/INSTALL.md" -o INSTALL.md
+
+      - name: Generate README with substituted placeholders
+        run: |
+          PACKAGE="${{ inputs.package_name }}"
+          
+          # replace {{PACKAGE}} in INSTALL.md
+          sed "s/{{PACKAGE}}/$PACKAGE/g" INSTALL.md > INSTALL.tmp.md
+          
+          # insert ABOUT.md
           sed '/<!-- INCLUDE_ABOUT -->/ {
             r ABOUT.md
             d
-          }' "${{ inputs.template_file }}" > "${{ inputs.output_file }}"
+          }' "${{ inputs.template_file }}" > README.tmp.md
+          
+          # insert INSTALL.md
+          sed '/<!-- INCLUDE_INSTALL -->/ {
+            r INSTALL.tmp.md
+            d
+          }' README.tmp.md > "${{ inputs.output_file }}"
 
       - name: Stage README changes only
         run: |
@@ -47,8 +67,7 @@ jobs:
           else
             git config --local user.name "github-actions[bot]"
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "Update README with latest ABOUT.md"
-          fi
+            git commit -m "Update README with latest ABOUT.md and INSTALL.md"
 
       - name: Push changes and create PR
         env:
@@ -58,8 +77,8 @@ jobs:
           git push origin HEAD:$BRANCH
 
           gh pr create \
-            --title "Update README with latest ABOUT.md" \
-            --body "This PR updates the README with the latest version of ABOUT.md from the control-toolbox/.github repo." \
+            --title "Update README with latest ABOUT.md and INSTALL.md" \
+            --body "This PR updates the README with the latest version of ABOUT.md and INSTALL.md from the control-toolbox/.github repo." \
             --base main \
             --head $BRANCH \
             --assignee ocots || echo "PR already exists or could not be created"
