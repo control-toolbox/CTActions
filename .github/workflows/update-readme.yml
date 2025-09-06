@@ -1,4 +1,4 @@
-name: Update README with ABOUT.md and INSTALL.md
+name: Update README with ABOUT.md, INSTALL.md and CONTRIBUTING.md
 
 on:
   workflow_call:
@@ -15,6 +15,10 @@ on:
         description: 'Name of the Julia package for Installation section'
         required: true
         type: string
+      repo_name:
+        description: 'Repository name for CONTRIBUTING.md links'
+        required: true
+        type: string
 
 jobs:
   generate-readme:
@@ -28,32 +32,46 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch ABOUT.md from central repo (temporary file)
+      - name: Fetch ABOUT.md from central repo
         run: |
           curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/ABOUT.md" -o ABOUT.md
 
-      - name: Fetch INSTALL.md from central repo (temporary file)
+      - name: Fetch INSTALL.md from central repo
         run: |
           curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/INSTALL.md" -o INSTALL.md
+
+      - name: Fetch CONTRIBUTING.md from central repo
+        run: |
+          curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/CONTRIBUTING.md" -o CONTRIBUTING.md
 
       - name: Generate README with substituted placeholders
         run: |
           PACKAGE="${{ inputs.package_name }}"
-          
-          # replace {{PACKAGE}} in INSTALL.md
+          REPO="${{ inputs.repo_name }}"
+
+          # Replace {{PACKAGE}} in INSTALL.md
           sed "s/{{PACKAGE}}/$PACKAGE/g" INSTALL.md > INSTALL.tmp.md
           
-          # insert ABOUT.md
+          # Replace {{REPO}} in CONTRIBUTING.md
+          sed "s/{{REPO}}/$REPO/g" CONTRIBUTING.md > CONTRIBUTING.tmp.md
+          
+          # Insert ABOUT.md
           sed '/<!-- INCLUDE_ABOUT -->/ {
             r ABOUT.md
             d
           }' "${{ inputs.template_file }}" > README.tmp.md
           
-          # insert INSTALL.md
+          # Insert INSTALL.md
           sed '/<!-- INCLUDE_INSTALL -->/ {
             r INSTALL.tmp.md
             d
-          }' README.tmp.md > "${{ inputs.output_file }}"
+          }' README.tmp.md > README.tmp2.md
+          
+          # Insert CONTRIBUTING.md
+          sed '/<!-- INCLUDE_CONTRIBUTING -->/ {
+            r CONTRIBUTING.tmp.md
+            d
+          }' README.tmp2.md > "${{ inputs.output_file }}"
 
       - name: Stage README changes only
         run: |
@@ -67,7 +85,7 @@ jobs:
           else
             git config --local user.name "github-actions[bot]"
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "Update README with latest ABOUT.md and INSTALL.md"
+            git commit -m "Update README with latest ABOUT.md, INSTALL.md and CONTRIBUTING.md"
           fi
 
       - name: Push changes and create PR
@@ -78,8 +96,8 @@ jobs:
           git push origin HEAD:$BRANCH
 
           gh pr create \
-            --title "Update README with latest ABOUT.md and INSTALL.md" \
-            --body "This PR updates the README with the latest version of ABOUT.md and INSTALL.md from the control-toolbox/.github repo." \
+            --title "Update README with latest ABOUT.md, INSTALL.md and CONTRIBUTING.md" \
+            --body "This PR updates the README with the latest version of ABOUT.md, INSTALL.md and CONTRIBUTING.md from the control-toolbox/.github repo." \
             --base main \
             --head $BRANCH \
             --assignee ocots || echo "PR already exists or could not be created"
