@@ -5,15 +5,16 @@ on:
       template_file:
         description: 'Path to README template file'
         required: true
-        type: string
       output_file:
         description: 'Path to generated README'
         required: true
-        type: string
 
 jobs:
   generate-readme:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write      # needed to push branch
+      pull-requests: write # needed to create PR
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -31,10 +32,27 @@ jobs:
             d
           }' "${{ inputs.template_file }}" > "${{ inputs.output_file }}"
 
-      - name: Commit README
+      - name: Commit changes
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git add "${{ inputs.output_file }}"
           git commit -m "Update README with latest ABOUT.md" || echo "No changes to commit"
-          git push
+
+      - name: Push changes and create PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git diff --quiet HEAD^ HEAD; then
+            echo "No changes to push"
+            exit 0
+          fi
+
+          BRANCH="update-readme-$(date +%s)"
+          git push origin HEAD:$BRANCH
+
+          gh pr create \
+            --title "Update README with latest ABOUT.md" \
+            --body "This PR updates the README with the latest version of ABOUT.md from the control-toolbox/meta repo." \
+            --base main \
+            --head $BRANCH || echo "PR already exists or could not be created"
