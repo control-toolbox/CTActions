@@ -1,4 +1,5 @@
 name: Update README with ABOUT.md
+
 on:
   workflow_call:
     inputs:
@@ -55,6 +56,7 @@ jobs:
 
           gh pr create \
             --title "Update README with latest ABOUT.md" \
-            --body "This PR updates the README with the latest version of ABOUT.md from the control-toolbox/meta repo." \
+            --body "This PR updates the README with the latest version of ABOUT.md from the control-toolbox/.github repo." \
             --base main \
-            --head $BRANCH || echo "PR already exists or could not be created"
+            --head $BRANCH \
+            --assignee ocots || echo "PR already exists or could not be created"
