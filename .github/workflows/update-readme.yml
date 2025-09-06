@@ -19,6 +19,10 @@ on:
         description: 'Repository name (e.g., OptimalControl.jl)'
         required: true
         type: string
+      citation_badge:
+        description: 'Markdown badge for Citation/DOI (e.g., [![DOI](https://zenodo.org/badge/XXXX.svg)](https://zenodo.org/doi/XXXX))'
+        required: false
+        type: string
 
 jobs:
   generate-readme:
@@ -42,6 +46,7 @@ jobs:
         run: |
           PACKAGE="${{ inputs.package_name }}"
           REPO="${{ inputs.repo_name }}"
+          CITATION="${{ inputs.citation_badge }}"
 
           # Replace placeholders in INSTALL.md and CONTRIBUTING.md
           sed "s/{{PACKAGE}}/$PACKAGE/g" INSTALL.md > INSTALL.tmp.md
@@ -90,7 +95,9 @@ jobs:
                     echo "| **Release / Version** | [![Release](https://juliahub.com/docs/General/$PACKAGE/stable/version.svg)](https://github.com/control-toolbox/$REPO/releases) |"
                     ;;
                   Citation)
-                    echo "| **Citation / DOI** | [![DOI](https://zenodo.org/badge/541187171.svg)](https://zenodo.org/doi/10.5281/zenodo.13336563) |"
+                    if [ -n "$CITATION" ]; then
+                      echo "| **Citation** | $CITATION |"
+                    fi
                     ;;
                   License)
                     echo "| **License** | [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/control-toolbox/$REPO/blob/master/LICENSE) |"
@@ -110,7 +117,7 @@ jobs:
               r badges.tmp.md
               d
             }" README.tmp3.md > "${{ inputs.output_file }}"
-            
+
             # Cleanup temporary files
             rm -f INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md badges.tmp.md
           else
