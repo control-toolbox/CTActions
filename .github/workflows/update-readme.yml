@@ -24,8 +24,8 @@ jobs:
   generate-readme:
     runs-on: ubuntu-latest
     permissions:
-      contents: write      # needed to push branch
-      pull-requests: write # needed to create PR
+      contents: write
+      pull-requests: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@v3
@@ -43,7 +43,7 @@ jobs:
           PACKAGE="${{ inputs.package_name }}"
           REPO="${{ inputs.repo_name }}"
 
-          # Replace placeholders
+          # Replace placeholders in INSTALL.md and CONTRIBUTING.md
           sed "s/{{PACKAGE}}/$PACKAGE/g" INSTALL.md > INSTALL.tmp.md
           sed "s/{{REPO}}/$REPO/g" CONTRIBUTING.md > CONTRIBUTING.tmp.md
 
@@ -69,49 +69,53 @@ jobs:
           BADGES_LINE=$(grep '<!-- INCLUDE_BADGES:' README.tmp3.md || echo "")
           if [ -n "$BADGES_LINE" ]; then
             BADGES_LIST=$(echo $BADGES_LINE | sed 's/.*: \(.*\) -->/\1/' | sed 's/,/ /g')
-            TABLE="| **Category** | **Badge** |\n|-----------------------|-----------|\n"
-            for BADGE in $BADGES_LIST; do
-              case $BADGE in
-                Documentation)
-                  TABLE="$TABLE| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://control-toolbox.org/$PACKAGE/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)](https://control-toolbox.org/$PACKAGE/dev/) |\n"
-                  ;;
-                CI)
-                  TABLE="$TABLE| **CI / Build** | [![Build Status](https://github.com/control-toolbox/$PACKAGE/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/control-toolbox/$PACKAGE/actions/workflows/CI.yml?query=branch%3Amain) |\n"
-                  ;;
-                Coverage)
-                  TABLE="$TABLE| **Test Coverage** | [![Coverage](https://codecov.io/gh/control-toolbox/$PACKAGE/branch/main/graph/badge.svg)](https://codecov.io/gh/control-toolbox/$PACKAGE) |\n"
-                  ;;
-                PackageEvaluation)
-                  TABLE="$TABLE| **Package Evaluation** | [![PkgEval](https://img.shields.io/badge/Julia-package-purple)](https://juliahub.com/ui/Packages/General/$PACKAGE) [![Dependencies](https://juliahub.com/docs/General/$PACKAGE/stable/deps.svg)](https://juliahub.com/ui/Packages/General/$PACKAGE?t=2) |\n"
-                  ;;
-                Release)
-                  TABLE="$TABLE| **Release / Version** | [![Release](https://juliahub.com/docs/General/$PACKAGE/stable/version.svg)](https://github.com/control-toolbox/$PACKAGE/releases) |\n"
-                  ;;
-                Citation)
-                  TABLE="$TABLE| **Citation / DOI** | [![DOI](https://zenodo.org/badge/541187171.svg)](https://zenodo.org/doi/10.5281/zenodo.13336563) |\n"
-                  ;;
-                License)
-                  TABLE="$TABLE| **License** | [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/control-toolbox/$PACKAGE/blob/master/LICENSE) |\n"
-                  ;;
-                CodeStyle)
-                  TABLE="$TABLE| **Code Style / Quality** | [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/JuliaDiff/BlueStyle) [![Aqua.jl](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) |\n"
-                  ;;
-                Downloads)
-                  TABLE="$TABLE| **Downloads** | [![Monthly](https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Fmonthly_downloads/$PACKAGE&query=total_requests&suffix=%2Fmonth&label=Monthly%20Downloads)](https://juliapkgstats.com/pkg/$PACKAGE) [![Total](https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Ftotal_downloads/$PACKAGE&query=total_requests&label=Total%20Downloads)](https://juliapkgstats.com/pkg/$PACKAGE) |\n"
-                  ;;
-              esac
-            done
+            {
+              echo "| **Category** | **Badge** |"
+              echo "|-----------------------|-----------|"
+              for BADGE in $BADGES_LIST; do
+                case $BADGE in
+                  Documentation)
+                    echo "| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://control-toolbox.org/$PACKAGE/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)](https://control-toolbox.org/$PACKAGE/dev/) |"
+                    ;;
+                  CI)
+                    echo "| **CI / Build** | [![Build Status](https://github.com/control-toolbox/$PACKAGE/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/control-toolbox/$PACKAGE/actions/workflows/CI.yml?query=branch%3Amain) |"
+                    ;;
+                  Coverage)
+                    echo "| **Test Coverage** | [![Coverage](https://codecov.io/gh/control-toolbox/$PACKAGE/branch/main/graph/badge.svg)](https://codecov.io/gh/control-toolbox/$PACKAGE) |"
+                    ;;
+                  PackageEvaluation)
+                    echo "| **Package Evaluation** | [![PkgEval](https://img.shields.io/badge/Julia-package-purple)](https://juliahub.com/ui/Packages/General/$PACKAGE) [![Dependencies](https://juliahub.com/docs/General/$PACKAGE/stable/deps.svg)](https://juliahub.com/ui/Packages/General/$PACKAGE?t=2) |"
+                    ;;
+                  Release)
+                    echo "| **Release / Version** | [![Release](https://juliahub.com/docs/General/$PACKAGE/stable/version.svg)](https://github.com/control-toolbox/$PACKAGE/releases) |"
+                    ;;
+                  Citation)
+                    echo "| **Citation / DOI** | [![DOI](https://zenodo.org/badge/541187171.svg)](https://zenodo.org/doi/10.5281/zenodo.13336563) |"
+                    ;;
+                  License)
+                    echo "| **License** | [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/control-toolbox/$PACKAGE/blob/master/LICENSE) |"
+                    ;;
+                  CodeStyle)
+                    echo "| **Code Style / Quality** | [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/JuliaDiff/BlueStyle) [![Aqua.jl](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) |"
+                    ;;
+                  Downloads)
+                    echo "| **Downloads** | [![Monthly](https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Fmonthly_downloads/$PACKAGE&query=total_requests&suffix=%2Fmonth&label=Monthly%20Downloads)](https://juliapkgstats.com/pkg/$PACKAGE) [![Total](https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Ftotal_downloads/$PACKAGE&query=total_requests&label=Total%20Downloads)](https://juliapkgstats.com/pkg/$PACKAGE) |"
+                    ;;
+                esac
+              done
+            } > badges.tmp.md
+
+            # Replace placeholder with actual table
             sed "/<!-- INCLUDE_BADGES:/{
-              r /dev/stdin
+              r badges.tmp.md
               d
-            }" README.tmp3.md <<< "$TABLE" > "${{ inputs.output_file }}"
+            }" README.tmp3.md > "${{ inputs.output_file }}"
           else
             mv README.tmp3.md "${{ inputs.output_file }}"
           fi
 
       - name: Stage README changes only
-        run: |
-          git add "${{ inputs.output_file }}"
+        run: git add "${{ inputs.output_file }}"
 
       - name: Commit changes if needed
         run: |
@@ -130,7 +134,6 @@ jobs:
         run: |
           BRANCH="update-readme-$(date +%s)"
           git push origin HEAD:$BRANCH
-
           gh pr create \
             --title "Update README with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges" \
             --body "This PR updates the README with the latest version of ABOUT.md, INSTALL.md, CONTRIBUTING.md, and badges from the control-toolbox/.github repo." \
