@@ -24,7 +24,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch ABOUT.md from central repo
+      - name: Fetch ABOUT.md from central repo (temporary file)
         run: |
           curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/ABOUT.md" -o ABOUT.md
 
@@ -35,7 +35,7 @@ jobs:
             d
           }' "${{ inputs.template_file }}" > "${{ inputs.output_file }}"
 
-      - name: Stage changes
+      - name: Stage README changes only
         run: |
           git add "${{ inputs.output_file }}"
 
