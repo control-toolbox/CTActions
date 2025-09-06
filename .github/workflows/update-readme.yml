@@ -12,11 +12,11 @@ on:
         required: true
         type: string
       package_name:
-        description: 'Name of the Julia package for placeholders'
+        description: 'Name of the Julia package (e.g., OptimalControl)'
         required: true
         type: string
       repo_name:
-        description: 'Repository name for CONTRIBUTING.md links'
+        description: 'Repository name (e.g., OptimalControl.jl)'
         required: true
         type: string
 
@@ -78,22 +78,22 @@ jobs:
                     echo "| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://control-toolbox.org/$PACKAGE/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)](https://control-toolbox.org/$PACKAGE/dev/) |"
                     ;;
                   CI)
-                    echo "| **CI / Build** | [![Build Status](https://github.com/control-toolbox/$PACKAGE.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/control-toolbox/$PACKAGE.jl/actions/workflows/CI.yml?query=branch%3Amain) |"
+                    echo "| **CI / Build** | [![Build Status](https://github.com/control-toolbox/$REPO/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/control-toolbox/$REPO/actions/workflows/CI.yml?query=branch%3Amain) |"
                     ;;
                   Coverage)
-                    echo "| **Test Coverage** | [![Coverage](https://codecov.io/gh/control-toolbox/$PACKAGE.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/control-toolbox/$PACKAGE.jl) |"
+                    echo "| **Test Coverage** | [![Coverage](https://codecov.io/gh/control-toolbox/$REPO/branch/main/graph/badge.svg)](https://codecov.io/gh/control-toolbox/$REPO) |"
                     ;;
                   PackageEvaluation)
                     echo "| **Package Evaluation** | [![PkgEval](https://img.shields.io/badge/Julia-package-purple)](https://juliahub.com/ui/Packages/General/$PACKAGE) [![Dependencies](https://juliahub.com/docs/General/$PACKAGE/stable/deps.svg)](https://juliahub.com/ui/Packages/General/$PACKAGE?t=2) |"
                     ;;
                   Release)
-                    echo "| **Release / Version** | [![Release](https://juliahub.com/docs/General/$PACKAGE/stable/version.svg)](https://github.com/control-toolbox/$PACKAGE/releases) |"
+                    echo "| **Release / Version** | [![Release](https://juliahub.com/docs/General/$PACKAGE/stable/version.svg)](https://github.com/control-toolbox/$REPO/releases) |"
                     ;;
                   Citation)
                     echo "| **Citation / DOI** | [![DOI](https://zenodo.org/badge/541187171.svg)](https://zenodo.org/doi/10.5281/zenodo.13336563) |"
                     ;;
                   License)
-                    echo "| **License** | [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/control-toolbox/$PACKAGE/blob/master/LICENSE) |"
+                    echo "| **License** | [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/control-toolbox/$REPO/blob/master/LICENSE) |"
                     ;;
                   CodeStyle)
                     echo "| **Code Style / Quality** | [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/JuliaDiff/BlueStyle) [![Aqua.jl](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) |"
