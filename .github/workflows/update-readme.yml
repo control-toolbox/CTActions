@@ -25,7 +25,7 @@ jobs:
 
       - name: Fetch ABOUT.md from central repo
         run: |
-          curl -sL "https://raw.githubusercontent.com/control-toolbox/meta/main/ABOUT.md" -o ABOUT.md
+          curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/ABOUT.md" -o ABOUT.md
 
       - name: Generate README
         run: |
