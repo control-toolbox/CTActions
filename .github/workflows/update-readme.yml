@@ -23,6 +23,10 @@ on:
         description: 'Markdown badge for Citation/DOI (e.g., [![DOI](https://zenodo.org/badge/XXXX.svg)](https://zenodo.org/doi/XXXX))'
         required: false
         type: string
+      assignee:
+        description: 'GitHub username to assign the PR to. Leave empty for no assignee.'
+        required: false
+        type: string
 
 jobs:
   generate-readme:
@@ -145,9 +149,19 @@ jobs:
         run: |
           BRANCH="update-readme-$(date +%s)"
           git push origin HEAD:$BRANCH
-          gh pr create \
-            --title "Update README with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges" \
-            --body "This PR updates the README with the latest version of ABOUT.md, INSTALL.md, CONTRIBUTING.md, and badges from the control-toolbox/.github repo." \
-            --base main \
-            --head $BRANCH \
-            --assignee ocots || echo "PR already exists or could not be created"
+
+          # Only assign if input is non-empty
+          if [ -n "${{ inputs.assignee }}" ]; then
+            gh pr create \
+              --title "Update README with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges" \
+              --body "This PR updates the README with the latest version of ABOUT.md, INSTALL.md, CONTRIBUTING.md, and badges from the control-toolbox/.github repo." \
+              --base main \
+              --head $BRANCH \
+              --assignee "${{ inputs.assignee }}" || echo "PR already exists or could not be created"
+          else
+            gh pr create \
+              --title "Update README with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges" \
+              --body "This PR updates the README with the latest version of ABOUT.md, INSTALL.md, CONTRIBUTING.md, and badges from the control-toolbox/.github repo." \
+              --base main \
+              --head $BRANCH || echo "PR already exists or could not be created"
+          fi
