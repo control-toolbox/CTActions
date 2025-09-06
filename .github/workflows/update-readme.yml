@@ -75,7 +75,7 @@ jobs:
               for BADGE in $BADGES_LIST; do
                 case $BADGE in
                   Documentation)
-                    echo "| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://control-toolbox.org/$PACKAGE/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)](https://control-toolbox.org/$PACKAGE/dev/) |"
+                    echo "| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://control-toolbox.org/$REPO/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)](https://control-toolbox.org/$REPO/dev/) |"
                     ;;
                   CI)
                     echo "| **CI / Build** | [![Build Status](https://github.com/control-toolbox/$REPO/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/control-toolbox/$REPO/actions/workflows/CI.yml?query=branch%3Amain) |"
