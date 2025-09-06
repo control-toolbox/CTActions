@@ -110,8 +110,12 @@ jobs:
               r badges.tmp.md
               d
             }" README.tmp3.md > "${{ inputs.output_file }}"
+            
+            # Cleanup temporary files
+            rm -f INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md badges.tmp.md
           else
             mv README.tmp3.md "${{ inputs.output_file }}"
+            rm -f INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md
           fi
 
       - name: Stage README changes only
