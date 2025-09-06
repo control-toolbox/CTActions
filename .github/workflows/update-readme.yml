@@ -1,4 +1,4 @@
-name: Update README with ABOUT.md, INSTALL.md and CONTRIBUTING.md
+name: Update README with ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges
 
 on:
   workflow_call:
@@ -12,7 +12,7 @@ on:
         required: true
         type: string
       package_name:
-        description: 'Name of the Julia package for Installation section'
+        description: 'Name of the Julia package for placeholders'
         required: true
         type: string
       repo_name:
@@ -32,46 +32,82 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Fetch ABOUT.md from central repo
+      - name: Fetch central files
         run: |
           curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/ABOUT.md" -o ABOUT.md
-
-      - name: Fetch INSTALL.md from central repo
-        run: |
           curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/INSTALL.md" -o INSTALL.md
-
-      - name: Fetch CONTRIBUTING.md from central repo
-        run: |
           curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/CONTRIBUTING.md" -o CONTRIBUTING.md
 
-      - name: Generate README with substituted placeholders
+      - name: Generate README with substituted placeholders and badges
         run: |
           PACKAGE="${{ inputs.package_name }}"
           REPO="${{ inputs.repo_name }}"
 
-          # Replace {{PACKAGE}} in INSTALL.md
+          # Replace placeholders
           sed "s/{{PACKAGE}}/$PACKAGE/g" INSTALL.md > INSTALL.tmp.md
-          
-          # Replace {{REPO}} in CONTRIBUTING.md
           sed "s/{{REPO}}/$REPO/g" CONTRIBUTING.md > CONTRIBUTING.tmp.md
-          
+
           # Insert ABOUT.md
           sed '/<!-- INCLUDE_ABOUT -->/ {
             r ABOUT.md
             d
-          }' "${{ inputs.template_file }}" > README.tmp.md
-          
+          }' "${{ inputs.template_file }}" > README.tmp1.md
+
           # Insert INSTALL.md
           sed '/<!-- INCLUDE_INSTALL -->/ {
             r INSTALL.tmp.md
             d
-          }' README.tmp.md > README.tmp2.md
-          
+          }' README.tmp1.md > README.tmp2.md
+
           # Insert CONTRIBUTING.md
           sed '/<!-- INCLUDE_CONTRIBUTING -->/ {
             r CONTRIBUTING.tmp.md
             d
-          }' README.tmp2.md > "${{ inputs.output_file }}"
+          }' README.tmp2.md > README.tmp3.md
+
+          # Handle badges
+          BADGES_LINE=$(grep '<!-- INCLUDE_BADGES:' README.tmp3.md || echo "")
+          if [ -n "$BADGES_LINE" ]; then
+            BADGES_LIST=$(echo $BADGES_LINE | sed 's/.*: \(.*\) -->/\1/' | sed 's/,/ /g')
+            TABLE="| **Category** | **Badge** |\n|-----------------------|-----------|\n"
+            for BADGE in $BADGES_LIST; do
+              case $BADGE in
+                Documentation)
+                  TABLE="$TABLE| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://control-toolbox.org/$PACKAGE/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)](https://control-toolbox.org/$PACKAGE/dev/) |\n"
+                  ;;
+                CI)
+                  TABLE="$TABLE| **CI / Build** | [![Build Status](https://github.com/control-toolbox/$PACKAGE/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/control-toolbox/$PACKAGE/actions/workflows/CI.yml?query=branch%3Amain) |\n"
+                  ;;
+                Coverage)
+                  TABLE="$TABLE| **Test Coverage** | [![Coverage](https://codecov.io/gh/control-toolbox/$PACKAGE/branch/main/graph/badge.svg)](https://codecov.io/gh/control-toolbox/$PACKAGE) |\n"
+                  ;;
+                PackageEvaluation)
+                  TABLE="$TABLE| **Package Evaluation** | [![PkgEval](https://img.shields.io/badge/Julia-package-purple)](https://juliahub.com/ui/Packages/General/$PACKAGE) [![Dependencies](https://juliahub.com/docs/General/$PACKAGE/stable/deps.svg)](https://juliahub.com/ui/Packages/General/$PACKAGE?t=2) |\n"
+                  ;;
+                Release)
+                  TABLE="$TABLE| **Release / Version** | [![Release](https://juliahub.com/docs/General/$PACKAGE/stable/version.svg)](https://github.com/control-toolbox/$PACKAGE/releases) |\n"
+                  ;;
+                Citation)
+                  TABLE="$TABLE| **Citation / DOI** | [![DOI](https://zenodo.org/badge/541187171.svg)](https://zenodo.org/doi/10.5281/zenodo.13336563) |\n"
+                  ;;
+                License)
+                  TABLE="$TABLE| **License** | [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/control-toolbox/$PACKAGE/blob/master/LICENSE) |\n"
+                  ;;
+                CodeStyle)
+                  TABLE="$TABLE| **Code Style / Quality** | [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/JuliaDiff/BlueStyle) [![Aqua.jl](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) |\n"
+                  ;;
+                Downloads)
+                  TABLE="$TABLE| **Downloads** | [![Monthly](https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Fmonthly_downloads/$PACKAGE&query=total_requests&suffix=%2Fmonth&label=Monthly%20Downloads)](https://juliapkgstats.com/pkg/$PACKAGE) [![Total](https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Ftotal_downloads/$PACKAGE&query=total_requests&label=Total%20Downloads)](https://juliapkgstats.com/pkg/$PACKAGE) |\n"
+                  ;;
+              esac
+            done
+            sed "/<!-- INCLUDE_BADGES:/{
+              r /dev/stdin
+              d
+            }" README.tmp3.md <<< "$TABLE" > "${{ inputs.output_file }}"
+          else
+            mv README.tmp3.md "${{ inputs.output_file }}"
+          fi
 
       - name: Stage README changes only
         run: |
@@ -85,7 +121,7 @@ jobs:
           else
             git config --local user.name "github-actions[bot]"
             git config --local user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "Update README with latest ABOUT.md, INSTALL.md and CONTRIBUTING.md"
+            git commit -m "Update README with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges"
           fi
 
       - name: Push changes and create PR
@@ -96,8 +132,8 @@ jobs:
           git push origin HEAD:$BRANCH
 
           gh pr create \
-            --title "Update README with latest ABOUT.md, INSTALL.md and CONTRIBUTING.md" \
-            --body "This PR updates the README with the latest version of ABOUT.md, INSTALL.md and CONTRIBUTING.md from the control-toolbox/.github repo." \
+            --title "Update README with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges" \
+            --body "This PR updates the README with the latest version of ABOUT.md, INSTALL.md, CONTRIBUTING.md, and badges from the control-toolbox/.github repo." \
             --base main \
             --head $BRANCH \
             --assignee ocots || echo "PR already exists or could not be created"
