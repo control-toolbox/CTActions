@@ -39,18 +39,16 @@ jobs:
         run: |
           git add "${{ inputs.output_file }}"
 
-      - name: Exit if no changes
+      - name: Commit changes if needed
         run: |
           if git diff --cached --quiet; then
-            echo "No changes to push"
+            echo "No changes to commit"
             exit 0
+          else
+            git config --local user.name "github-actions[bot]"
+            git config --local user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -m "Update README with latest ABOUT.md"
           fi
-
-      - name: Commit changes
-        run: |
-          git config --local user.name "github-actions[bot]"
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "Update README with latest ABOUT.md"
 
       - name: Push changes and create PR
         env:
