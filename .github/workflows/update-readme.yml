@@ -5,9 +5,11 @@ on:
       template_file:
         description: 'Path to README template file'
         required: true
+        type: string
       output_file:
         description: 'Path to generated README'
         required: true
+        type: string
 
 jobs:
   generate-readme:
