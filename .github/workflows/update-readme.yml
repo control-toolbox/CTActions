@@ -78,10 +78,10 @@ jobs:
                     echo "| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://control-toolbox.org/$PACKAGE/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)](https://control-toolbox.org/$PACKAGE/dev/) |"
                     ;;
                   CI)
-                    echo "| **CI / Build** | [![Build Status](https://github.com/control-toolbox/$PACKAGE/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/control-toolbox/$PACKAGE/actions/workflows/CI.yml?query=branch%3Amain) |"
+                    echo "| **CI / Build** | [![Build Status](https://github.com/control-toolbox/$PACKAGE.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/control-toolbox/$PACKAGE.jl/actions/workflows/CI.yml?query=branch%3Amain) |"
                     ;;
                   Coverage)
-                    echo "| **Test Coverage** | [![Coverage](https://codecov.io/gh/control-toolbox/$PACKAGE/branch/main/graph/badge.svg)](https://codecov.io/gh/control-toolbox/$PACKAGE) |"
+                    echo "| **Test Coverage** | [![Coverage](https://codecov.io/gh/control-toolbox/$PACKAGE.jl/branch/main/graph/badge.svg)](https://codecov.io/gh/control-toolbox/$PACKAGE.jl) |"
                     ;;
                   PackageEvaluation)
                     echo "| **Package Evaluation** | [![PkgEval](https://img.shields.io/badge/Julia-package-purple)](https://juliahub.com/ui/Packages/General/$PACKAGE) [![Dependencies](https://juliahub.com/docs/General/$PACKAGE/stable/deps.svg)](https://juliahub.com/ui/Packages/General/$PACKAGE?t=2) |"
