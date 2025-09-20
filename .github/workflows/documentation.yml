@@ -17,6 +17,8 @@ jobs:
 
       - name: Debug assets before docs build
         run: |
+          echo "📂 pwd:"
+          pwd
           echo "📂 Listing docs/src/assets:"
           ls -R docs/src/assets || true
 
