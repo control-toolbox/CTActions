@@ -8,13 +8,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
       - uses: julia-actions/setup-julia@latest
       - uses: julia-actions/julia-buildpkg@latest
+
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+
+      - name: Debug assets before docs build
+        run: |
+          echo "📂 Listing docs/src/assets:"
+          ls -R docs/src/assets || true
+          echo "📂 Listing docs/build/assets:"
+          ls -R docs/build/assets || true
+
       - name: Build and deploy
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # If authenticating with GitHub Actions token
-          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }} # If authenticating with SSH deploy key
-          GKSwstype: 100 # To make GitHub Action work, disable showing a plot window with the GR backend of the Plots package
-        run: julia --project=docs/ -e 'ENV["GKSwstype"]="nul" ; include("docs/make.jl")'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+          GKSwstype: 100
+        run: |
+          julia --project=docs/ -e 'ENV["GKSwstype"]="nul"; include("docs/make.jl")'
