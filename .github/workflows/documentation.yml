@@ -12,15 +12,15 @@ jobs:
       - uses: julia-actions/setup-julia@latest
       - uses: julia-actions/julia-buildpkg@latest
 
-      - name: Install dependencies
-        run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
-
       - name: Debug assets before docs build
         run: |
           echo "📂 pwd:"
           pwd
           echo "📂 Listing docs/src/assets:"
           ls -R docs/src/assets || true
+          
+      - name: Install dependencies
+        run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
 
       - name: Build and deploy
         env:
