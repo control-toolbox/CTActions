@@ -129,39 +129,12 @@ jobs:
             rm -f INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md
           fi
 
-      - name: Stage README changes only
-        run: git add "${{ inputs.output_file }}"
-
-      - name: Commit changes if needed
-        run: |
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-            exit 0
-          else
-            git config --local user.name "github-actions[bot]"
-            git config --local user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "Update README with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges"
-          fi
-
-      - name: Push changes and create PR
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          BRANCH="update-readme-$(date +%s)"
-          git push origin HEAD:$BRANCH
-
-          # Only assign if input is non-empty
-          if [ -n "${{ inputs.assignee }}" ]; then
-            gh pr create \
-              --title "Update README with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges" \
-              --body "This PR updates the README with the latest version of ABOUT.md, INSTALL.md, CONTRIBUTING.md, and badges from the control-toolbox/.github repo." \
-              --base main \
-              --head $BRANCH \
-              --assignee "${{ inputs.assignee }}" || echo "PR already exists or could not be created"
-          else
-            gh pr create \
-              --title "Update README with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges" \
-              --body "This PR updates the README with the latest version of ABOUT.md, INSTALL.md, CONTRIBUTING.md, and badges from the control-toolbox/.github repo." \
-              --base main \
-              --head $BRANCH || echo "PR already exists or could not be created"
-          fi
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          commit-message: "Update README ($(date +'%Y-%m-%d')) with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges"
+          branch: update-readme-$(date +'%Y-%m-%d')
+          delete-branch: true
+          title: "Update README ($(date +'%Y-%m-%d')) with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges"
+          body: "This PR updates the README with the latest version of ABOUT.md, INSTALL.md, CONTRIBUTING.md, and badges from the control-toolbox/.github repo."
+          assignees: ${{ inputs.assignee }}
