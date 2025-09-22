@@ -133,13 +133,18 @@ jobs:
       - name: 🔍 Check for README or CONTRIBUTING changes
         id: check
         run: |
-          echo "🔎 Comparing ${inputs.output_file} and CONTRIBUTING.md for changes..."
-          if git diff --quiet "${{ inputs.output_file }}" CONTRIBUTING.md; then
+          OUTPUT_FILE="${{ inputs.output_file }}"
+          echo "🔎 Comparing $OUTPUT_FILE and CONTRIBUTING.md for changes..."
+
+          if [ ! -f CONTRIBUTING.md ]; then
+            echo "⚠️ CONTRIBUTING.md does not exist in the repo."
+            echo "changed=true" >> $GITHUB_OUTPUT
+          elif git diff --quiet "$OUTPUT_FILE" CONTRIBUTING.md; then
             echo "✅ No changes detected in README or CONTRIBUTING.md."
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "⚠️ Changes detected in README or CONTRIBUTING.md!"
-            git diff --name-only "${{ inputs.output_file }}" CONTRIBUTING.md
+            git diff --name-only "$OUTPUT_FILE" CONTRIBUTING.md
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
