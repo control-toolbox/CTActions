@@ -129,10 +129,10 @@ jobs:
             rm -f ABOUT.md INSTALL.md INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md
           fi
 
-      - name: Check for README / CONTRIBUTING changes
+      - name: Check for README or CONTRIBUTING changes
         id: check
         run: |
-          if [[ git diff --quiet "${{ inputs.output_file }}" || git diff --quiet "CONTRIBUTING.md" ]]; then
+          if git diff --quiet "${{ inputs.output_file }}" CONTRIBUTING.md; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
