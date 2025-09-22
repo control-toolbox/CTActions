@@ -123,10 +123,10 @@ jobs:
             }" README.tmp3.md > "${{ inputs.output_file }}"
 
             # Cleanup temporary files
-            rm -f INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md badges.tmp.md
+            rm -f ABOUT.md INSTALL.md INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md badges.tmp.md
           else
             mv README.tmp3.md "${{ inputs.output_file }}"
-            rm -f INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md
+            rm -f ABOUT.md INSTALL.md INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md
           fi
 
       - name: Check for README changes
