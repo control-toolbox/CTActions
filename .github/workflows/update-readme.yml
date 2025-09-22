@@ -52,6 +52,7 @@ jobs:
           REPO="${{ inputs.repo_name }}"
           CITATION="${{ inputs.citation_badge }}"
 
+          # Replace placeholders in INSTALL.md and CONTRIBUTING.md
           sed "s/{{PACKAGE}}/$PACKAGE/g" INSTALL.md > INSTALL.tmp.md
           sed "s/{{REPO}}/$REPO/g" CONTRIBUTING.md > CONTRIBUTING.tmp.md
 
@@ -104,8 +105,11 @@ jobs:
                 esac
               done
             } > badges.tmp.md
+            
+            # Replace placeholder with actual table
+            sed "/<!-- INCLUDE_BADGES:/ { r badges.tmp.md d }" README.tmp3.md > "${{ inputs.output_file }}"
 
-            sed "/<!-- INCLUDE_BADGES:/ { r badges.tmp.md; d }" README.tmp3.md > "${{ inputs.output_file }}"
+             # Cleanup temporary files
             rm -f INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md badges.tmp.md
           else
             mv README.tmp3.md "${{ inputs.output_file }}"
