@@ -136,16 +136,22 @@ jobs:
           OUTPUT_FILE="${{ inputs.output_file }}"
           echo "🔎 Checking git-tracked changes for $OUTPUT_FILE and CONTRIBUTING.md..."
 
-          # On force git à détecter le fichier téléchargé comme nouveau si besoin
-          git add --intent-to-add "$OUTPUT_FILE" CONTRIBUTING.md 2>/dev/null || true
-
-          if git diff --cached --quiet; then
-            echo "✅ No changes detected in README or CONTRIBUTING.md."
-            echo "changed=false" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️ Changes detected in README or CONTRIBUTING.md!"
-            git diff --cached --name-only
+          # Vérifie si CONTRIBUTING.md existait avant le téléchargement
+          if [ ! -f CONTRIBUTING.md ] || ! git ls-files --error-unmatch CONTRIBUTING.md >/dev/null 2>&1; then
+            echo "⚠️ CONTRIBUTING.md did not exist in the repo before. Forcing PR creation."
             echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            # On force git à détecter les fichiers comme modifiés
+            git add --intent-to-add "$OUTPUT_FILE" CONTRIBUTING.md 2>/dev/null || true
+
+            if git diff --cached --quiet; then
+              echo "✅ No changes detected in README or CONTRIBUTING.md."
+              echo "changed=false" >> $GITHUB_OUTPUT
+            else
+              echo "⚠️ Changes detected in README or CONTRIBUTING.md!"
+              git diff --cached --name-only
+              echo "changed=true" >> $GITHUB_OUTPUT
+            fi
           fi
 
       - name: 📅 Get current date
