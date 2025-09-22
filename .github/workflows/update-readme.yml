@@ -57,6 +57,9 @@ jobs:
 
           sed "s/{{PACKAGE}}/$PACKAGE/g" INSTALL.md > INSTALL.tmp.md
           sed "s/{{REPO}}/$REPO/g" CONTRIBUTING.md > CONTRIBUTING.tmp.md
+
+          # replace CONTRIBUTING.md since we want to commit it if any changes
+          cp CONTRIBUTING.tmp.md CONTRIBUTING.md
           
           # Insert ABOUT.md
           sed '/<!-- INCLUDE_ABOUT -->/ {
