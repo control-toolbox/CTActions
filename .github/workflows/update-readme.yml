@@ -55,9 +55,19 @@ jobs:
           sed "s/{{PACKAGE}}/$PACKAGE/g" INSTALL.md > INSTALL.tmp.md
           sed "s/{{REPO}}/$REPO/g" CONTRIBUTING.md > CONTRIBUTING.tmp.md
 
-          sed '/<!-- INCLUDE_ABOUT -->/ { r ABOUT.md; d }' "${{ inputs.template_file }}" > README.tmp1.md
-          sed '/<!-- INCLUDE_INSTALL -->/ { r INSTALL.tmp.md; d }' README.tmp1.md > README.tmp2.md
-          sed '/<!-- INCLUDE_CONTRIBUTING -->/ { r CONTRIBUTING.tmp.md; d }' README.tmp2.md > README.tmp3.md
+          sed '/<!-- INCLUDE_ABOUT -->/{
+            r ABOUT.md
+            d
+          }' "README.template.md" > README.tmp1.md
+          sed '/<!-- INCLUDE_INSTALL -->/{
+            r INSTALL.tmp.md
+            d
+          }' README.tmp1.md > README.tmp2.md
+          
+          sed '/<!-- INCLUDE_CONTRIBUTING -->/{
+            r CONTRIBUTING.tmp.md
+            d
+          }' README.tmp2.md > README.tmp3.md
 
           BADGES_LINE=$(grep '<!-- INCLUDE_BADGES:' README.tmp3.md || echo "")
           if [ -n "$BADGES_LINE" ]; then
