@@ -20,7 +20,7 @@ on:
         required: true
         type: string
       citation_badge:
-        description: 'Markdown badge for Citation/DOI (e.g., [![DOI](https://zenodo.org/badge/XXXX.svg)](https://zenodo.org/doi/XXXX))'
+        description: 'Markdown badge for Citation/DOI'
         required: false
         type: string
       assignee:
@@ -46,7 +46,7 @@ jobs:
           curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/INSTALL.md" -o INSTALL.md
           curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/CONTRIBUTING.md" -o CONTRIBUTING.md
 
-      - name: Generate README with substituted placeholders and badges
+      - name: Generate README with placeholders and badges
         run: |
           PACKAGE="${{ inputs.package_name }}"
           REPO="${{ inputs.repo_name }}"
@@ -107,13 +107,10 @@ jobs:
             rm -f INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md
           fi
 
-      - name: Stage README changes
-        run: git add "${{ inputs.output_file }}"
-
-      - name: Check for changes
+      - name: Check for README changes
         id: check
         run: |
-          if git diff --cached --quiet; then
+          if git diff --quiet "${{ inputs.output_file }}"; then
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "changed=true" >> $GITHUB_OUTPUT
