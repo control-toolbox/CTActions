@@ -132,9 +132,12 @@ jobs:
       - name: Check for README or CONTRIBUTING changes
         id: check
         run: |
+          echo "🔍 Checking for changes in README.md or CONTRIBUTING.md..."
           if git diff --quiet "${{ inputs.output_file }}" CONTRIBUTING.md; then
+            echo "✅ No changes detected."
             echo "changed=false" >> $GITHUB_OUTPUT
           else
+            echo "⚠️ Changes detected!"
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
