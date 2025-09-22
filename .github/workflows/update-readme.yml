@@ -139,13 +139,14 @@ jobs:
           OUTPUT_FILE="${{ inputs.output_file }}"
           echo "🔎 Checking git-tracked changes for $OUTPUT_FILE and CONTRIBUTING.md..."
 
-          # Vérifie si CONTRIBUTING.md existait avant le téléchargement
-          if [ ! -f CONTRIBUTING.md ] || ! git ls-files --error-unmatch CONTRIBUTING.md >/dev/null 2>&1; then
-            echo "⚠️ CONTRIBUTING.md did not exist in the repo before. Forcing PR creation."
+          # Vérifie si CONTRIBUTING.md existait dans le repo avant le workflow
+          if ! git ls-files --error-unmatch CONTRIBUTING.md >/dev/null 2>&1; then
+            echo "⚠️ CONTRIBUTING.md did not exist in the repo before. Will create PR."
+            git add "$OUTPUT_FILE" CONTRIBUTING.md
             echo "changed=true" >> $GITHUB_OUTPUT
           else
-            # On force git à détecter les fichiers comme modifiés
-            git add --intent-to-add "$OUTPUT_FILE" CONTRIBUTING.md 2>/dev/null || true
+            # Ajoute les fichiers modifiés ou remplacés
+            git add "$OUTPUT_FILE" CONTRIBUTING.md
 
             if git diff --cached --quiet; then
               echo "✅ No changes detected in README or CONTRIBUTING.md."
