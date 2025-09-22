@@ -130,21 +130,21 @@ jobs:
             rm -f ABOUT.md INSTALL.md INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md
           fi
 
-      - name: 🔍 Check for README or CONTRIBUTING changes
+      - name: "🔍 Check for README or CONTRIBUTING changes"
         id: check
         run: |
           OUTPUT_FILE="${{ inputs.output_file }}"
-          echo "🔎 Comparing $OUTPUT_FILE and CONTRIBUTING.md for changes..."
+          echo "🔎 Checking git-tracked changes for $OUTPUT_FILE and CONTRIBUTING.md..."
 
-          if [ ! -f CONTRIBUTING.md ]; then
-            echo "⚠️ CONTRIBUTING.md does not exist in the repo."
-            echo "changed=true" >> $GITHUB_OUTPUT
-          elif git diff --quiet "$OUTPUT_FILE" CONTRIBUTING.md; then
+          # On force git à détecter le fichier téléchargé comme nouveau si besoin
+          git add --intent-to-add "$OUTPUT_FILE" CONTRIBUTING.md 2>/dev/null || true
+
+          if git diff --cached --quiet; then
             echo "✅ No changes detected in README or CONTRIBUTING.md."
             echo "changed=false" >> $GITHUB_OUTPUT
           else
             echo "⚠️ Changes detected in README or CONTRIBUTING.md!"
-            git diff --name-only "$OUTPUT_FILE" CONTRIBUTING.md
+            git diff --cached --name-only
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
