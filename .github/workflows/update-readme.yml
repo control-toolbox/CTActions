@@ -19,6 +19,10 @@ on:
         description: 'Repository name (e.g., OptimalControl.jl)'
         required: true
         type: string
+      doc_url:
+        description: 'Documentation url (e.g., https://control-toolbox.org/OptimalControl.jl)'
+        required: true
+        type: string        
       citation_badge:
         description: 'Markdown badge for Citation/DOI'
         required: false
@@ -53,6 +57,7 @@ jobs:
           echo "🔧 Replacing placeholders and inserting content..."
           PACKAGE="${{ inputs.package_name }}"
           REPO="${{ inputs.repo_name }}"
+          DOCU="${{ inputs.doc_url }}"
           CITATION="${{ inputs.citation_badge }}"
 
           sed "s/{{PACKAGE}}/$PACKAGE/g" INSTALL.md > INSTALL.tmp.md
@@ -88,7 +93,7 @@ jobs:
               for BADGE in $BADGES_LIST; do
                 case $BADGE in
                   Documentation)
-                    echo "| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)](https://control-toolbox.org/$PACKAGE.jl/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)](https://control-toolbox.org/$PACKAGE.jl/dev/) |"
+                    echo "| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)]($DOCU/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)]($DOCU/dev/) |"
                     ;;
                   CI)
                     echo "| **CI / Build** | [![Build Status](https://github.com/$REPO/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/$REPO/actions/workflows/CI.yml?query=branch%3Amain) |"
