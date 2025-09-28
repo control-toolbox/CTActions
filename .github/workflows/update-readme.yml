@@ -16,7 +16,7 @@ on:
         required: true
         type: string
       repo_name:
-        description: 'Repository name (e.g., OptimalControl.jl)'
+        description: 'Repository name (e.g., control-toolbox/OptimalControl.jl)'
         required: true
         type: string
       doc_url:
