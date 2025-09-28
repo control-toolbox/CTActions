@@ -100,7 +100,7 @@ jobs:
                     echo "| **Package Evaluation** | [![PkgEval](https://img.shields.io/badge/Julia-package-purple)](https://juliahub.com/ui/Packages/General/$PACKAGE) [![Dependencies](https://juliahub.com/docs/General/$PACKAGE/stable/deps.svg)](https://juliahub.com/ui/Packages/General/$PACKAGE?t=2) |"
                     ;;
                   Release)
-                    echo "| **Release / Version** | [![Release](https://juliahub.com/docs/General/$PACKAGE/stable/version.svg)](https://github.com/control-toolbox/$REPO/releases) |"
+                    echo "| **Release / Version** | [![Release](https://img.shields.io/github/v/release/control-toolbox/$REPO.svg)](https://github.com/control-toolbox/$REPO/releases) |"
                     ;;
                   Citation)
                     if [ -n "$CITATION" ]; then
