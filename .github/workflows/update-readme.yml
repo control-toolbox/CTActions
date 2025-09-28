@@ -60,8 +60,8 @@ jobs:
           DOCU="${{ inputs.doc_url }}"
           CITATION="${{ inputs.citation_badge }}"
 
-          sed "s/{{PACKAGE}}/$PACKAGE/g" INSTALL.md > INSTALL.tmp.md
-          sed "s/{{REPO}}/$REPO/g" CONTRIBUTING.md > CONTRIBUTING.tmp.md
+          sed "s|{{PACKAGE}}|$PACKAGE|g" INSTALL.md > INSTALL.tmp.md
+          sed "s|{{REPO}}|$REPO|g" CONTRIBUTING.md > CONTRIBUTING.tmp.md
 
           # replace CONTRIBUTING.md since we want to commit it if any changes
           cp CONTRIBUTING.tmp.md CONTRIBUTING.md
@@ -86,7 +86,7 @@ jobs:
 
           BADGES_LINE=$(grep '<!-- INCLUDE_BADGES:' README.tmp3.md || echo "")
           if [ -n "$BADGES_LINE" ]; then
-            BADGES_LIST=$(echo $BADGES_LINE | sed 's/.*: \(.*\) -->/\1/' | sed 's/,/ /g')
+            BADGES_LIST=$(echo $BADGES_LINE | sed 's|.*: \(.*\) -->|\1|' | sed 's|,| |g')
             {
               echo "| **Category** | **Badge** |"
               echo "|-----------------------|-----------|"
