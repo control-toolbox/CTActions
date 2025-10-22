@@ -19,7 +19,7 @@ jobs:
       - name: Create typos config
         run: |
           cat > _typos.toml << EOF
-          [default.locale]
+          [default]
           locale = "${{ inputs.locale }}"
           EOF
       - name: Check spelling
