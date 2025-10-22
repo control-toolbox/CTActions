@@ -7,7 +7,7 @@ on:
         description: 'Language locale for spell checking'
         required: false
         type: string
-        default: 'en-us'
+        default: 'en'
 
 jobs:
   typos-check:
