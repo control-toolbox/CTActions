@@ -2,6 +2,12 @@ name: Spell Check
 
 on:
   workflow_call:
+    inputs:
+      locale:
+        description: 'Language locale for spell checking'
+        required: false
+        type: string
+        default: 'en-us'
 
 jobs:
   typos-check:
@@ -10,5 +16,11 @@ jobs:
     steps:
       - name: Checkout Actions Repository
         uses: actions/checkout@v4
+      - name: Create typos config
+        run: |
+          cat > _typos.toml << EOF
+          [default.locale]
+          locale = "${{ inputs.locale }}"
+          EOF
       - name: Check spelling
-        uses: crate-ci/typos@v1.18.0 
+        uses: crate-ci/typos@v1.18.0
