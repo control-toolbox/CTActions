@@ -3,23 +3,31 @@ name: CI
 on:
   workflow_call:
     inputs:
-      version:
-        required: true
+      versions:
+        required: false
         type: string
-      os:
-        required: true
+        default: '["1.10","1.11","1.12"]'
+      runners:
+        required: false
         type: string
-      arch:
-        required: true
+        default: '["ubuntu-latest","macos-latest","windows-latest"]'
+      archs:
+        required: false
         type: string
+        default: '["x64"]'
 
 jobs:
   test:
-    runs-on: ${{ inputs.os }}
+    strategy:
+      matrix:
+        version: ${{ fromJSON(inputs.versions) }}
+        runner: ${{ fromJSON(inputs.runners) }}
+        arch: ${{ fromJSON(inputs.archs) }}
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v5
       - uses: julia-actions/setup-julia@latest
         with:
-          version: ${{ inputs.version }}
-          arch: ${{ inputs.arch }}
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
       - uses: julia-actions/julia-runtest@latest
