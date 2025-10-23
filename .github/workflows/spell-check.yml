@@ -8,6 +8,11 @@ on:
         required: false
         type: string
         default: 'en'
+      extend-identifiers:
+        description: 'Lines of identifier = "string" pairs for typos extend-identifiers section'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   typos-check:
@@ -21,6 +26,9 @@ jobs:
           cat > _typos.toml << EOF
           [default]
           locale = "${{ inputs.locale }}"
+
+          [default.extend-identifiers]
+          ${{ inputs.extend-identifiers }}
           
           [files]
           extend-exclude = [
@@ -28,5 +36,6 @@ jobs:
             "*.toml",
           ]
           EOF
+          cat _typos.toml
       - name: Check spelling
         uses: crate-ci/typos@v1.18.0
