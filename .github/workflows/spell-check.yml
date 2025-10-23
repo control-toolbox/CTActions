@@ -21,6 +21,12 @@ jobs:
           cat > _typos.toml << EOF
           [default]
           locale = "${{ inputs.locale }}"
+          
+          [files]
+          extend-exclude = [
+            "*.json",
+            "*.toml",
+          ]
           EOF
       - name: Check spelling
         uses: crate-ci/typos@v1.18.0
