@@ -38,4 +38,4 @@ jobs:
           EOF
           cat _typos.toml
       - name: Check spelling
-        uses: crate-ci/typos@v1.18.0
+        uses: crate-ci/typos@v1.38.1
