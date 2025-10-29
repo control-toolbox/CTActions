@@ -34,6 +34,7 @@ jobs:
           extend-exclude = [
             "*.json",
             "*.toml",
+            "*.svg",
           ]
           EOF
           cat _typos.toml
