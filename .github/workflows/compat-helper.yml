@@ -2,6 +2,11 @@ name: Compat Helper
 
 on:
   workflow_call:
+    inputs:
+      subdirs:
+        required: false
+        type: string
+        default: '["", "docs", "test"]'
 
 permissions:
   contents: write
@@ -43,7 +48,7 @@ jobs:
         run: |
           import CompatHelper
           CompatHelper.main(
-              subdirs=["", "docs", "test"],
+              subdirs=${{ inputs.subdirs }},
               entry_type=CompatHelper.DropEntry()
           )
         shell: julia --color=yes {0}
