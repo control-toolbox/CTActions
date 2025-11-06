@@ -1,0 +1,21 @@
+name: Occidata Runner Maintenance
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '30 2 * * 1'   # every Monday at 02:30 UTC
+
+jobs:
+  cleanup:
+    runs-on: [self-hosted, occidata, local]
+    steps:
+      - name: Purge Julia cache
+        run: rm -rf /projects/ctb/gha-runner/julia_depot/compiled || true
+
+      - name: Update TeXLive
+        run: |
+          export PATH=/projects/ctb/gha-runner/texlive/2025/bin/x86_64-linux:$PATH
+          tlmgr update --self --all
+
+      - name: Rotate logs older than 30 days
+        run: find /projects/ctb/gha-runner/logs -type f -mtime +30 -delete || true
