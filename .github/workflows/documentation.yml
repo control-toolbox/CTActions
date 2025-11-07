@@ -12,7 +12,25 @@ jobs:
 
       - uses: julia-actions/setup-julia@latest
       - uses: julia-actions/julia-buildpkg@latest
-          
+
+      # 🧰 Cache des artefacts (binaires des paquets)
+      - name: Cache Julia artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-julia-artifacts-${{ hashFiles('docs/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-artifacts-
+
+      # ⚡ Cache du code précompilé (fichiers .ji)
+      - name: Cache Julia compiled code
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/compiled
+          key: ${{ runner.os }}-julia-compiled-${{ hashFiles('docs/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-compiled-
+
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
 
