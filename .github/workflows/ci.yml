@@ -24,10 +24,31 @@ jobs:
         runner: ${{ fromJSON(inputs.runners) }}
         arch: ${{ fromJSON(inputs.archs) }}
     runs-on: ${{ matrix.runner }}
+
     steps:
       - uses: actions/checkout@v5
+
       - uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+
+      # 🧰 Cache des artefacts Julia
+      - name: Cache Julia artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-julia-artifacts-${{ matrix.version }}-${{ hashFiles('**/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-artifacts-${{ matrix.version }}-
+
+      # ⚡ Cache du code précompilé
+      - name: Cache Julia compiled code
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/compiled
+          key: ${{ runner.os }}-julia-compiled-${{ matrix.version }}-${{ hashFiles('**/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-compiled-${{ matrix.version }}-
+
       - uses: julia-actions/julia-runtest@latest
