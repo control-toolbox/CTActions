@@ -9,14 +9,35 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - uses: julia-actions/setup-julia@latest
-      - uses: julia-actions/cache@v2
+
+      # 🧰 Cache des artefacts Julia
+      - name: Cache Julia artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-julia-artifacts-${{ hashFiles('Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-artifacts-
+
+      # ⚡ Cache du code précompilé
+      - name: Cache Julia compiled code
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/compiled
+          key: ${{ runner.os }}-julia-compiled-${{ hashFiles('Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-compiled-
+
+      # 🧱 (optionnel) Construire le package local s'il existe
       - uses: julia-actions/julia-buildpkg@latest
+
+      # 🎨 Installer JuliaFormatter et formater le code
       - name: Install JuliaFormatter and format
         run: |
-          julia  -e 'import Pkg; Pkg.add("JuliaFormatter")'
-          julia  -e 'using JuliaFormatter; format(".", BlueStyle())'
-      # https://github.com/marketplace/actions/create-pull-request
-      # https://github.com/peter-evans/create-pull-request#reference-example
+          julia -e 'using Pkg; Pkg.add("JuliaFormatter")'
+          julia -e 'using JuliaFormatter; format(".", BlueStyle())'
+
+      # 🤖 Créer une Pull Request avec le code formaté
       - name: Create Pull Request
         id: cpr
         uses: peter-evans/create-pull-request@v7
@@ -27,6 +48,8 @@ jobs:
           branch: auto-juliaformatter-pr
           delete-branch: true
           labels: formatting, automated pr, no changelog
+
+      # 🧾 Logs utiles
       - name: Check outputs
         run: |
           echo "Pull Request Number - ${{ steps.cpr.outputs.pull-request-number }}"
