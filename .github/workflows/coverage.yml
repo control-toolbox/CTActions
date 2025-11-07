@@ -6,15 +6,41 @@ on:
       codecov-secret:
         description: 'Codecov token for repository'
         required: false
+
 jobs:
   test:
     name: coverage
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
       - uses: julia-actions/setup-julia@latest
+
+      # 🧰 Cache des artefacts Julia (binaries téléchargés)
+      - name: Cache Julia artifacts
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-julia-artifacts-${{ hashFiles('**/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-artifacts-
+
+      # ⚡ Cache du code précompilé (.ji)
+      - name: Cache Julia compiled code
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/compiled
+          key: ${{ runner.os }}-julia-compiled-${{ hashFiles('**/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-compiled-
+
+      # 🧱 Exécuter les tests
       - uses: julia-actions/julia-runtest@latest
+
+      # 📊 Générer les fichiers de couverture
       - uses: julia-actions/julia-processcoverage@latest
+
+      # ☁️ Envoyer les résultats à Codecov
       - uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.codecov-secret }}
