@@ -1,8 +1,3 @@
-# test if the current PR breaks compatibility with OptimalControl.jl
-# the workflow has 2 steps
-# break: clone repo, build and test OptimalControl, and create artifact from the breakage/ folder
-# comment: download artifact, create summary, and add a comment on the PR
-
 name: Breakage
 
 on:
@@ -17,7 +12,7 @@ on:
       pkgversion:
         required: true
         type: string
-      pkgbreak: # test or doc
+      pkgbreak: # "test" or "doc"
         required: false
         default: 'test'
         type: string
@@ -26,100 +21,107 @@ jobs:
   break:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+
     steps:
       - uses: actions/checkout@v5
 
-      # Install Julia
       - uses: julia-actions/setup-julia@latest
         with:
           version: 1
-          arch: x64
-      - uses: actions/cache@v4
-        env:
-          cache-name: cache-artifacts
+
+      # Cache artifacts (downloads)
+      - name: Cache Julia artifacts
+        uses: actions/cache@v4
         with:
           path: ~/.julia/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          key: ${{ runner.os }}-breakage-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
+            ${{ runner.os }}-breakage-
+
       - uses: julia-actions/julia-buildpkg@v1
 
-      # Breakage test
-      - name: 'Breakage of ${{ inputs.pkgname }}, ${{ inputs.pkgversion }} version, ${{ inputs.pkgbreak }}'
+      # --- Breakage test ---
+      - name: Run breakage test
         env:
           URL: ${{ inputs.pkgpath }}/${{ inputs.pkgname }}.jl
           VERSION: ${{ inputs.pkgversion }}
           BREAK: ${{ inputs.pkgbreak }}
         run: |
-          set -v
-          mkdir -p ./breakage
-          #echo "${{ github.event.number }}" > ./breakage/NR
-          #
-          PKG_SRC_PATH=`pwd`
-          PKG_SRC_NAME=`basename -s ".jl" $PKG_SRC_PATH`
-          #
-          git clone https://github.com/$URL
-          export PKG=$(echo $URL | cut -f2 -d/)
-          cd $PKG
-          if [ $VERSION == "stable" ]; then
-            TAG=$(git tag -l "v*" --sort=-creatordate | head -n1)
-            if [ -z "$TAG" ]; then
-              TAG="no_tag"
+          set -euxo pipefail
+          mkdir -p breakage
+
+          PKG_SRC_PATH=$(pwd)
+          PKG_SRC_NAME=$(basename "$PKG_SRC_PATH")
+
+          git clone --depth 1 https://github.com/$URL repo
+          cd repo
+
+          # Checkout the version to test
+          if [ "$VERSION" = "stable" ]; then
+            TAG=$(git tag -l "v*" --sort=-creatordate | head -n1 || true)
+            if [ -n "$TAG" ]; then
+              git checkout "$TAG"
             else
-              git checkout $TAG
+              TAG="no_tag"
             fi
           else
-            TAG=$VERSION
+            TAG="$VERSION"
+            git fetch --tags || true
+            git checkout "$TAG" || echo "⚠️ Could not checkout $TAG"
           fi
           export TAG
-          #
-          PKG_SRC_VERSION=$(julia --project=@. -e 'using Pkg, Logging;
+
+          PKG_SRC_VERSION=$(julia --project=@. -e '
+            using Pkg, Logging;
             with_logger(NullLogger()) do
               Pkg.instantiate()
               try
-                version=Pkg.installed()["'$PKG_SRC_NAME'"]
+                version = Pkg.installed()["'"$PKG_SRC_NAME"'"]
                 println("compat: v", version)
-              catch e
+              catch
                 println("")
               end
-            end')
+            end
+          ')
           export PKG_SRC_VERSION
-          #
-          julia -e 'using Pkg;
-            PKG = ENV["PKG"]
-            TAG = ENV["TAG"]
-            VERSION = ENV["VERSION"]
-            PKG_SRC_VERSION = ENV["PKG_SRC_VERSION"]
-            BREAK = ENV["BREAK"]
-            joburl = joinpath(ENV["GITHUB_SERVER_URL"], ENV["GITHUB_REPOSITORY"], "actions/runs", ENV["GITHUB_RUN_ID"])
-            open("../breakage/breakage-$PKG-$VERSION", "w") do io
+
+          joburl="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          outfile="../breakage/breakage-${{ inputs.pkgname }}-${{ inputs.pkgversion }}"
+
+          julia -e '
+            using Pkg
+            PKG, TAG, VERSION, PKG_SRC_VERSION, BREAK, joburl =
+              ENV["PKG"], ENV["TAG"], ENV["VERSION"], ENV["PKG_SRC_VERSION"], ENV["BREAK"], ENV["joburl"]
+
+            open(ENV["outfile"], "w") do io
               try
-                TAG == "no_tag" && error("Not tag for $VERSION")
+                TAG == "no_tag" && error("No tag for $VERSION")
+
                 if BREAK == "test"
-                  pkg"activate .";
-                  pkg"instantiate";
-                  pkg"status";
-                  pkg"dev ../";
-                  pkg"build";
-                  pkg"test";
+                  pkg"activate ."
+                  pkg"instantiate"
+                  pkg"status"
+                  pkg"dev ../"
+                  pkg"build"
+                  pkg"test"
                 elseif BREAK == "doc"
-                  pkg"activate docs";
-                  pkg"instantiate";
-                  pkg"status";
-                  pkg"dev ../";
-                  pkg"build";
-                  include("docs/make.jl");
+                  pkg"activate docs"
+                  pkg"instantiate"
+                  pkg"status"
+                  pkg"dev ../"
+                  pkg"build"
+                  include("docs/make.jl")
                 else
-                  error("pkgbreak should be test or doc, not " * BREAK)
+                  error("Invalid pkgbreak value: $BREAK")
                 end
-                print(io, "[![](https://img.shields.io/badge/$BREAK%20$TAG-✅-grey)]($joburl) ", PKG_SRC_VERSION);
+
+                print(io, "[![](https://img.shields.io/badge/$BREAK%20$TAG-✅-grey)]($joburl) ", PKG_SRC_VERSION)
               catch e
-                @error e;
-                print(io, "[![](https://img.shields.io/badge/$BREAK%20$TAG-❌-grey)]($joburl) ", PKG_SRC_VERSION);
-              end;
-            end'
+                @error e
+                print(io, "[![](https://img.shields.io/badge/$BREAK%20$TAG-❌-grey)]($joburl) ", PKG_SRC_VERSION)
+              end
+            end
+          '
 
       - uses: actions/upload-artifact@v5
         with:
@@ -129,6 +131,7 @@ jobs:
   comment:
     needs: break
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v5
 
@@ -138,59 +141,56 @@ jobs:
           pattern: breakage-*
           merge-multiple: true
 
-      - run: ls -R
-      - run: |
+      - name: Create summary
+        run: |
           cd breakage
-          echo "Breakage test results" > summary.md
-          echo "Date: $(TZ=UTC-2 date '+%Y-%m-%d %H:%M:%S')" >> summary.md
-          echo "| Name | Latest | Stable |" >> summary.md
-          echo "|--|--|--|" >> summary.md
-          count=0
-          for file in breakage-*
-          do
-            # [ "$file" == "NR" ] && continue
-            # [ "$file" == "summary.md" ] && continue
-            if [ $count == "0" ]; then
-              name=$(echo $file | cut -f2 -d-)
-              echo -n "| $name | "
-            else
-              echo -n "| "
-            fi
-            cat $file
-            if [ $count == "0" ]; then
-              echo -n " "
-              count=1
-            else
-              echo " |"
-              count=0
-            fi
-          done >> summary.md
+          {
+            echo "Breakage test results"
+            echo "Date: $(TZ=UTC date '+%Y-%m-%d %H:%M:%S')"
+            echo ""
+            echo "| Name | Latest | Stable |"
+            echo "|--|--|--|"
+            count=0
+            for file in breakage-*; do
+              [ -f "$file" ] || continue
+              if [ $count -eq 0 ]; then
+                name=$(echo "$file" | cut -d- -f2)
+                printf "| %s | " "$name"
+              else
+                printf "| "
+              fi
+              cat "$file"
+              if [ $count -eq 0 ]; then
+                printf " "
+                count=1
+              else
+                echo " |"
+                count=0
+              fi
+            done
+          } > summary.md
 
-      - name: PR comment with file
+      - name: Comment on PR
         uses: actions/github-script@v8
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Import file content from summary.md
             const fs = require('fs')
-            const filePath = 'breakage/summary.md'
-            const msg = fs.readFileSync(filePath, 'utf8')
+            const msg = fs.readFileSync('breakage/summary.md', 'utf8')
+            const prNumber = context.payload.pull_request?.number
+            if (!prNumber) {
+              console.log("No PR number found.")
+              return
+            }
 
-            // Get the current PR number from context
-            const prNumber = context.payload.pull_request.number
-
-            // Fetch existing comments on the PR
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber
             })
 
-            // Find a previous comment by the bot to update
-            const botComment = comments.find(comment => comment.user.id === 41898282)
-
+            const botComment = comments.find(c => c.user.id === 41898282)
             if (botComment) {
-              // Update the existing comment
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -198,7 +198,6 @@ jobs:
                 body: msg
               })
             } else {
-              // Create a new comment
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
