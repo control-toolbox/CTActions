@@ -26,29 +26,35 @@ jobs:
     runs-on: ${{ matrix.runner }}
 
     steps:
+      # Checkout the repository code
       - uses: actions/checkout@v5
 
+      # Install Julia with the specified version and architecture
       - uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
 
-      # 🧰 Cache des artefacts Julia
+      # Cache Julia artifacts (downloaded packages)
+      # Key is based on Project.toml to allow updates while caching
       - name: Cache Julia artifacts
         uses: actions/cache@v4
         with:
           path: ~/.julia/artifacts
-          key: ${{ runner.os }}-julia-artifacts-${{ matrix.version }}-${{ hashFiles('**/Manifest.toml') }}
+          key: ${{ runner.os }}-julia-artifacts-${{ matrix.version }}-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
             ${{ runner.os }}-julia-artifacts-${{ matrix.version }}-
 
-      # ⚡ Cache du code précompilé
+      # Cache precompiled Julia code
+      # Speeds up package loading by caching compilation results
       - name: Cache Julia compiled code
         uses: actions/cache@v4
         with:
           path: ~/.julia/compiled
-          key: ${{ runner.os }}-julia-compiled-${{ matrix.version }}-${{ hashFiles('**/Manifest.toml') }}
+          key: ${{ runner.os }}-julia-compiled-${{ matrix.version }}-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
             ${{ runner.os }}-julia-compiled-${{ matrix.version }}-
 
+      # Run tests (this automatically calls Pkg.instantiate())
+      # Instantiate will generate/update Manifest.toml and install dependencies
       - uses: julia-actions/julia-runtest@latest
