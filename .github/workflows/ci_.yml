@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  workflow_call:
+    inputs:
+      versions:
+        description: "Julia versions to test (JSON array)"
+        required: false
+        type: string
+        default: '["1.10","1.11","1.12"]'
+      runs_on:
+        description: "GitHub runner labels (e.g., 'ubuntu-latest' or JSON array for self-hosted like '[\"self-hosted\", \"Linux\", \"gpu\"]')"
+        required: false
+        type: string
+        default: '["ubuntu-latest","macos-latest","windows-latest"]'
+      archs:
+        description: "Julia architectures to test (JSON array, e.g., '[\"x64\"]' or '[\"x64\", \"aarch64\"]')"
+        required: false
+        type: string
+        default: '["x64"]'
+      runner_type:
+        description: "Runner type: 'github' for GitHub-hosted runners or 'self-hosted' for self-hosted runners"
+        required: false
+        type: string
+        default: 'github'
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        version: ${{ fromJSON(inputs.versions) }}
+        runs_on: ${{ fromJSON(inputs.runs_on) }}
+        arch: ${{ fromJSON(inputs.archs) }}
+    runs-on: ${{ matrix.runs_on }}
+
+    steps:
+      # ---------------------------
+      # Checkout Repository
+      # ---------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      # ---------------------------
+      # Setup Julia Environment
+      # ---------------------------
+      - name: Setup Julia
+        uses: julia-actions/setup-julia@latest
+        with:
+          version: ${{ matrix.version }}
+          arch: ${{ matrix.arch }}
+
+      # ---------------------------
+      # Julia caching (conditional based on runner type)
+      # ---------------------------
+      - name: Cache Julia packages (GitHub-hosted runners)
+        if: inputs.runner_type == 'github'
+        uses: julia-actions/cache@v2
+
+      - name: Cache Julia artifacts (self-hosted runners)
+        if: inputs.runner_type == 'self-hosted'
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-artifacts
+        with:
+          path: ~/.julia/artifacts
+          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-test-${{ env.cache-name }}-
+            ${{ runner.os }}-test-
+            ${{ runner.os }}-
+
+      - name: Cache Julia compiled code (self-hosted runners)
+        if: inputs.runner_type == 'self-hosted'
+        uses: actions/cache@v4
+        with:
+          path: ~/.julia/compiled
+          key: ${{ runner.os }}-julia-compiled-${{ matrix.version }}-${{ hashFiles('**/Project.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-julia-compiled-${{ matrix.version }}-
+
+      # ---------------------------
+      # Build and test
+      # ---------------------------
+      - name: Build Julia package
+        uses: julia-actions/julia-buildpkg@v1
+
+      - name: Run tests
+        uses: julia-actions/julia-runtest@latest
