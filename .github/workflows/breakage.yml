@@ -91,8 +91,8 @@ jobs:
           ')
           export PKG_SRC_VERSION
 
-          joburl="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          outfile="../breakage/breakage-${{ inputs.pkgname }}-${{ inputs.pkgversion }}"
+          export joburl="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          export outfile="../breakage/breakage-${{ inputs.pkgname }}-${{ inputs.pkgversion }}"
 
           julia -e '
             using Pkg
