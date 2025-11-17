@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: ''
+      config-path:
+        description: 'Path to custom typos config file (if not provided, generates default)'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   typos-check:
@@ -22,6 +27,7 @@ jobs:
       - name: Checkout Actions Repository
         uses: actions/checkout@v5
       - name: Create typos config
+        if: inputs.config-path == ''
         run: |
           cat > _typos.toml << EOF
           [default]
@@ -40,3 +46,5 @@ jobs:
           cat _typos.toml
       - name: Check spelling
         uses: crate-ci/typos@v1.39.0
+        with:
+          config: ${{ inputs.config-path != '' && inputs.config-path || '_typos.toml' }}
