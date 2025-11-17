@@ -58,6 +58,7 @@ jobs:
 
           # Checkout the version to test
           if [ "$VERSION" = "stable" ]; then
+            git fetch --tags || true
             TAG=$(git tag -l "v*" --sort=-creatordate | head -n1 || true)
             if [ -n "$TAG" ]; then
               git checkout "$TAG"
