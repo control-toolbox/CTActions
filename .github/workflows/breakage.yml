@@ -51,7 +51,7 @@ jobs:
           mkdir -p breakage
 
           PKG_SRC_PATH=$(pwd)
-          PKG_SRC_NAME=$(basename "$PKG_SRC_PATH")
+          PKG_SRC_NAME=$(basename "$PKG_SRC_PATH" .jl)
 
           git clone --depth 1 https://github.com/$URL repo
           cd repo
@@ -64,10 +64,16 @@ jobs:
             else
               TAG="no_tag"
             fi
+          elif [ "$VERSION" = "latest" ]; then
+            TAG="main"
+            # Stay on the default branch (already checked out)
           else
             TAG="$VERSION"
             git fetch --tags || true
-            git checkout "$TAG" || echo "⚠️ Could not checkout $TAG"
+            if ! git checkout "$TAG" 2>/dev/null; then
+              echo "⚠️ Could not checkout $TAG, staying on default branch"
+              TAG="default"
+            fi
           fi
           export TAG
 
@@ -90,8 +96,8 @@ jobs:
 
           julia -e '
             using Pkg
-            PKG, TAG, VERSION, PKG_SRC_VERSION, BREAK, joburl =
-              ENV["PKG"], ENV["TAG"], ENV["VERSION"], ENV["PKG_SRC_VERSION"], ENV["BREAK"], ENV["joburl"]
+            TAG, VERSION, PKG_SRC_VERSION, BREAK, joburl =
+              ENV["TAG"], ENV["VERSION"], ENV["PKG_SRC_VERSION"], ENV["BREAK"], ENV["joburl"]
 
             open(ENV["outfile"], "w") do io
               try
@@ -153,14 +159,14 @@ jobs:
             count=0
             for file in breakage-*; do
               [ -f "$file" ] || continue
-              if [ $count -eq 0 ]; then
+              if [ "$count" -eq 0 ]; then
                 name=$(echo "$file" | cut -d- -f2)
                 printf "| %s | " "$name"
               else
                 printf "| "
               fi
               cat "$file"
-              if [ $count -eq 0 ]; then
+              if [ "$count" -eq 0 ]; then
                 printf " "
                 count=1
               else
