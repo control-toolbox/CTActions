@@ -15,7 +15,7 @@ jobs:
 
       # 🧰 Cache des artefacts (binaires des paquets)
       - name: Cache Julia artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.julia/artifacts
           key: ${{ runner.os }}-julia-artifacts-${{ hashFiles('docs/Manifest.toml') }}
@@ -24,7 +24,7 @@ jobs:
 
       # ⚡ Cache du code précompilé (fichiers .ji)
       - name: Cache Julia compiled code
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.julia/compiled
           key: ${{ runner.os }}-julia-compiled-${{ hashFiles('docs/Manifest.toml') }}
