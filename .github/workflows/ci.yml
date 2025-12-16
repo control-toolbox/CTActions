@@ -7,7 +7,7 @@ on:
         description: "Julia versions to test (JSON array)"
         required: false
         type: string
-        default: '["1.10","1.11","1.12"]'
+        default: '["1.10","1.12"]'
       runs_on:
         description: "GitHub runner labels (e.g., 'ubuntu-latest' or JSON array for self-hosted like '[\"self-hosted\", \"Linux\", \"gpu\"]')"
         required: false
