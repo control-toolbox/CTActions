@@ -115,6 +115,9 @@ jobs:
             TAG, VERSION, PKG_SRC_VERSION, BREAK, joburl =
               ENV["TAG"], ENV["VERSION"], ENV["PKG_SRC_VERSION"], ENV["BREAK"], ENV["joburl"]
 
+            # URL-encode TAG for badge (replace - with --, which shields.io accepts)
+            badge_tag = replace(TAG, "-" => "--")
+
             open(ENV["outfile"], "w") do io
               try
                 TAG == "no_tag" && error("No tag for $VERSION")
@@ -137,10 +140,10 @@ jobs:
                   error("Invalid pkgbreak value: $BREAK")
                 end
 
-                print(io, "[![](https://img.shields.io/badge/$BREAK%20$TAG-✅-grey)]($joburl) ", PKG_SRC_VERSION)
+                print(io, "[![](https://img.shields.io/badge/$BREAK%20$badge_tag-✅-grey)]($joburl) ", PKG_SRC_VERSION)
               catch e
                 @error e
-                print(io, "[![](https://img.shields.io/badge/$BREAK%20$TAG-❌-grey)]($joburl) ", PKG_SRC_VERSION)
+                print(io, "[![](https://img.shields.io/badge/$BREAK%20$badge_tag-❌-grey)]($joburl) ", PKG_SRC_VERSION)
               end
             end
           '
