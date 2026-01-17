@@ -16,6 +16,13 @@ on:
         required: false
         default: 'test'
         type: string
+      use_ct_registry:
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      SSH_KEY:
+        required: false
 
 jobs:
   break:
@@ -29,8 +36,9 @@ jobs:
         with:
           version: 1
 
-      # Add ct-registry (always)
+      # Add ct-registry (only if use_registry is true and SSH_KEY is provided)
       - name: Add ct-registry
+        if: inputs.use_ct_registry
         uses: julia-actions/add-julia-registry@v1
         with:
           key: ${{ secrets.SSH_KEY }}
