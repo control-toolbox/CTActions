@@ -45,6 +45,6 @@ jobs:
           EOF
           cat _typos.toml
       - name: Check spelling
-        uses: crate-ci/typos@v1.41.0
+        uses: crate-ci/typos@v1.42.1
         with:
           config: ${{ inputs.config-path != '' && inputs.config-path || '_typos.toml' }}
