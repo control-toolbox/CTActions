@@ -23,7 +23,15 @@ on:
         required: false
         type: string
         default: 'github'
-
+      use_ct_registry:
+        description: "Whether the local ct-registry is added or not"
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      SSH_KEY:
+        required: false
+  
 jobs:
   test:
     strategy:
@@ -48,6 +56,16 @@ jobs:
         with:
           version: ${{ matrix.version }}
           arch: ${{ matrix.arch }}
+
+      # ---------------------------
+      # Add ct-registry
+      # ---------------------------
+      - name: Add ct-registry
+        if: inputs.use_ct_registry
+        uses: julia-actions/add-julia-registry@v1
+        with:
+          key: ${{ secrets.SSH_KEY }}
+          registry: control-toolbox/ct-registry
 
       # ---------------------------
       # Julia caching (conditional based on runner type)
