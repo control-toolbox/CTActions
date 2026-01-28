@@ -61,7 +61,7 @@ jobs:
       # Add ct-registry
       # ---------------------------
       - name: Add ct-registry
-        if: inputs.use_ct_registry
+        if: inputs.use_ct_registry && runner.os != 'Windows'
         uses: julia-actions/add-julia-registry@v1
         with:
           key: ${{ secrets.SSH_KEY }}
