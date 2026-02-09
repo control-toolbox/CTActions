@@ -2,7 +2,15 @@ name: Documentation
 
 on:
   workflow_call:
-
+    inputs:
+      use_ct_registry:
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      SSH_KEY:
+        required: false
+        
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -11,7 +19,14 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: julia-actions/setup-julia@latest
-      - uses: julia-actions/julia-buildpkg@latest
+      
+      # Add ct-registry (only if use_registry is true and SSH_KEY is provided)
+      - name: Add ct-registry
+        if: inputs.use_ct_registry
+        uses: julia-actions/add-julia-registry@v2
+        with:
+          key: ${{ secrets.SSH_KEY }}
+          registry: control-toolbox/ct-registry
 
       # 🧰 Cache des artefacts (binaires des paquets)
       - name: Cache Julia artifacts
@@ -30,7 +45,9 @@ jobs:
           key: ${{ runner.os }}-julia-compiled-${{ hashFiles('docs/Manifest.toml') }}
           restore-keys: |
             ${{ runner.os }}-julia-compiled-
-
+            
+      - uses: julia-actions/julia-buildpkg@latest
+      
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
 
