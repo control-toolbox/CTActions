@@ -2,9 +2,16 @@ name: Coverage
 
 on:
   workflow_call:
+    inputs:
+      use_ct_registry:
+        required: false
+        default: false
+        type: boolean
     secrets:
       codecov-secret:
         description: 'Codecov token for repository'
+        required: false
+      SSH_KEY:
         required: false
 
 jobs:
@@ -15,6 +22,14 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: julia-actions/setup-julia@latest
+
+      # Add ct-registry (only if use_registry is true and SSH_KEY is provided)
+      - name: Add ct-registry
+        if: inputs.use_ct_registry
+        uses: julia-actions/add-julia-registry@v2
+        with:
+          key: ${{ secrets.SSH_KEY }}
+          registry: control-toolbox/ct-registry
 
       # 🧰 Cache des artefacts Julia (binaries téléchargés)
       - name: Cache Julia artifacts
