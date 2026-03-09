@@ -46,7 +46,7 @@ jobs:
         uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: ":robot: Format .jl files"
+          commit-message: "Format .jl files"
           title: '[AUTO] JuliaFormatter.jl run'
           branch: auto-juliaformatter-pr
           delete-branch: true
