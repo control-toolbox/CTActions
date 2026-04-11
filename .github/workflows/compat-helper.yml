@@ -49,7 +49,7 @@ jobs:
           import CompatHelper
           CompatHelper.main(
               subdirs=${{ inputs.subdirs }},
-              entry_type=CompatHelper.DropEntry()
+              entry_type=CompatHelper.KeepEntry()
           )
         shell: julia --color=yes {0}
         env:
