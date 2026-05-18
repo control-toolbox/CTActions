@@ -1,0 +1,78 @@
+name: Add to Project
+
+on:
+  workflow_call:
+    inputs:
+      project-url:
+        required: false
+        type: string
+        default: 'https://github.com/orgs/control-toolbox/projects/4'
+      status:
+        required: false
+        type: string
+        default: 'Todo'
+    secrets:
+      project_token:
+        required: true
+
+jobs:
+  add-to-project:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add issue or PR to project
+        id: add
+        uses: actions/add-to-project@v1.0.2
+        with:
+          project-url: ${{ inputs.project-url }}
+          github-token: ${{ secrets.project_token }}
+
+      - name: Set status field
+        env:
+          GH_TOKEN: ${{ secrets.project_token }}
+          ITEM_ID: ${{ steps.add.outputs.itemId }}
+          PROJECT_URL: ${{ inputs.project-url }}
+          STATUS_NAME: ${{ inputs.status }}
+        run: |
+          PROJECT_NUMBER=$(echo "$PROJECT_URL" | grep -oP '(?<=/projects/)\d+')
+          ORG=$(echo "$PROJECT_URL" | grep -oP '(?<=orgs/)[^/]+')
+
+          PROJECT_DATA=$(gh api graphql -f query='
+            query($org: String!, $number: Int!) {
+              organization(login: $org) {
+                projectV2(number: $number) {
+                  id
+                  fields(first: 20) {
+                    nodes {
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        name
+                        options { id name }
+                      }
+                    }
+                  }
+                }
+              }
+            }' -f org="$ORG" -F number="$PROJECT_NUMBER")
+
+          PROJECT_ID=$(echo "$PROJECT_DATA" | jq -r '.data.organization.projectV2.id')
+          FIELD_ID=$(echo "$PROJECT_DATA" | jq -r \
+            '.data.organization.projectV2.fields.nodes[] | select(.name == "Status") | .id')
+          OPTION_ID=$(echo "$PROJECT_DATA" | jq -r \
+            --arg s "$STATUS_NAME" \
+            '.data.organization.projectV2.fields.nodes[] | select(.name == "Status") | .options[] | select(.name == $s) | .id')
+
+          gh api graphql -f query='
+            mutation($project: ID!, $item: ID!, $field: ID!, $option: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $project
+                itemId: $item
+                fieldId: $field
+                value: { singleSelectOptionId: $option }
+              }) {
+                projectV2Item { id }
+              }
+            }' \
+            -f project="$PROJECT_ID" \
+            -f item="$ITEM_ID" \
+            -f field="$FIELD_ID" \
+            -f option="$OPTION_ID"
