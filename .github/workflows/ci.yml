@@ -72,7 +72,7 @@ jobs:
       # ---------------------------
       - name: Cache Julia packages (GitHub-hosted runners)
         if: inputs.runner_type == 'github'
-        uses: julia-actions/cache@v2
+        uses: julia-actions/cache@v3
 
       - name: Cache Julia artifacts (self-hosted runners)
         if: inputs.runner_type == 'self-hosted'
