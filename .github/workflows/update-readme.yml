@@ -93,7 +93,7 @@ jobs:
               for BADGE in $BADGES_LIST; do
                 case $BADGE in
                   Documentation)
-                    echo "| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)]($DOCU/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)]($DOCU/dev/) |"
+                    echo "| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)]($DOCU/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)]($DOCU/dev/) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/$REPO) |"
                     ;;
                   CI)
                     echo "| **CI / Build** | [![Build Status](https://github.com/$REPO/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/$REPO/actions/workflows/CI.yml?query=branch%3Amain) |"
