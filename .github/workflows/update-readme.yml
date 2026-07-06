@@ -172,7 +172,7 @@ jobs:
         uses: peter-evans/create-pull-request@v8
         with:
           commit-message: "Update README (${{ steps.date.outputs.date }}) with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges"
-          branch: update-readme-${{ steps.date.outputs.date }}
+          branch: bot/update-readme
           delete-branch: true
           title: "Update README (${{ steps.date.outputs.date }}) with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges"
           body: |
