@@ -28,6 +28,11 @@ on:
         required: false
         default: false
         type: boolean
+      test_args:
+        description: "Arguments string forwarded to julia-runtest's test_args (e.g. 'GPU' to select a package's GPU-specific test suite). Empty by default (no arguments)."
+        required: false
+        type: string
+        default: ''
     secrets:
       SSH_KEY:
         required: false
@@ -104,3 +109,5 @@ jobs:
 
       - name: Run tests
         uses: julia-actions/julia-runtest@latest
+        with:
+          test_args: ${{ inputs.test_args }}
