@@ -65,15 +65,21 @@ jobs:
       # ---------------------------
       # Add ct-registry
       # ---------------------------
-      # The ssh-agent Windows service ships disabled by default on windows-latest
-      # runners (error :1058 / ERROR_SERVICE_DISABLED otherwise); enable it before
-      # add-julia-registry starts it.
-      - name: Enable ssh-agent service (Windows)
+      # add-julia-registry invokes bare `ssh-agent`/`ssh-add`/`ssh-keyscan` (PATH
+      # lookup, not a hardcoded path). By default that resolves to Windows'
+      # System32 OpenSSH port, which (a) treats a bare `ssh-agent` invocation as a
+      # Windows-service start rather than forking a background agent, failing with
+      # "unable to start ssh-agent service, error :1058" (ERROR_SERVICE_DISABLED),
+      # and (b) is old enough that its `ssh-keyscan github.com` cannot negotiate
+      # the sntrup761x25519-sha512@openssh.com post-quantum KEX GitHub now offers,
+      # failing with "choose_kex: unsupported KEX method". Git for Windows ships
+      # its own (MSYS2-based) OpenSSH client, behaves like the Unix tools these
+      # actions expect, and is already installed on GitHub-hosted Windows runners
+      # — prepend it to PATH so it's what gets resolved.
+      - name: Prefer Git's OpenSSH client (Windows)
         if: inputs.use_ct_registry && runner.os == 'Windows'
         shell: pwsh
-        run: |
-          Get-Service ssh-agent | Set-Service -StartupType Manual
-          Start-Service ssh-agent
+        run: echo "C:\Program Files\Git\usr\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Add ct-registry
         if: inputs.use_ct_registry
