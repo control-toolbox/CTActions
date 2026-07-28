@@ -65,6 +65,16 @@ jobs:
       # ---------------------------
       # Add ct-registry
       # ---------------------------
+      # The ssh-agent Windows service ships disabled by default on windows-latest
+      # runners (error :1058 / ERROR_SERVICE_DISABLED otherwise); enable it before
+      # add-julia-registry starts it.
+      - name: Enable ssh-agent service (Windows)
+        if: inputs.use_ct_registry && runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Get-Service ssh-agent | Set-Service -StartupType Manual
+          Start-Service ssh-agent
+
       - name: Add ct-registry
         if: inputs.use_ct_registry
         uses: julia-actions/add-julia-registry@v2
