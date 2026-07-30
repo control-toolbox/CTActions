@@ -122,11 +122,30 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           registry: control-toolbox/ct-registry
 
+      # add-julia-registry's own ssh-agent (started above) is only ever talked to
+      # by system `git`/`ssh`, which is why that step succeeds. Pkg's later git
+      # operations in the "Build Julia package" step below — the registry
+      # re-fetch during instantiate, and any git-sourced dependency clone (e.g.
+      # CTLie) — go through Julia's *bundled* LibGit2 instead, which on Windows
+      # can't use that same agent (its named-pipe transport isn't something
+      # libssh2 understands there) and fails with "user cancelled credential
+      # request".
+      #
+      # Setting JULIA_PKG_USE_CLI_GIT=true here does NOT fix it:
+      # julia-actions/julia-buildpkg's own script unconditionally does
+      # `ENV["JULIA_PKG_USE_CLI_GIT"] = <its git_cli input, default false>`
+      # before calling Pkg.Registry.add()/Pkg.build(), clobbering whatever we
+      # export via GITHUB_ENV. The actual fix is the `git_cli: true` input on
+      # that step below, which routes through the same env var but from
+      # inside the action, after its own default assignment.
+
       # ---------------------------
       # Build and test
       # ---------------------------
       - name: Build Julia package
         uses: julia-actions/julia-buildpkg@v1
+        with:
+          git_cli: ${{ (inputs.use_ct_registry && runner.os == 'Windows') && 'true' || 'false' }}
 
       - name: Run tests
         uses: julia-actions/julia-runtest@latest
