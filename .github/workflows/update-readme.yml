@@ -174,7 +174,7 @@ jobs:
           commit-message: "Update README (${{ steps.date.outputs.date }}) with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges"
           branch: bot/update-readme
           delete-branch: true
-          title: "Update README (${{ steps.date.outputs.date }}) with latest ABOUT.md, INSTALL.md, CONTRIBUTING.md and badges"
+          title: "Update README (${{ steps.date.outputs.date }})"
           body: |
             This PR updates the README with the latest version of ABOUT.md, INSTALL.md, CONTRIBUTING.md, and badges from the control-toolbox/.github repo.
 
