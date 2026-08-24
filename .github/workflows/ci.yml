@@ -74,13 +74,25 @@ jobs:
         if: inputs.runner_type == 'github'
         uses: julia-actions/cache@v2
 
+      # julia-actions/setup-julia does not set JULIA_DEPOT_PATH, so different
+      # self-hosted runners can have different real depot locations (e.g. a
+      # cluster-wide JULIA_DEPOT_PATH exported by the runner service vs. the
+      # Julia default of ~/.julia). Hardcoding ~/.julia below would silently
+      # cache/purge nothing on a runner where that's not the real depot. Ask
+      # Julia itself where its writable depot is instead of guessing.
+      - name: Resolve Julia depot path (self-hosted runners)
+        id: depot
+        if: inputs.runner_type == 'self-hosted'
+        shell: bash
+        run: echo "path=$(julia -e 'print(Base.DEPOT_PATH[1])')" >> "$GITHUB_OUTPUT"
+
       - name: Cache Julia artifacts (self-hosted runners)
         if: inputs.runner_type == 'self-hosted'
         uses: actions/cache@v5
         env:
           cache-name: cache-artifacts
         with:
-          path: ~/.julia/artifacts
+          path: ${{ steps.depot.outputs.path }}/artifacts
           key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
             ${{ runner.os }}-test-${{ env.cache-name }}-
@@ -91,7 +103,7 @@ jobs:
         if: inputs.runner_type == 'self-hosted'
         uses: actions/cache@v5
         with:
-          path: ~/.julia/compiled
+          path: ${{ steps.depot.outputs.path }}/compiled
           key: ${{ runner.os }}-julia-compiled-${{ matrix.version }}-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
             ${{ runner.os }}-julia-compiled-${{ matrix.version }}-
@@ -149,7 +161,27 @@ jobs:
         with:
           git_cli: ${{ (inputs.use_ct_registry && runner.os == 'Windows') && 'true' || 'false' }}
 
+      # Self-hosted runners reuse a persistent Julia depot across every run
+      # (unlike GitHub-hosted runners, whose disk is wiped between jobs), so a
+      # compiled/ cache left over from a different branch/Manifest can drift
+      # out of sync with what's actually installed and break precompilation
+      # for unrelated packages/extensions. Retry once after purging it rather
+      # than requiring a runner-specific maintenance job to catch this.
       - name: Run tests
+        id: run_tests
+        continue-on-error: ${{ inputs.runner_type == 'self-hosted' }}
+        uses: julia-actions/julia-runtest@latest
+        with:
+          test_args: ${{ inputs.test_args }}
+
+      - name: Purge stale compiled cache (self-hosted runners)
+        if: inputs.runner_type == 'self-hosted' && steps.run_tests.outcome == 'failure'
+        run: |
+          echo "::warning::Tests failed on first attempt — purging ${{ steps.depot.outputs.path }}/compiled in case it's a stale precompile cache, then retrying once"
+          rm -rf "${{ steps.depot.outputs.path }}/compiled"
+
+      - name: Run tests (retry after cache purge, self-hosted runners)
+        if: inputs.runner_type == 'self-hosted' && steps.run_tests.outcome == 'failure'
         uses: julia-actions/julia-runtest@latest
         with:
           test_args: ${{ inputs.test_args }}
