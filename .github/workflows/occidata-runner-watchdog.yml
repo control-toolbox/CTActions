@@ -71,15 +71,14 @@ jobs:
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$RUNNER_TEMP/occidata-ssh/known_hosts" \
-            ocots@occidata-cluster.irit.fr \
-            'bash -lc '\''
-              set -euo pipefail
-              if squeue -h -u "$(id -un)" -n gha-runner -o "%T" | awk '\''$1 == "RUNNING" || $1 == "CONFIGURING" { found=1 } END { exit !found }'\''; then
-                echo "gha-runner SLURM job already exists; not starting a duplicate."
-              else
-                sbatch /projects/ctb/gha-runner/runner.slurm
-              fi
-            '\'''
+            ocots@occidata-cluster.irit.fr bash -s <<'REMOTE_SCRIPT'
+          set -euo pipefail
+          if squeue -h -u "$(id -un)" -n gha-runner -o "%T" | awk '$1 == "RUNNING" || $1 == "CONFIGURING" { found=1 } END { exit !found }'; then
+            echo "gha-runner SLURM job already exists; not starting a duplicate."
+          else
+            sbatch /projects/ctb/gha-runner/runner.slurm
+          fi
+          REMOTE_SCRIPT
 
       - name: Report incomplete recovery
         if: steps.secrets.outputs.configured == 'true' && steps.runner.outputs.online == 'false'
