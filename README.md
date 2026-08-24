@@ -26,7 +26,16 @@ This repository provides **reusable workflows** (`workflow_call`) that every con
 | Workflow | Schedule | Description |
 |---|---|---|
 | `occidata-runner-maintenance.yml` | Weekly (Mon 02:30 UTC) | Purge Julia cache, update TeXLive, rotate logs on self-hosted runner |
+| `occidata-runner-watchdog.yml` | Daily (03:15 UTC) | Check the Occidata runner and restart its SLURM job through SSH when absent |
 | `remove-julia.yml` | Weekly (Mon 01:23 UTC) | Remove stale Julia installations on self-hosted runner |
+
+The Occidata watchdog requires these CTActions repository or organization secrets:
+
+- `RUNNER_FALLBACK_TOKEN`: GitHub token allowed to list organization runners;
+- `OCCIDATA_SSH_KEY`: private SSH key authorized for `ocots@occidata-cluster.irit.fr`;
+- `OCCIDATA_KNOWN_HOSTS`: pinned `known_hosts` entry for `occidata-cluster.irit.fr`.
+
+The watchdog does not start a duplicate SLURM job when a `gha-runner` job is already running. If the cluster is unreachable, it fails without attempting a restart.
 
 ## Usage example
 

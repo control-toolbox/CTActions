@@ -1,0 +1,88 @@
+name: Occidata Runner Watchdog
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '15 3 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  check-and-restart:
+    name: Check and restart Occidata runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.RUNNER_FALLBACK_TOKEN }}
+      OCCIDATA_SSH_KEY: ${{ secrets.OCCIDATA_SSH_KEY }}
+      OCCIDATA_KNOWN_HOSTS: ${{ secrets.OCCIDATA_KNOWN_HOSTS }}
+    steps:
+      - name: Check required secrets
+        id: secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN}" || -z "${OCCIDATA_SSH_KEY}" || -z "${OCCIDATA_KNOWN_HOSTS}" ]]; then
+            echo 'configured=false' >> "$GITHUB_OUTPUT"
+            echo 'Required watchdog secrets are not configured; skipping restart.'
+          else
+            echo 'configured=true' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check GitHub runner status
+        id: runner
+        if: steps.secrets.outputs.configured == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! RUNNER_STATUS=$(gh api orgs/control-toolbox/actions/runners \
+            --jq '.runners[] | select(.name == "occidata-runner" and .status == "online")'); then
+            echo 'GitHub runner status check failed; refusing automatic restart.'
+            exit 1
+          fi
+          if [[ -n "$RUNNER_STATUS" ]]; then
+            echo 'online=true' >> "$GITHUB_OUTPUT"
+            echo 'occidata-runner is online.'
+          else
+            echo 'online=false' >> "$GITHUB_OUTPUT"
+            echo 'occidata-runner is offline or not registered.'
+          fi
+
+      - name: Prepare SSH credentials
+        if: steps.secrets.outputs.configured == 'true' && steps.runner.outputs.online == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          install -m 700 -d "$RUNNER_TEMP/occidata-ssh"
+          printf '%s\n' "$OCCIDATA_SSH_KEY" > "$RUNNER_TEMP/occidata-ssh/id_ed25519"
+          chmod 600 "$RUNNER_TEMP/occidata-ssh/id_ed25519"
+          printf '%s\n' "$OCCIDATA_KNOWN_HOSTS" > "$RUNNER_TEMP/occidata-ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/occidata-ssh/known_hosts"
+
+      - name: Restart runner job when absent
+        if: steps.secrets.outputs.configured == 'true' && steps.runner.outputs.online == 'false'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "$RUNNER_TEMP/occidata-ssh/id_ed25519" \
+            -o BatchMode=yes \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$RUNNER_TEMP/occidata-ssh/known_hosts" \
+            ocots@occidata-cluster.irit.fr \
+            'bash -lc '\''
+              set -euo pipefail
+              if squeue -h -u "$(id -un)" -n gha-runner -o "%T" | awk '\''$1 == "RUNNING" || $1 == "CONFIGURING" { found=1 } END { exit !found }'\''; then
+                echo "gha-runner SLURM job already exists; not starting a duplicate."
+              else
+                sbatch /projects/ctb/gha-runner/runner.slurm
+              fi
+            '\'''
+
+      - name: Report incomplete recovery
+        if: steps.secrets.outputs.configured == 'true' && steps.runner.outputs.online == 'false'
+        shell: bash
+        run: |
+          echo 'The runner was offline when checked. GitHub may need several minutes to report it online after SLURM starts.'

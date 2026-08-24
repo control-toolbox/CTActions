@@ -7,7 +7,7 @@ on:
 
 jobs:
   cleanup:
-    runs-on: [self-hosted, occidata, local]
+    runs-on: [self-hosted, occidata]
     steps:
       - name: Purge Julia cache
         run: rm -rf /projects/ctb/gha-runner/julia_depot/compiled || true
