@@ -118,6 +118,8 @@ jobs:
       - name: Add ct-registry
         if: inputs.use_ct_registry
         uses: julia-actions/add-julia-registry@v2
+        env:
+          SHELL: /bin/bash
         with:
           key: ${{ secrets.SSH_KEY }}
           registry: control-toolbox/ct-registry
