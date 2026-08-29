@@ -156,6 +156,28 @@ jobs:
       # ---------------------------
       # Build and test
       # ---------------------------
+      # `Pkg.test` builds its sandbox environment (Project.toml + Manifest.toml)
+      # with `mktempdir()` — i.e. under $TMPDIR, which defaults to /tmp — and runs
+      # the test subprocess with JULIA_LOAD_PATH="@:<that dir>" and JULIA_PROJECT
+      # unset. No --project, no @stdlib: that temp directory is the *only* entry on
+      # the load path. If it disappears mid-run, every later `using X` fails with
+      # "Package X not found in current path" (stdlib `Test` included, because
+      # `Base.require` re-runs `identify_package` before looking at already-loaded
+      # modules), and a disappearance during precompilation surfaces instead as
+      # "N direct dependencies failed to precompile".
+      #
+      # That is exactly what happens on the occidata runner, whose node wipes /tmp
+      # every hour at HH:01: any run whose test window crosses the top of an hour
+      # dies. GitHub-hosted runners get a fresh disk per job and are unaffected, so
+      # scope this to self-hosted. $RUNNER_TEMP lives under the runner's own _work
+      # tree and is cleaned by the runner between jobs, not by the node.
+      - name: Keep the Pkg sandbox out of /tmp (self-hosted runners)
+        if: inputs.runner_type == 'self-hosted'
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/jltmp"
+          echo "TMPDIR=$RUNNER_TEMP/jltmp" >> "$GITHUB_ENV"
+
       - name: Build Julia package
         uses: julia-actions/julia-buildpkg@v1
         with:
@@ -175,13 +197,13 @@ jobs:
           test_args: ${{ inputs.test_args }}
 
       - name: Purge stale compiled cache (self-hosted runners)
-        if: inputs.runner_type == 'self-hosted' && steps.run_tests.outcome == 'failure'
+        if: ${{ !cancelled() && inputs.runner_type == 'self-hosted' && steps.run_tests.outcome == 'failure' }}
         run: |
           echo "::warning::Tests failed on first attempt — purging ${{ steps.depot.outputs.path }}/compiled in case it's a stale precompile cache, then retrying once"
           rm -rf "${{ steps.depot.outputs.path }}/compiled"
 
       - name: Run tests (retry after cache purge, self-hosted runners)
-        if: inputs.runner_type == 'self-hosted' && steps.run_tests.outcome == 'failure'
+        if: ${{ !cancelled() && inputs.runner_type == 'self-hosted' && steps.run_tests.outcome == 'failure' }}
         uses: julia-actions/julia-runtest@latest
         with:
           test_args: ${{ inputs.test_args }}

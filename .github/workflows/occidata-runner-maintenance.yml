@@ -19,3 +19,13 @@ jobs:
 
       - name: Rotate logs older than 30 days
         run: find /projects/ctb/gha-runner/logs -type f -mtime +30 -delete || true
+
+      # Companion to `export TMPDIR=$GHA_ROOT/tmp` in the runner's runner.slurm,
+      # which keeps temporary files (notably Pkg.test's sandbox environment) off
+      # the node's /tmp — wiped wholesale every hour at HH:01, which killed any CI
+      # run crossing the top of an hour. Unlike /tmp, that directory has no cleaner
+      # of its own, hence this prune. `-mtime +2` cannot touch a live sandbox: a
+      # CI run lasts under an hour. No-op (|| true) while runner.slurm has not been
+      # updated yet and the directory does not exist.
+      - name: Prune the runner's private TMPDIR
+        run: find /projects/ctb/gha-runner/tmp -mindepth 1 -maxdepth 1 -mtime +2 -exec rm -rf {} + || true
