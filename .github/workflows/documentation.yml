@@ -7,10 +7,31 @@ on:
         required: false
         default: false
         type: boolean
+      # GPU-backed docs build (control-toolbox/OptimalControl.jl#885 part 2).
+      # Default '' reproduces today's behaviour exactly for every caller: `build-gpu`
+      # is skipped and only `build` runs. A caller opts in with e.g. '["occidata"]'.
+      #
+      # Design: *publish then upgrade*, not probe-then-fallback. `build` always runs
+      # first and deploys, unchanged — so docs publishing never depends on a
+      # self-hosted box being online. `build-gpu` runs only once `build` has
+      # succeeded and, with `continue-on-error: true`, never fails the workflow: on
+      # success it redeploys the same site with real GPU numbers; on failure or a
+      # long SLURM queue (self-hosted GPU boxes are not always immediately
+      # available) the already-published site from `build` is simply left in place.
+      gpu_runner:
+        description: "Self-hosted GPU runner labels for a docs-build upgrade pass (JSON array, e.g. '[\"occidata\"]'). Empty (default) disables the pass entirely."
+        required: false
+        default: ''
+        type: string
+      gpu_timeout_minutes:
+        description: "Timeout for the GPU upgrade pass. Budget for a cold build (self-hosted depots can be purged by maintenance jobs), not a warm one."
+        required: false
+        default: 120
+        type: number
     secrets:
       SSH_KEY:
         required: false
-        
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -19,7 +40,7 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: julia-actions/setup-julia@latest
-      
+
       # Add ct-registry (only if use_registry is true and SSH_KEY is provided)
       - name: Add ct-registry
         if: inputs.use_ct_registry
@@ -45,13 +66,105 @@ jobs:
           key: ${{ runner.os }}-julia-compiled-${{ hashFiles('docs/Manifest.toml') }}
           restore-keys: |
             ${{ runner.os }}-julia-compiled-
-            
+
       - uses: julia-actions/julia-buildpkg@latest
-      
+
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
 
       - name: Build and deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+          GKSwstype: 100
+        run: |
+          julia --project=docs/ -e 'ENV["GKSwstype"]="nul"; include("docs/make.jl")'
+          echo "📂 Listing docs/build/assets:"
+          ls -R docs/build/assets || true
+
+  # The GPU upgrade pass. See the `gpu_runner` input doc above for the design
+  # rationale. Never on the critical path of publishing: it only starts once
+  # `build` has already deployed, and `continue-on-error: true` means its outcome
+  # never fails the workflow either way.
+  build-gpu:
+    needs: build
+    if: inputs.gpu_runner != '' && github.event_name != 'pull_request'
+    runs-on: ${{ fromJSON(inputs.gpu_runner) }}
+    timeout-minutes: ${{ inputs.gpu_timeout_minutes }}
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: julia-actions/setup-julia@latest
+
+      # Self-hosted depots are persistent and not necessarily at ~/.julia (ci.yml's
+      # own comment on this: setup-julia does not set JULIA_DEPOT_PATH, and
+      # different self-hosted runners can have different real depot locations) —
+      # ask Julia instead of guessing, same pattern as ci.yml.
+      - name: Resolve Julia depot path
+        id: depot
+        run: echo "path=$(julia -e 'print(Base.DEPOT_PATH[1])')" >> "$GITHUB_OUTPUT"
+
+      # The node's /tmp is wiped every hour at HH:01 (occidata specifically; see
+      # ci.yml's "Keep the Pkg sandbox out of /tmp" step, commit 2f00b67). A docs
+      # build is longer than a test run, so it will almost certainly cross an hour
+      # boundary — redirect before any Julia step runs.
+      - name: Redirect TMPDIR off the node's periodically-wiped /tmp
+        run: |
+          mkdir -p "$RUNNER_TEMP/jltmp"
+          echo "TMPDIR=$RUNNER_TEMP/jltmp" >> "$GITHUB_ENV"
+
+      - name: Add ct-registry
+        if: inputs.use_ct_registry
+        uses: julia-actions/add-julia-registry@v2
+        with:
+          key: ${{ secrets.SSH_KEY }}
+          registry: control-toolbox/ct-registry
+
+      - name: Cache Julia artifacts
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.depot.outputs.path }}/artifacts
+          key: ${{ runner.os }}-gpu-docs-julia-artifacts-${{ hashFiles('docs/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gpu-docs-julia-artifacts-
+
+      - name: Cache Julia compiled code
+        uses: actions/cache@v5
+        with:
+          path: ${{ steps.depot.outputs.path }}/compiled
+          key: ${{ runner.os }}-gpu-docs-julia-compiled-${{ hashFiles('docs/Manifest.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-gpu-docs-julia-compiled-
+
+      - uses: julia-actions/julia-buildpkg@latest
+
+      - name: Install dependencies
+        run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
+
+      # Self-hosted depots persist across runs and across branches, unlike
+      # GitHub-hosted runners' fresh-per-job disk — a compiled/ cache left over
+      # from a different Manifest can drift out of sync and break precompilation.
+      # Retry once after purging it, same pattern as ci.yml's "Run tests (retry
+      # after cache purge, self-hosted runners)".
+      - name: Build and deploy
+        id: build_deploy
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+          GKSwstype: 100
+        run: |
+          julia --project=docs/ -e 'ENV["GKSwstype"]="nul"; include("docs/make.jl")'
+
+      - name: Purge stale compiled cache and retry once
+        if: steps.build_deploy.outcome == 'failure'
+        run: |
+          echo "::warning::GPU docs build failed on first attempt — purging ${{ steps.depot.outputs.path }}/compiled in case it's a stale precompile cache, then retrying once"
+          rm -rf "${{ steps.depot.outputs.path }}/compiled"
+
+      - name: Build and deploy (retry after cache purge)
+        if: steps.build_deploy.outcome == 'failure'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
