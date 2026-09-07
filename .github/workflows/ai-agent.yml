@@ -1,0 +1,123 @@
+name: AI Agent
+
+on:
+  workflow_call:
+    inputs:
+      provider:
+        description: "AI provider to use"
+        required: false
+        type: string
+        default: albert
+      handbook_ref:
+        description: "Handbook branch, tag, or commit containing the agent"
+        required: false
+        type: string
+        default: main
+      agent_name:
+        description: "Agent name under Handbook/ai-agents"
+        required: false
+        type: string
+        default: hello
+      model:
+        description: "Provider model alias or model identifier"
+        required: false
+        type: string
+        default: deepseek
+      prompt:
+        description: "Prompt sent to the agent"
+        required: true
+        type: string
+    secrets:
+      ALBERT_API_KEY:
+        required: false
+      HANDBOOK_READ_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  call:
+    name: Call AI agent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate provider and agent name
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          AGENT_NAME: ${{ inputs.agent_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$PROVIDER" in
+            albert)
+              ;;
+            *)
+              echo "Unsupported provider: $PROVIDER" >&2
+              echo "This workflow currently implements the albert provider." >&2
+              exit 1
+              ;;
+          esac
+
+          case "$AGENT_NAME" in
+            ""|*..*|*/*)
+              echo "agent_name must be a non-empty file name without path separators or '..'." >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Checkout agent instructions
+        uses: actions/checkout@v6
+        with:
+          repository: control-toolbox/Handbook
+          ref: ${{ inputs.handbook_ref }}
+          path: handbook
+          token: ${{ secrets.HANDBOOK_READ_TOKEN }}
+          sparse-checkout: ai-agents/${{ inputs.agent_name }}.md
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve model
+        id: model
+        env:
+          MODEL_INPUT: ${{ inputs.model }}
+        shell: bash
+        run: |
+          case "$MODEL_INPUT" in
+            deepseek)
+              echo "model=deepseek-ai/DeepSeek-V4-Flash" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "model=$MODEL_INPUT" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Call AI provider
+        env:
+          ALBERT_API_KEY: ${{ secrets.ALBERT_API_KEY }}
+          AGENT_PATH: handbook/ai-agents/${{ inputs.agent_name }}.md
+          MODEL: ${{ steps.model.outputs.model }}
+          PROMPT: ${{ inputs.prompt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -n "$ALBERT_API_KEY"
+          test -f "$AGENT_PATH"
+          agent_instructions=$(cat "$AGENT_PATH")
+          payload=$(jq -n \
+            --arg model "$MODEL" \
+            --arg system "$agent_instructions" \
+            --arg prompt "$PROMPT" \
+            '{model: $model, messages: [
+              {role: "system", content: $system},
+              {role: "user", content: $prompt}
+            ]}')
+
+          response=$(curl --fail-with-body --silent --show-error \
+            --request POST \
+            --url "https://albert.api.etalab.gouv.fr/v1/chat/completions" \
+            --header "Authorization: Bearer $ALBERT_API_KEY" \
+            --header "Content-Type: application/json" \
+            --data "$payload")
+
+          printf '%s\n' "$response" | jq -r '.choices[0].message.content // error("AI provider response has no message content")'
