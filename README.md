@@ -13,6 +13,7 @@ This repository provides **reusable workflows** (`workflow_call`) that every con
 | `ci.yml` | Build and test on a matrix of Julia versions, OS, and archs | `versions`, `runs_on`, `archs`, `use_ct_registry`, `test_args` |
 | `coverage.yml` | Run tests and upload coverage to Codecov | `use_ct_registry` |
 | `documentation.yml` | Build and deploy documentation with Documenter.jl | `use_ct_registry` |
+| `ai-agent.yml` | Run a Handbook-defined AI agent through a selected provider | `provider`, `handbook_ref`, `agent_name`, `model`, `task` |
 | `formatter.yml` | Run JuliaFormatter (BlueStyle) and open a PR if needed | — |
 | `compat-helper.yml` | Keep `[compat]` entries in `Project.toml` up to date | `subdirs` |
 | `spell-check.yml` | Spell check with `typos` | `locale`, `extend-identifiers`, `config-path` |
