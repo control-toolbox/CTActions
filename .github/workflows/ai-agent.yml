@@ -97,6 +97,7 @@ jobs:
           AGENT_PATH: handbook/ai-agents/${{ inputs.agent_name }}.md
           MODEL: ${{ steps.model.outputs.model }}
           PROMPT: ${{ inputs.prompt }}
+          PROVIDER: ${{ inputs.provider }}
         shell: bash
         run: |
           set -euo pipefail
@@ -106,10 +107,11 @@ jobs:
           agent_instructions=$(cat "$AGENT_PATH")
           payload=$(jq -n \
             --arg model "$MODEL" \
+            --arg provider "$PROVIDER" \
             --arg system "$agent_instructions" \
             --arg prompt "$PROMPT" \
             '{model: $model, messages: [
-              {role: "system", content: $system},
+              {role: "system", content: ($system + "\n\nRuntime context:\n- Provider: " + $provider + "\n- Model: " + $model)},
               {role: "user", content: $prompt}
             ]}')
 
