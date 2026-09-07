@@ -98,6 +98,7 @@ jobs:
           MODEL: ${{ steps.model.outputs.model }}
           PROMPT: ${{ inputs.prompt }}
           PROVIDER: ${{ inputs.provider }}
+          REPOSITORY: ${{ github.repository }}
         shell: bash
         run: |
           set -euo pipefail
@@ -108,10 +109,11 @@ jobs:
           payload=$(jq -n \
             --arg model "$MODEL" \
             --arg provider "$PROVIDER" \
+            --arg repository "$REPOSITORY" \
             --arg system "$agent_instructions" \
             --arg prompt "$PROMPT" \
             '{model: $model, messages: [
-              {role: "system", content: ($system + "\n\nRuntime context:\n- Provider: " + $provider + "\n- Model: " + $model)},
+              {role: "system", content: ($system + "\n\nRuntime context:\n- Provider: " + $provider + "\n- Model: " + $model + "\n- Calling repository: " + $repository)},
               {role: "user", content: $prompt}
             ]}')
 
