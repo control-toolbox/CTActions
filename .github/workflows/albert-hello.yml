@@ -1,0 +1,92 @@
+name: Albert Hello
+
+on:
+  workflow_call:
+    inputs:
+      handbook_ref:
+        description: "Handbook branch, tag, or commit containing the agent"
+        required: false
+        type: string
+        default: main
+      agent_path:
+        description: "Path to the agent instructions in Handbook"
+        required: false
+        type: string
+        default: agents-ai/albert-hello.md
+      model:
+        description: "Albert model alias or model identifier"
+        required: false
+        type: string
+        default: deepseek
+      prompt:
+        description: "Prompt sent to the agent"
+        required: true
+        type: string
+    secrets:
+      ALBERT_API_KEY:
+        required: true
+      HANDBOOK_READ_TOKEN:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  call:
+    name: Call Albert agent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout agent instructions
+        uses: actions/checkout@v6
+        with:
+          repository: control-toolbox/Handbook
+          ref: ${{ inputs.handbook_ref }}
+          path: handbook
+          token: ${{ secrets.HANDBOOK_READ_TOKEN }}
+          sparse-checkout: ${{ inputs.agent_path }}
+          sparse-checkout-cone-mode: false
+
+      - name: Resolve model
+        id: model
+        env:
+          MODEL_INPUT: ${{ inputs.model }}
+        shell: bash
+        run: |
+          case "$MODEL_INPUT" in
+            deepseek)
+              echo "model=deepseek-ai/DeepSeek-V4-Flash" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "model=$MODEL_INPUT" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Call Albert API
+        env:
+          ALBERT_API_KEY: ${{ secrets.ALBERT_API_KEY }}
+          AGENT_PATH: handbook/${{ inputs.agent_path }}
+          MODEL: ${{ steps.model.outputs.model }}
+          PROMPT: ${{ inputs.prompt }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          test -f "$AGENT_PATH"
+          agent_instructions=$(cat "$AGENT_PATH")
+          payload=$(jq -n \
+            --arg model "$MODEL" \
+            --arg system "$agent_instructions" \
+            --arg prompt "$PROMPT" \
+            '{model: $model, messages: [
+              {role: "system", content: $system},
+              {role: "user", content: $prompt}
+            ]}')
+
+          response=$(curl --fail-with-body --silent --show-error \
+            --request POST \
+            --url "https://albert.api.etalab.gouv.fr/v1/chat/completions" \
+            --header "Authorization: Bearer $ALBERT_API_KEY" \
+            --header "Content-Type: application/json" \
+            --data "$payload")
+
+          printf '%s\n' "$response" | jq -r '.choices[0].message.content // error("Albert response has no message content")'
