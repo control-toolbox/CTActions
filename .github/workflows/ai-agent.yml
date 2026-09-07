@@ -23,8 +23,8 @@ on:
         required: false
         type: string
         default: deepseek
-      prompt:
-        description: "Prompt sent to the agent"
+      task:
+        description: "Task sent to the agent"
         required: true
         type: string
     secrets:
@@ -96,7 +96,7 @@ jobs:
           ALBERT_API_KEY: ${{ secrets.ALBERT_API_KEY }}
           AGENT_PATH: handbook/ai-agents/${{ inputs.agent_name }}.md
           MODEL: ${{ steps.model.outputs.model }}
-          PROMPT: ${{ inputs.prompt }}
+          TASK: ${{ inputs.task }}
           PROVIDER: ${{ inputs.provider }}
           REPOSITORY: ${{ github.repository }}
         shell: bash
@@ -111,10 +111,10 @@ jobs:
             --arg provider "$PROVIDER" \
             --arg repository "$REPOSITORY" \
             --arg system "$agent_instructions" \
-            --arg prompt "$PROMPT" \
+            --arg task "$TASK" \
             '{model: $model, messages: [
               {role: "system", content: ($system + "\n\nRuntime context:\n- Provider: " + $provider + "\n- Model: " + $model + "\n- Calling repository: " + $repository)},
-              {role: "user", content: $prompt}
+              {role: "user", content: $task}
             ]}')
 
           response=$(curl --fail-with-body --silent --show-error \
