@@ -1,20 +1,25 @@
-name: Albert Hello
+name: AI Agent
 
 on:
   workflow_call:
     inputs:
+      provider:
+        description: "AI provider to use"
+        required: false
+        type: string
+        default: albert
       handbook_ref:
         description: "Handbook branch, tag, or commit containing the agent"
         required: false
         type: string
         default: main
-      agent_path:
-        description: "Path to the agent instructions in Handbook"
+      agent_name:
+        description: "Agent name under Handbook/ai-agents"
         required: false
         type: string
-        default: agents-ai/albert-hello.md
+        default: hello
       model:
-        description: "Albert model alias or model identifier"
+        description: "Provider model alias or model identifier"
         required: false
         type: string
         default: deepseek
@@ -24,7 +29,7 @@ on:
         type: string
     secrets:
       ALBERT_API_KEY:
-        required: true
+        required: false
       HANDBOOK_READ_TOKEN:
         required: true
 
@@ -33,9 +38,34 @@ permissions:
 
 jobs:
   call:
-    name: Call Albert agent
+    name: Call AI agent
     runs-on: ubuntu-latest
     steps:
+      - name: Validate provider and agent name
+        env:
+          PROVIDER: ${{ inputs.provider }}
+          AGENT_NAME: ${{ inputs.agent_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          case "$PROVIDER" in
+            albert)
+              ;;
+            *)
+              echo "Unsupported provider: $PROVIDER" >&2
+              echo "This workflow currently implements the albert provider." >&2
+              exit 1
+              ;;
+          esac
+
+          case "$AGENT_NAME" in
+            ""|*..*|*/*)
+              echo "agent_name must be a non-empty file name without path separators or '..'." >&2
+              exit 1
+              ;;
+          esac
+
       - name: Checkout agent instructions
         uses: actions/checkout@v6
         with:
@@ -43,7 +73,7 @@ jobs:
           ref: ${{ inputs.handbook_ref }}
           path: handbook
           token: ${{ secrets.HANDBOOK_READ_TOKEN }}
-          sparse-checkout: ${{ inputs.agent_path }}
+          sparse-checkout: ai-agents/${{ inputs.agent_name }}.md
           sparse-checkout-cone-mode: false
 
       - name: Resolve model
@@ -61,16 +91,17 @@ jobs:
               ;;
           esac
 
-      - name: Call Albert API
+      - name: Call AI provider
         env:
           ALBERT_API_KEY: ${{ secrets.ALBERT_API_KEY }}
-          AGENT_PATH: handbook/${{ inputs.agent_path }}
+          AGENT_PATH: handbook/ai-agents/${{ inputs.agent_name }}.md
           MODEL: ${{ steps.model.outputs.model }}
           PROMPT: ${{ inputs.prompt }}
         shell: bash
         run: |
           set -euo pipefail
 
+          test -n "$ALBERT_API_KEY"
           test -f "$AGENT_PATH"
           agent_instructions=$(cat "$AGENT_PATH")
           payload=$(jq -n \
@@ -89,4 +120,4 @@ jobs:
             --header "Content-Type: application/json" \
             --data "$payload")
 
-          printf '%s\n' "$response" | jq -r '.choices[0].message.content // error("Albert response has no message content")'
+          printf '%s\n' "$response" | jq -r '.choices[0].message.content // error("AI provider response has no message content")'
