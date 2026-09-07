@@ -84,7 +84,7 @@ jobs:
         run: |
           case "$MODEL_INPUT" in
             deepseek)
-              echo "model=deepseek-ai/DeepSeek-V4-Flash" >> "$GITHUB_OUTPUT"
+              echo "model=deepseek-v4-flash" >> "$GITHUB_OUTPUT"
               ;;
             *)
               echo "model=$MODEL_INPUT" >> "$GITHUB_OUTPUT"
