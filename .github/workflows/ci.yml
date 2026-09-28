@@ -183,6 +183,17 @@ jobs:
         with:
           git_cli: ${{ (inputs.use_ct_registry && runner.os == 'Windows') && 'true' || 'false' }}
 
+      # The occidata runner idles in a CPU allocation so as not to hold a GPU for
+      # days; the tests get a GPU node for their own duration through the script
+      # the runner exports as $OCCIDATA_GPU_RUN (control-toolbox/occidata,
+      # scripts/slurm_gpu_run.sh). julia-runtest's `prefix` input only takes an
+      # expression, hence the detour through GITHUB_ENV. Unset on every other
+      # runner, so the prefix stays empty there.
+      - name: Resolve GPU prefix (self-hosted runners)
+        if: inputs.runner_type == 'self-hosted'
+        shell: bash
+        run: echo "GPU_RUN_PREFIX=${OCCIDATA_GPU_RUN:-}" >> "$GITHUB_ENV"
+
       # Self-hosted runners reuse a persistent Julia depot across every run
       # (unlike GitHub-hosted runners, whose disk is wiped between jobs), so a
       # compiled/ cache left over from a different branch/Manifest can drift
@@ -195,6 +206,7 @@ jobs:
         uses: julia-actions/julia-runtest@latest
         with:
           test_args: ${{ inputs.test_args }}
+          prefix: ${{ env.GPU_RUN_PREFIX }}
 
       - name: Purge stale compiled cache (self-hosted runners)
         if: ${{ !cancelled() && inputs.runner_type == 'self-hosted' && steps.run_tests.outcome == 'failure' }}
@@ -207,3 +219,4 @@ jobs:
         uses: julia-actions/julia-runtest@latest
         with:
           test_args: ${{ inputs.test_args }}
+          prefix: ${{ env.GPU_RUN_PREFIX }}

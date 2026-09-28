@@ -142,6 +142,11 @@ jobs:
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
 
+      # Only the builds themselves need CUDA: on occidata they run on a GPU node
+      # through $OCCIDATA_GPU_RUN (see ci.yml's "Resolve GPU prefix" step); the
+      # expansion is empty on any other runner. SLURM reads a bare number as
+      # minutes, so the GPU allocation gets the same budget as the job.
+      #
       # Self-hosted depots persist across runs and across branches, unlike
       # GitHub-hosted runners' fresh-per-job disk — a compiled/ cache left over
       # from a different Manifest can drift out of sync and break precompilation.
@@ -154,8 +159,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
           GKSwstype: 100
+          OCCIDATA_GPU_TIME: ${{ inputs.gpu_timeout_minutes }}
         run: |
-          julia --project=docs/ -e 'ENV["GKSwstype"]="nul"; include("docs/make.jl")'
+          ${OCCIDATA_GPU_RUN:-} julia --project=docs/ -e 'ENV["GKSwstype"]="nul"; include("docs/make.jl")'
 
       - name: Purge stale compiled cache and retry once
         if: steps.build_deploy.outcome == 'failure'
@@ -169,7 +175,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
           GKSwstype: 100
+          OCCIDATA_GPU_TIME: ${{ inputs.gpu_timeout_minutes }}
         run: |
-          julia --project=docs/ -e 'ENV["GKSwstype"]="nul"; include("docs/make.jl")'
+          ${OCCIDATA_GPU_RUN:-} julia --project=docs/ -e 'ENV["GKSwstype"]="nul"; include("docs/make.jl")'
           echo "📂 Listing docs/build/assets:"
           ls -R docs/build/assets || true
