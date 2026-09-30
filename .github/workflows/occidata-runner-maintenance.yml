@@ -9,8 +9,8 @@ jobs:
   cleanup:
     runs-on: [self-hosted, occidata]
     steps:
-      # The runner isolates the jobs' git config in $GHA_ROOT/gitconfig-actions
-      # (GIT_CONFIG_GLOBAL in runner.slurm). The script, versioned in
+      # The runner isolates the jobs' git config in $GHA_ROOT/home/.gitconfig
+      # (the jobs' own HOME, set by runner.slurm). The script, versioned in
       # control-toolbox/occidata (scripts/), removes url.*.insteadOf rewrites — a
       # https -> git@github.com: rewrite broke every checkout on 2026-09-28, the
       # cluster having no SSH key — dedups safe.directory and checks HTTPS access.
