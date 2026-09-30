@@ -12,7 +12,7 @@ jobs:
 
       # 🧰 Cache Julia artifacts (binaries de JuliaFormatter et dépendances)
       - name: Cache Julia artifacts
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.julia/artifacts
           key: ${{ runner.os }}-formatter-artifacts-${{ hashFiles('**/formatter.lock') }}
@@ -21,7 +21,7 @@ jobs:
 
       # ⚡ Cache du code précompilé (.ji)
       - name: Cache Julia compiled code
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.julia/compiled
           key: ${{ runner.os }}-formatter-compiled-${{ hashFiles('**/formatter.lock') }}
