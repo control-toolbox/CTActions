@@ -183,16 +183,11 @@ jobs:
         with:
           git_cli: ${{ (inputs.use_ct_registry && runner.os == 'Windows') && 'true' || 'false' }}
 
-      # The occidata runner idles in a CPU allocation so as not to hold a GPU for
-      # days; the tests get a GPU node for their own duration through the script
-      # the runner exports as $OCCIDATA_GPU_RUN (control-toolbox/occidata,
-      # scripts/slurm_gpu_run.sh). julia-runtest's `prefix` input only takes an
-      # expression, hence the detour through GITHUB_ENV. Unset on every other
-      # runner, so the prefix stays empty there.
-      - name: Resolve GPU prefix (self-hosted runners)
-        if: inputs.runner_type == 'self-hosted'
-        shell: bash
-        run: echo "GPU_RUN_PREFIX=${OCCIDATA_GPU_RUN:-}" >> "$GITHUB_ENV"
+      - name: Run tests
+        if: inputs.runner_type != 'self-hosted'
+        uses: julia-actions/julia-runtest@latest
+        with:
+          test_args: ${{ inputs.test_args }}
 
       # Self-hosted runners reuse a persistent Julia depot across every run
       # (unlike GitHub-hosted runners, whose disk is wiped between jobs), so a
@@ -200,23 +195,38 @@ jobs:
       # out of sync with what's actually installed and break precompilation
       # for unrelated packages/extensions. Retry once after purging it rather
       # than requiring a runner-specific maintenance job to catch this.
-      - name: Run tests
-        id: run_tests
-        continue-on-error: ${{ inputs.runner_type == 'self-hosted' }}
-        uses: julia-actions/julia-runtest@latest
-        with:
-          test_args: ${{ inputs.test_args }}
-          prefix: ${{ env.GPU_RUN_PREFIX }}
-
-      - name: Purge stale compiled cache (self-hosted runners)
-        if: ${{ !cancelled() && inputs.runner_type == 'self-hosted' && steps.run_tests.outcome == 'failure' }}
+      #
+      # Both attempts live in one step so that its exit status is the retry's:
+      # continue-on-error on a julia-runtest step does not stop a failure inside
+      # that composite action from failing the job (seen on CTLie.jl run
+      # 37276655422, where the retry passed and the job still failed). The
+      # Pkg.test call is the one julia-runtest makes with its default inputs.
+      #
+      # The occidata runner idles in a CPU allocation so as not to hold a GPU for
+      # days; the tests get a GPU node for their own duration through the script
+      # the runner exports as $OCCIDATA_GPU_RUN (control-toolbox/occidata,
+      # scripts/slurm_gpu_run.sh). Unset on every other runner, so the prefix
+      # expands to nothing there.
+      - name: Run tests (self-hosted runners, one retry after cache purge)
+        if: inputs.runner_type == 'self-hosted'
+        shell: bash
+        env:
+          TEST_ARGS: ${{ inputs.test_args }}
+          COMPILED_DIR: ${{ steps.depot.outputs.path }}/compiled
         run: |
-          echo "::warning::Tests failed on first attempt — purging ${{ steps.depot.outputs.path }}/compiled in case it's a stale precompile cache, then retrying once"
-          rm -rf "${{ steps.depot.outputs.path }}/compiled"
-
-      - name: Run tests (retry after cache purge, self-hosted runners)
-        if: ${{ !cancelled() && inputs.runner_type == 'self-hosted' && steps.run_tests.outcome == 'failure' }}
-        uses: julia-actions/julia-runtest@latest
-        with:
-          test_args: ${{ inputs.test_args }}
-          prefix: ${{ env.GPU_RUN_PREFIX }}
+          run_tests() {
+            # shellcheck disable=SC2086  # TEST_ARGS splits like julia-runtest's test_args
+            ${OCCIDATA_GPU_RUN:-} julia --color=yes --project=@. -e '
+              import Pkg
+              Pkg.test(;
+                coverage=true,
+                julia_args=["--check-bounds=yes", "--compiled-modules=yes", "--depwarn=yes"],
+                force_latest_compatible_version=false,
+                allow_reresolve=true,
+                test_args=ARGS,
+              )' -- $TEST_ARGS
+          }
+          run_tests && exit 0
+          echo "::warning::Tests failed on first attempt — purging $COMPILED_DIR in case it's a stale precompile cache, then retrying once"
+          rm -rf "$COMPILED_DIR"
+          run_tests

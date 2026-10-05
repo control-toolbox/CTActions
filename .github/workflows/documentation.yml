@@ -143,15 +143,16 @@ jobs:
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
 
       # Only the builds themselves need CUDA: on occidata they run on a GPU node
-      # through $OCCIDATA_GPU_RUN (see ci.yml's "Resolve GPU prefix" step); the
-      # expansion is empty on any other runner. SLURM reads a bare number as
+      # through $OCCIDATA_GPU_RUN (see ci.yml's self-hosted "Run tests" step);
+      # the expansion is empty on any other runner. SLURM reads a bare number as
       # minutes, so the GPU allocation gets the same budget as the job.
       #
       # Self-hosted depots persist across runs and across branches, unlike
       # GitHub-hosted runners' fresh-per-job disk — a compiled/ cache left over
       # from a different Manifest can drift out of sync and break precompilation.
-      # Retry once after purging it, same pattern as ci.yml's "Run tests (retry
-      # after cache purge, self-hosted runners)".
+      # Retry once after purging it, as ci.yml's self-hosted "Run tests" step
+      # does. continue-on-error is enough here because this step is a plain
+      # `run:`, not a composite action.
       - name: Build and deploy
         id: build_deploy
         continue-on-error: true
