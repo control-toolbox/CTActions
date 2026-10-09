@@ -42,6 +42,8 @@ jobs:
       - name: Setup Julia
         id: julia
         uses: julia-actions/setup-julia@latest
+        with:
+          version: '1.12'
 
       # Add ct-registry (only if use_registry is true and SSH_KEY is provided)
       - name: Add ct-registry
@@ -100,6 +102,8 @@ jobs:
       - name: Setup Julia
         id: julia
         uses: julia-actions/setup-julia@latest
+        with:
+          version: '1.12'
 
       # Self-hosted depots are persistent and not necessarily at ~/.julia (ci.yml's
       # own comment on this: setup-julia does not set JULIA_DEPOT_PATH, and
