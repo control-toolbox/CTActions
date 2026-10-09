@@ -39,7 +39,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: julia-actions/setup-julia@latest
+      - name: Setup Julia
+        id: julia
+        uses: julia-actions/setup-julia@latest
 
       # Add ct-registry (only if use_registry is true and SSH_KEY is provided)
       - name: Add ct-registry
@@ -54,18 +56,18 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.julia/artifacts
-          key: ${{ runner.os }}-julia-artifacts-${{ hashFiles('docs/Manifest.toml') }}
+          key: ${{ runner.os }}-julia-${{ steps.julia.outputs.julia-version }}-artifacts-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
-            ${{ runner.os }}-julia-artifacts-
+            ${{ runner.os }}-julia-${{ steps.julia.outputs.julia-version }}-artifacts-
 
       # ⚡ Cache du code précompilé (fichiers .ji)
       - name: Cache Julia compiled code
         uses: actions/cache@v5
         with:
           path: ~/.julia/compiled
-          key: ${{ runner.os }}-julia-compiled-${{ hashFiles('docs/Manifest.toml') }}
+          key: ${{ runner.os }}-julia-${{ steps.julia.outputs.julia-version }}-compiled-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
-            ${{ runner.os }}-julia-compiled-
+            ${{ runner.os }}-julia-${{ steps.julia.outputs.julia-version }}-compiled-
 
       - uses: julia-actions/julia-buildpkg@latest
 
@@ -95,7 +97,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: julia-actions/setup-julia@latest
+      - name: Setup Julia
+        id: julia
+        uses: julia-actions/setup-julia@latest
 
       # Self-hosted depots are persistent and not necessarily at ~/.julia (ci.yml's
       # own comment on this: setup-julia does not set JULIA_DEPOT_PATH, and
@@ -125,17 +129,17 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ${{ steps.depot.outputs.path }}/artifacts
-          key: ${{ runner.os }}-gpu-docs-julia-artifacts-${{ hashFiles('docs/Manifest.toml') }}
+          key: ${{ runner.os }}-gpu-docs-julia-${{ steps.julia.outputs.julia-version }}-artifacts-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
-            ${{ runner.os }}-gpu-docs-julia-artifacts-
+            ${{ runner.os }}-gpu-docs-julia-${{ steps.julia.outputs.julia-version }}-artifacts-
 
       - name: Cache Julia compiled code
         uses: actions/cache@v5
         with:
           path: ${{ steps.depot.outputs.path }}/compiled
-          key: ${{ runner.os }}-gpu-docs-julia-compiled-${{ hashFiles('docs/Manifest.toml') }}
+          key: ${{ runner.os }}-gpu-docs-julia-${{ steps.julia.outputs.julia-version }}-compiled-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
-            ${{ runner.os }}-gpu-docs-julia-compiled-
+            ${{ runner.os }}-gpu-docs-julia-${{ steps.julia.outputs.julia-version }}-compiled-
 
       - uses: julia-actions/julia-buildpkg@latest
 

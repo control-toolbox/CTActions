@@ -8,25 +8,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@latest
+      - name: Setup Julia
+        id: julia
+        uses: julia-actions/setup-julia@latest
 
       # 🧰 Cache Julia artifacts (binaries de JuliaFormatter et dépendances)
       - name: Cache Julia artifacts
         uses: actions/cache@v5
         with:
           path: ~/.julia/artifacts
-          key: ${{ runner.os }}-formatter-artifacts-${{ hashFiles('**/formatter.lock') }}
+          key: ${{ runner.os }}-formatter-julia-${{ steps.julia.outputs.julia-version }}-artifacts-${{ hashFiles('**/formatter.lock') }}
           restore-keys: |
-            ${{ runner.os }}-formatter-artifacts-
+            ${{ runner.os }}-formatter-julia-${{ steps.julia.outputs.julia-version }}-artifacts-
 
       # ⚡ Cache du code précompilé (.ji)
       - name: Cache Julia compiled code
         uses: actions/cache@v5
         with:
           path: ~/.julia/compiled
-          key: ${{ runner.os }}-formatter-compiled-${{ hashFiles('**/formatter.lock') }}
+          key: ${{ runner.os }}-formatter-julia-${{ steps.julia.outputs.julia-version }}-compiled-${{ hashFiles('**/formatter.lock') }}
           restore-keys: |
-            ${{ runner.os }}-formatter-compiled-
+            ${{ runner.os }}-formatter-julia-${{ steps.julia.outputs.julia-version }}-compiled-
 
       # 🎨 Installer JuliaFormatter dans un environnement vide et formater
       - name: Install JuliaFormatter and format

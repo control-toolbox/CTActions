@@ -57,6 +57,7 @@ jobs:
       # Setup Julia Environment
       # ---------------------------
       - name: Setup Julia
+        id: julia
         uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.version }}
@@ -93,20 +94,18 @@ jobs:
           cache-name: cache-artifacts
         with:
           path: ${{ steps.depot.outputs.path }}/artifacts
-          key: ${{ runner.os }}-test-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
+          key: ${{ runner.os }}-test-julia-${{ steps.julia.outputs.julia-version }}-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
-            ${{ runner.os }}-test-${{ env.cache-name }}-
-            ${{ runner.os }}-test-
-            ${{ runner.os }}-
+            ${{ runner.os }}-test-julia-${{ steps.julia.outputs.julia-version }}-${{ env.cache-name }}-
 
       - name: Cache Julia compiled code (self-hosted runners)
         if: inputs.runner_type == 'self-hosted'
         uses: actions/cache@v5
         with:
           path: ${{ steps.depot.outputs.path }}/compiled
-          key: ${{ runner.os }}-julia-compiled-${{ matrix.version }}-${{ hashFiles('**/Project.toml') }}
+          key: ${{ runner.os }}-julia-compiled-${{ steps.julia.outputs.julia-version }}-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
-            ${{ runner.os }}-julia-compiled-${{ matrix.version }}-
+            ${{ runner.os }}-julia-compiled-${{ steps.julia.outputs.julia-version }}-
 
       # ---------------------------
       # Add ct-registry
