@@ -21,7 +21,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: julia-actions/setup-julia@latest
+      - name: Setup Julia
+        id: julia
+        uses: julia-actions/setup-julia@latest
 
       # Add ct-registry (only if use_registry is true and SSH_KEY is provided)
       - name: Add ct-registry
@@ -36,18 +38,18 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.julia/artifacts
-          key: ${{ runner.os }}-julia-artifacts-${{ hashFiles('**/Manifest.toml') }}
+          key: ${{ runner.os }}-julia-${{ steps.julia.outputs.julia-version }}-artifacts-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
-            ${{ runner.os }}-julia-artifacts-
+            ${{ runner.os }}-julia-${{ steps.julia.outputs.julia-version }}-artifacts-
 
       # ⚡ Cache du code précompilé (.ji)
       - name: Cache Julia compiled code
         uses: actions/cache@v5
         with:
           path: ~/.julia/compiled
-          key: ${{ runner.os }}-julia-compiled-${{ hashFiles('**/Manifest.toml') }}
+          key: ${{ runner.os }}-julia-${{ steps.julia.outputs.julia-version }}-compiled-${{ hashFiles('**/Project.toml') }}
           restore-keys: |
-            ${{ runner.os }}-julia-compiled-
+            ${{ runner.os }}-julia-${{ steps.julia.outputs.julia-version }}-compiled-
 
       # 🧱 Exécuter les tests
       - uses: julia-actions/julia-runtest@latest
