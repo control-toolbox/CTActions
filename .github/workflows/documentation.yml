@@ -55,7 +55,7 @@ jobs:
 
       # 🧰 Cache des artefacts (binaires des paquets)
       - name: Cache Julia artifacts
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.julia/artifacts
           key: ${{ runner.os }}-julia-${{ steps.julia.outputs.julia-version }}-artifacts-${{ hashFiles('**/Project.toml') }}
@@ -64,7 +64,7 @@ jobs:
 
       # ⚡ Cache du code précompilé (fichiers .ji)
       - name: Cache Julia compiled code
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.julia/compiled
           key: ${{ runner.os }}-julia-${{ steps.julia.outputs.julia-version }}-compiled-${{ hashFiles('**/Project.toml') }}
@@ -130,7 +130,7 @@ jobs:
           registry: control-toolbox/ct-registry
 
       - name: Cache Julia artifacts
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ steps.depot.outputs.path }}/artifacts
           key: ${{ runner.os }}-gpu-docs-julia-${{ steps.julia.outputs.julia-version }}-artifacts-${{ hashFiles('**/Project.toml') }}
@@ -138,7 +138,7 @@ jobs:
             ${{ runner.os }}-gpu-docs-julia-${{ steps.julia.outputs.julia-version }}-artifacts-
 
       - name: Cache Julia compiled code
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ${{ steps.depot.outputs.path }}/compiled
           key: ${{ runner.os }}-gpu-docs-julia-${{ steps.julia.outputs.julia-version }}-compiled-${{ hashFiles('**/Project.toml') }}
