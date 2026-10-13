@@ -6,6 +6,13 @@ Centralized GitHub Actions workflows, issue templates, and configuration for the
 
 This repository provides **reusable workflows** (`workflow_call`) that every control-toolbox package can include via `uses: control-toolbox/CTActions/.github/workflows/<file>@main`. It also ships standard issue templates and a Dependabot configuration for keeping GitHub Actions versions up to date.
 
+## Design and conventions
+
+How the organization manages its workflows — centralize then call, label-gated
+triggers, the catalog, which repository has which workflow and why, recipes for a new
+repository and for org-wide updates — is described in
+[`docs/WORKFLOWS.md`](docs/WORKFLOWS.md).
+
 ## Reusable workflows
 
 | Workflow | Description | Key inputs |
