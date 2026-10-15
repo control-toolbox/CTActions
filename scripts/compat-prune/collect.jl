@@ -16,14 +16,13 @@
 
 include("common.jl")
 
-const FILES = ("Project.toml", "test/Project.toml", "docs/Project.toml")
-
 "Download the audited files present in tree `treeish` of `repo` into `dest`; return their paths."
 function fetch_files(repo, treeish, dest)
     jq = ".tree[] | select(.type == \"blob\") | .path + \" \" + .sha"
-    blobs = Dict(Tuple(split(l)) for l in split(gh_jq("repos/$repo/git/trees/$treeish?recursive=1", jq), '\n'))
+    listing = gh_jq("repos/$repo/git/trees/$treeish?recursive=1", jq)
+    blobs = Dict(Tuple(split(l)) for l in split(listing, '\n') if !isempty(l))
     found = String[]
-    for f in FILES
+    for f in AUDITED_FILES
         haskey(blobs, f) || continue
         path = joinpath(dest, f)
         mkpath(dirname(path))
@@ -33,23 +32,31 @@ function fetch_files(repo, treeish, dest)
     return found
 end
 
-packages = parse_list(ARGS[1])
-out = ARGS[2]
+"""
+    collect_files(out, lookup, versions, trees) -> Dict
 
-lookup = Dict(n => registry_lookup(n) for n in packages)
-joint = resolve_env(Dict(n => lookup[n][1] for n in packages), Dict())
-joint["ok"] || error("The joint environment does not resolve on Julia $VERSION:\n$(joint["error"])")
-versions = manifest_versions(joint["manifest"])
-trees = manifest_trees(joint["manifest"])
-
-index = Dict{String,Any}()
-for n in packages
-    uuid, repo = lookup[n]
-    branch = gh_jq("repos/$repo", ".default_branch")
-    registered = fetch_files(repo, trees[n], joinpath(out, "registered", n))
-    default = fetch_files(repo, branch, joinpath(out, "default", n))
-    index[n] = Dict("uuid" => uuid, "version" => versions[n], "repo" => repo, "tree" => trees[n],
-                    "default_branch" => branch, "files" => registered, "default_files" => default)
-    println(rpad(n, 16), rpad(versions[n], 14), repo, "  [", join(registered, ", "), "]")
+Fetch the registered and default-branch files of every package of `lookup` (name =>
+(uuid, repo)) into `out`, write `<out>/index.toml` and return the index.
+"""
+function collect_files(out, lookup, versions, trees)
+    index = Dict{String,Any}()
+    for n in sort(collect(keys(lookup)))
+        uuid, repo = lookup[n]
+        branch = gh_jq("repos/$repo", ".default_branch")
+        registered = fetch_files(repo, trees[n], joinpath(out, "registered", n))
+        default = fetch_files(repo, branch, joinpath(out, "default", n))
+        index[n] = Dict("uuid" => uuid, "version" => versions[n], "repo" => repo, "tree" => trees[n],
+                        "default_branch" => branch, "files" => registered, "default_files" => default)
+        println(rpad(n, 16), rpad(versions[n], 14), repo, "  [", join(registered, ", "), "]")
+    end
+    open(io -> TOML.print(io, Dict("julia" => string(VERSION), "packages" => index)), joinpath(out, "index.toml"), "w")
+    return index
 end
-open(io -> TOML.print(io, Dict("julia" => string(VERSION), "packages" => index)), joinpath(out, "index.toml"), "w")
+
+if abspath(PROGRAM_FILE) == @__FILE__
+    packages, out = parse_list(ARGS[1]), ARGS[2]
+    lookup = Dict(n => registry_lookup(n) for n in packages)
+    joint = resolve_env(Dict(n => lookup[n][1] for n in packages), Dict())
+    joint["ok"] || error("The joint environment does not resolve on Julia $VERSION:\n$(joint["error"])")
+    collect_files(out, lookup, joint["versions"], joint["trees"])
+end

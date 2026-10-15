@@ -1,0 +1,45 @@
+CTBase | Project.toml | DocStringExtensions | blocked | newest 0.10
+CTBase | Project.toml | ForwardDiff | prune | 1
+CTBase | Project.toml | JET | prune | 0.9, 0.12
+CTBase | docs/Project.toml | ForwardDiff | prune | 1
+CTBase | docs/Project.toml | JET | prune | 0.9, 0.12
+CTDirect | Project.toml | CTBase | prune | 0.30
+CTDirect | Project.toml | CTModels | prune | 0.19
+CTDirect | docs/Project.toml | CTBase | prune | 0.30
+CTFlows | Project.toml | CUDA | prune | 6
+CTFlows | Project.toml | DiffEqBase | prune | 7
+CTFlows | Project.toml | ForwardDiff | prune | 1
+CTFlows | Project.toml | GPUArraysCore | prune | 0.2
+CTFlows | docs/Project.toml | DifferentiationInterface | prune | 0.7
+CTFlows | docs/Project.toml | ForwardDiff | prune | 1
+CTLie | Project.toml | CUDA | prune | 6
+CTLie | Project.toml | ForwardDiff | prune | 1
+CTLie | Project.toml | JET | prune | 0.9, 0.12
+CTLie | docs/Project.toml | ForwardDiff | prune | 1
+CTModels | Project.toml | JET | prune | 0.9, 0.12
+CTModels | Project.toml | OrderedCollections | prune | 2
+CTModels | docs/Project.toml | JET | prune | 0.9, 0.12
+CTParser | Project.toml | CTBase | keep | 
+CTParser | Project.toml | OrderedCollections | prune | 2
+CTParser | docs/Project.toml | CTBase | prune | 0.30
+CTParser | test/Project.toml | CTBase | blocked | newest 0.30
+CTParser | test/Project.toml | CUDA | prune | 6
+CTParser | test/Project.toml | CUDSS | prune | 0.8
+CTParser | test/Project.toml | MadNLP | prune | 0.10
+CTParser | test/Project.toml | MadNLPGPU | prune | 0.10
+CTParser | test/Project.toml | OrderedCollections | prune | 2
+CTSolvers | Project.toml | CUDA | prune | 6
+CTSolvers | Project.toml | CUDSS | prune | 0.7, 0.8
+CTSolvers | Project.toml | DiffEqBase | prune | 7
+CTSolvers | Project.toml | ForwardDiff | prune | 1
+CTSolvers | Project.toml | JET | prune | 0.9, 0.12
+CTSolvers | Project.toml | MadNLP | prune | 0.10
+CTSolvers | Project.toml | MadNLPGPU | prune | 0.10
+CTSolvers | Project.toml | OrderedCollections | prune | 2
+CTSolvers | docs/Project.toml | CUDA | prune | 6
+CTSolvers | docs/Project.toml | CUDSS | prune | 0.8
+CTSolvers | docs/Project.toml | DiffEqBase | prune | 7
+CTSolvers | docs/Project.toml | ForwardDiff | prune | 1
+CTSolvers | docs/Project.toml | JET | prune | 0.9, 0.12
+CTSolvers | docs/Project.toml | MadNLP | prune | 0.10
+CTSolvers | docs/Project.toml | MadNLPGPU | prune | 0.10

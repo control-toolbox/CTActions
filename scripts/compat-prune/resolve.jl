@@ -8,20 +8,31 @@
 
 include("common.jl")
 
-root, outfile = ARGS[1], ARGS[2]
-prunes = length(ARGS) ≥ 4 ? TOML.parsefile(ARGS[3])["prune"] : []
-baseline = length(ARGS) ≥ 4 ? TOML.parsefile(ARGS[4])["env"] : Dict()
-envs, audited, uuids = load_collected(root)
+"""
+    resolve_all(root; prunes=[], baseline=Dict(), sim=simulate) -> Dict
 
-results = Dict{String,Any}()
-for name in sort(collect(keys(envs)))
-    if isempty(prunes)
-        r = simulate(name, envs[name], Dict(), uuids)
-    else
-        base = baseline[name]
-        r = base["ok"] ? simulate(name, envs[name], narrowings(prunes, name, base["versions"], audited), uuids) : base
+Result of every environment of a collected directory, the baseline when `prunes` is empty.
+"""
+function resolve_all(root; prunes=[], baseline=Dict(), sim=simulate)
+    envs, audited, uuids = load_collected(root)
+    results = Dict{String,Any}()
+    for name in sort(collect(keys(envs)))
+        if isempty(prunes)
+            r = sim(name, envs[name], Dict(), uuids)
+        else
+            base = baseline[name]
+            r = base["ok"] ? sim(name, envs[name], narrowings(prunes, name, base["versions"], audited), uuids) : base
+        end
+        results[name] = r
+        println(VERSION, "  ", rpad(name, 24), r["ok"] ? "ok" : "UNSAT")
     end
-    results[name] = r
-    println(VERSION, "  ", rpad(name, 24), r["ok"] ? "ok" : "UNSAT")
+    return results
 end
-open(io -> TOML.print(io, Dict("julia" => string(VERSION), "env" => results)), outfile, "w")
+
+if abspath(PROGRAM_FILE) == @__FILE__
+    root, outfile = ARGS[1], ARGS[2]
+    prunes = length(ARGS) ≥ 4 ? TOML.parsefile(ARGS[3])["prune"] : []
+    baseline = length(ARGS) ≥ 4 ? TOML.parsefile(ARGS[4])["env"] : Dict()
+    results = resolve_all(root; prunes, baseline)
+    open(io -> TOML.print(io, Dict("julia" => string(VERSION), "env" => results)), outfile, "w")
+end

@@ -42,25 +42,36 @@ function docs_env(name, uuid, dir)
     return deps, restrict(get(t, "compat", Dict()), deps)
 end
 
-root = ARGS[1]
-index = TOML.parsefile(joinpath(root, "index.toml"))["packages"]
-pins = Dict(n => VersionNumber(p["version"]) for (n, p) in index)
+"""
+    build_envs(root) -> Dict
 
-envs = Dict{String,Any}()
-envs["joint"] = (Dict(n => p["uuid"] for (n, p) in index), Dict{String,Any}())
-for (n, p) in index
-    dir = joinpath(root, "registered", n)
-    envs["$n/test"] = test_env(n, p["uuid"], dir)
-    docs = docs_env(n, p["uuid"], dir)
-    docs === nothing || (envs["$n/docs"] = docs)
+The audited environments of a collected directory, as written to `envs.toml`: name =>
+`owner`, `kind`, `deps`, `compat`, `pins` (the packages pinned to their audited version).
+"""
+function build_envs(root)
+    index = TOML.parsefile(joinpath(root, "index.toml"))["packages"]
+    pins = Dict(n => VersionNumber(p["version"]) for (n, p) in index)
+    envs = Dict{String,Any}()
+    envs["joint"] = (Dict(n => p["uuid"] for (n, p) in index), Dict{String,Any}())
+    for (n, p) in index
+        dir = joinpath(root, "registered", n)
+        envs["$n/test"] = test_env(n, p["uuid"], dir)
+        docs = docs_env(n, p["uuid"], dir)
+        docs === nothing || (envs["$n/docs"] = docs)
+    end
+    out = Dict{String,Any}()
+    for (name, (deps, compat)) in envs
+        owner, kind = name == "joint" ? ("", "joint") : split(name, "/")
+        pinned = Dict(string(k) => string(pins[k]) for k in (kind == "joint" ? keys(pins) : (owner,)))
+        compat = merge(compat, Dict(k => (v = VersionNumber(v); "=$(v.major).$(v.minor).$(v.patch)") for (k, v) in pinned))
+        out[name] = Dict("owner" => owner, "kind" => kind, "deps" => deps, "compat" => compat, "pins" => pinned)
+    end
+    return out
 end
 
-out = Dict{String,Any}()
-for (name, (deps, compat)) in envs
-    owner, kind = name == "joint" ? ("", "joint") : split(name, "/")
-    pinned = Dict(string(k) => string(pins[k]) for k in (kind == "joint" ? keys(pins) : (owner,)))
-    compat = merge(compat, Dict(k => (v = VersionNumber(v); "=$(v.major).$(v.minor).$(v.patch)") for (k, v) in pinned))
-    out[name] = Dict("owner" => owner, "kind" => kind, "deps" => deps, "compat" => compat, "pins" => pinned)
+if abspath(PROGRAM_FILE) == @__FILE__
+    root = ARGS[1]
+    out = build_envs(root)
+    open(io -> TOML.print(io, Dict("env" => out)), joinpath(root, "envs.toml"), "w")
+    println(length(out), " environments: ", join(sort(collect(keys(out))), ", "))
 end
-open(io -> TOML.print(io, Dict("env" => out)), joinpath(root, "envs.toml"), "w")
-println(length(out), " environments: ", join(sort(collect(keys(out))), ", "))

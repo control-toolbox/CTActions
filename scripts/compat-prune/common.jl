@@ -2,15 +2,17 @@
 
 using Pkg, TOML
 
-# Resolution only: never precompile the throwaway environments.
-ENV["JULIA_PKG_PRECOMPILE_AUTO"] = "0"
-# Every resolution of an audit must see the same registry snapshot, or a release published
-# meanwhile shows up as a difference: registries are updated once, by `audit.jl`, before
-# anything else, and never again.
-Pkg.offline(true)
+# Resolution only: environments are resolved by calling Pkg's resolver directly (see
+# `resolve_env`), which never downloads, installs, precompiles, or updates a registry. An
+# audit therefore sees one registry snapshot from start to end: `audit.jl` updates the
+# registries once, before anything else.
+
+# The command runner behind `gh`: a function of the argument vector returning standard
+# output. Tests replace it with a fake to run without network; a second include keeps it.
+@isdefined(GH) || global GH = Ref{Any}(args -> read(`gh $args`, String))
 
 "Run `gh` with `args` and return its standard output."
-gh(args...) = read(`gh $args`, String)
+gh(args...) = GH[](collect(String, args))
 
 "`gh api` call returning the raw body (blobs, file contents)."
 gh_raw(path) = gh("api", path, "-H", "Accept: application/vnd.github.raw")
@@ -23,8 +25,14 @@ gh_jq(path, jq) = strip(gh("api", path, "--jq", jq))
 
 Resolve a throwaway environment whose `[deps]` are `deps` (name => uuid) and whose
 `[compat]` is `compat` (name => specifier), on the running Julia. Returns
-`Dict("ok" => true, "manifest" => …)` with the parsed `Manifest.toml`, or
-`Dict("ok" => false, "error" => …)` when the requirements are unsatisfiable.
+`Dict("ok" => true, "versions" => …, "trees" => …)` (name => version string, name =>
+git-tree-sha1 of the registered packages), or `Dict("ok" => false, "error" => …)` when the
+requirements are unsatisfiable.
+
+`Pkg.resolve` is not used: it downloads every source and artifact of the result (GBs of CUDA
+on a fresh runner), and `Pkg.offline(true)` would restrict it to the versions already
+installed. `Pkg.Operations.resolve_versions!` only resolves; it is internal, but its
+signature is the same from Julia 1.10 to 1.13 (checked by the integration tests).
 """
 function resolve_env(deps::AbstractDict, compat::AbstractDict)
     dir = mktempdir()
@@ -34,8 +42,12 @@ function resolve_env(deps::AbstractDict, compat::AbstractDict)
     current = Base.active_project()
     try
         Pkg.activate(dir; io=devnull)
-        Pkg.resolve(; io=devnull)
-        return Dict("ok" => true, "manifest" => TOML.parsefile(joinpath(dir, "Manifest.toml")))
+        ctx = Pkg.Types.Context()
+        pkgs = Pkg.Operations.load_direct_deps(ctx.env)
+        Pkg.Operations.resolve_versions!(ctx.env, ctx.registries, pkgs, ctx.julia_version, false)
+        return Dict("ok" => true,
+                    "versions" => Dict(p.name => string(p.version) for p in pkgs),
+                    "trees" => Dict(p.name => string(p.tree_hash) for p in pkgs if p.tree_hash !== nothing))
     catch e
         # Only an unsatisfiable resolution is a result; anything else is a bug of the caller.
         e isa Pkg.Resolve.ResolverError || rethrow()
@@ -45,13 +57,6 @@ function resolve_env(deps::AbstractDict, compat::AbstractDict)
         rm(dir; recursive=true, force=true)
     end
 end
-
-"Map name => version string for every entry of a parsed manifest (stdlibs: `\"stdlib\"`)."
-manifest_versions(m) = Dict(k => get(v[1], "version", "stdlib") for (k, v) in m["deps"])
-
-"Map name => git-tree-sha1 for every registered entry of a parsed manifest."
-manifest_trees(m) =
-    Dict(k => v[1]["git-tree-sha1"] for (k, v) in m["deps"] if haskey(v[1], "git-tree-sha1"))
 
 """
     registry_lookup(name) -> (uuid, repo)
@@ -74,6 +79,12 @@ function registry_lookup(name)
     error("$name is not in any reachable registry")
 end
 
+"The files audited in every repository."
+const AUDITED_FILES = ("Project.toml", "test/Project.toml", "docs/Project.toml")
+
+"Identity of a compat entry: the owner, the file it is declared in, the dependency."
+entry_key(p) = (p["owner"], p["file"], p["dep"])
+
 const spec = Pkg.Types.semver_spec
 
 "Render a VersionSpec back into a compat string (bounds carry no prerelease, so `-` only separates)."
@@ -93,16 +104,17 @@ function applies(owner, file, name, versions, audited)
 end
 
 """
-    simulate(name, env, narrowings, uuids) -> Dict
+    simulate(name, env, narrowings, uuids; resolver=resolve_env) -> Dict
 
 Resolve environment `name` (an entry of `envs.toml`) with each `dep => specifier` of
 `narrowings` intersected into its compat. Pkg intersects the compat of every package of an
 environment, so this is exactly what dropping specifiers from an entry that applies here
 would do, without touching any file. Returns `Dict("ok" => true, "versions" => …)` or
 `Dict("ok" => false, "error" => …)`; an empty intersection or a pinned package resolved at
-another version than the audited one are failures too.
+another version than the audited one are failures too. `resolver(deps, compat)` is
+`resolve_env`, replaced in tests.
 """
-function simulate(name, env, narrowings, uuids)
+function simulate(name, env, narrowings, uuids; resolver=resolve_env)
     deps, compat = copy(env["deps"]), copy(env["compat"])
     for (dep, s) in narrowings
         compat[dep] = render(spec(get(compat, dep, ">= 0")) ∩ spec(s))
@@ -110,9 +122,9 @@ function simulate(name, env, narrowings, uuids)
     end
     empty = sort([k for (k, v) in compat if isempty(v)])
     isempty(empty) || return Dict("ok" => false, "error" => "empty compat intersection for $(join(empty, ", "))")
-    res = resolve_env(deps, compat)
+    res = resolver(deps, compat)
     res["ok"] || return res
-    versions = manifest_versions(res["manifest"])
+    versions = res["versions"]
     off = ["$k $(versions[k]) (audited $v)" for (k, v) in env["pins"] if versions[k] != v]
     isempty(off) || return Dict("ok" => false, "error" => "pinned versions not selected: $(join(off, ", "))")
     return Dict("ok" => true, "versions" => versions)

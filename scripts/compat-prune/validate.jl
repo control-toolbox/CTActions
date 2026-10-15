@@ -1,6 +1,6 @@
 # Validate the prunes and identify the blockers, on the running Julia.
 #
-# usage: julia validate.jl <collected dir> <classified.toml> <baseline.toml> <out.toml> [<rejected.toml>]
+# usage: julia validate.jl <collected dir> <classified.toml> <baseline.toml> <out.toml> <rejected.toml> [--blockers]
 #
 # Prunes: all of them (minus those already rejected) are simulated together; an environment
 # whose manifest differs from the baseline, or that no longer resolves, is a failure. The
@@ -8,9 +8,10 @@
 # fail alone are rejected; if none does, the failure comes from their combination and all of
 # them are rejected. `audit.jl` repeats until no Julia version rejects anything.
 #
-# Blockers: for each blocked entry, each environment where it applies is resolved with the
-# dependency restricted to the newest specifier; the resolver's explanation names the
-# packages that cap it.
+# Blockers (`--blockers`, given by `audit.jl` on the newest Julia version only, as they are
+# information and cost one resolution per environment): for each blocked entry, each
+# environment where it applies is resolved with the dependency restricted to the newest
+# specifier; the resolver's explanation names the packages that cap it.
 
 include("common.jl")
 
@@ -40,59 +41,79 @@ function blockers(msg, dep)
     return sort(unique(String[m[1] for m in eachmatch(first_level, msg)]))
 end
 
-key(p) = (p["owner"], p["file"], p["dep"])
 
-if abspath(PROGRAM_FILE) == @__FILE__
-    root, classified, basefile, outfile = ARGS[1:4]
-    rejected_before = length(ARGS) ≥ 5 ? Set(key.(get(TOML.parsefile(ARGS[5]), "rejected", []))) : Set()
-    envs, audited, uuids = load_collected(root)
-    c = TOML.parsefile(classified)
-    prunes = [p for p in c["prune"] if !(key(p) in rejected_before)]
-    baseline = TOML.parsefile(basefile)["env"]
-    julia = join(split(string(VERSION), ".")[1:2], ".")
+"""
+    validate_prunes(envs, audited, uuids, prunes, baseline, julia; sim=simulate) -> rejected
 
+Simulate `prunes` together in every environment of `envs` that resolved at `baseline`; in an
+environment that departs from its baseline, simulate the prunes that apply there one by one
+and reject those that fail alone, or all of them when none does. Returns the rejected
+records (`owner`, `file`, `dep`, `where`, `reason`).
+"""
+function validate_prunes(envs, audited, uuids, prunes, baseline, julia; sim=simulate)
+    prunes = copy(prunes)
     rejected = Dict{String,Any}[]
     for name in sort(collect(keys(envs)))
         base = baseline[name]
         base["ok"] || continue
         n = narrowings(prunes, name, base["versions"], audited)
         isempty(n) && continue
-        why = departure(simulate(name, envs[name], n, uuids), base["versions"])
+        why = departure(sim(name, envs[name], n, uuids), base["versions"])
         why === nothing && continue
-        println(VERSION, "  ", rpad(name, 24), "fails together: ", why)
+        println(julia, "  ", rpad(name, 24), "fails together: ", why)
         suspects = [p for p in prunes if !isempty(narrowings([p], name, base["versions"], audited))]
         alone = Dict{Any,String}()
         for p in suspects
-            w = departure(simulate(name, envs[name], narrowings([p], name, base["versions"], audited), uuids), base["versions"])
-            w === nothing || (alone[key(p)] = w)
+            w = departure(sim(name, envs[name], narrowings([p], name, base["versions"], audited), uuids), base["versions"])
+            w === nothing || (alone[entry_key(p)] = w)
         end
-        culprits = isempty(alone) ? suspects : [p for p in suspects if haskey(alone, key(p))]
+        culprits = isempty(alone) ? suspects : [p for p in suspects if haskey(alone, entry_key(p))]
         for p in culprits
-            reason = get(alone, key(p), "fails only combined with other prunes: $why")
+            reason = get(alone, entry_key(p), "fails only combined with other prunes: $why")
             push!(rejected, Dict("owner" => p["owner"], "file" => p["file"], "dep" => p["dep"],
                                  "where" => "$name@$julia", "reason" => reason))
             println("    rejected: $(p["owner"]) $(p["file"]) $(p["dep"]) → $(p["after"])")
         end
-        rejected_now = Set(key.(culprits))
-        filter!(p -> !(key(p) in rejected_now), prunes)
+        gone = Set(entry_key.(culprits))
+        filter!(p -> !(entry_key(p) in gone), prunes)
     end
+    return rejected
+end
 
+"""
+    probe_blockers(envs, uuids, blocked, baseline, julia; sim=simulate) -> probes
+
+For each blocked entry, resolve every environment where it applies with the dependency
+restricted to its newest specifier, and read the blockers from the resolver's error.
+"""
+function probe_blockers(envs, uuids, blocked, baseline, julia; sim=simulate)
     found = Dict{String,Any}[]
-    for b in get(c, "other", [])
-        b["status"] == "blocked" || continue
-        for name in b["applies_in"]
-            base = baseline[name]
-            base["ok"] && haskey(base["versions"], b["dep"]) || continue
-            r = simulate(name, envs[name], Dict(b["dep"] => b["newest"]), uuids)
-            push!(found, Dict("owner" => b["owner"], "file" => b["file"], "dep" => b["dep"],
-                              "newest" => b["newest"], "where" => "$name@$julia",
-                              "blockers" => r["ok"] ? String[] : blockers(r["error"], b["dep"]),
-                              "detail" => r["ok"] ? "resolves, but the resolver prefers other versions" : first(r["error"], 2000)))
-            println(VERSION, "  blocked: $(b["owner"]) $(b["file"]) $(b["dep"]) $(b["newest"]) in $name, by ",
-                    r["ok"] ? "nothing (resolver preference)" : join(found[end]["blockers"], ", "))
-        end
+    for b in blocked, name in b["applies_in"]
+        base = baseline[name]
+        base["ok"] && haskey(base["versions"], b["dep"]) || continue
+        r = sim(name, envs[name], Dict(b["dep"] => b["newest"]), uuids)
+        push!(found, Dict("owner" => b["owner"], "file" => b["file"], "dep" => b["dep"],
+                          "newest" => b["newest"], "where" => "$name@$julia",
+                          "blockers" => r["ok"] ? String[] : blockers(r["error"], b["dep"]),
+                          "detail" => r["ok"] ? "resolves, but the resolver prefers other versions" : first(r["error"], 2000)))
+        println(julia, "  blocked: $(b["owner"]) $(b["file"]) $(b["dep"]) $(b["newest"]) in $name, by ",
+                r["ok"] ? "nothing (resolver preference)" : join(found[end]["blockers"], ", "))
     end
+    return found
+end
 
+if abspath(PROGRAM_FILE) == @__FILE__
+    # usage: … <out.toml> <rejected.toml> [--blockers]
+    root, classified, basefile, outfile, rejectedfile = ARGS[1:5]
+    rejected_before = Set(entry_key.(get(TOML.parsefile(rejectedfile), "rejected", [])))
+    envs, audited, uuids = load_collected(root)
+    c = TOML.parsefile(classified)
+    prunes = [p for p in c["prune"] if !(entry_key(p) in rejected_before)]
+    baseline = TOML.parsefile(basefile)["env"]
+    julia = join(split(string(VERSION), ".")[1:2], ".")
+    rejected = validate_prunes(envs, audited, uuids, prunes, baseline, julia)
+    blocked = [b for b in get(c, "other", []) if b["status"] == "blocked"]
+    found = "--blockers" in ARGS ? probe_blockers(envs, uuids, blocked, baseline, julia) : Dict{String,Any}[]
     open(io -> TOML.print(io, Dict("julia" => string(VERSION), "rejected" => rejected, "blocked" => found)), outfile, "w")
-    println(VERSION, "  ", length(rejected), " prune(s) rejected, ", length(found), " blocker probe(s)")
+    println(julia, "  ", length(rejected), " prune(s) rejected, ", length(found), " blocker probe(s)")
 end

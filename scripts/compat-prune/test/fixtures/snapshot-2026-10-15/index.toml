@@ -1,0 +1,73 @@
+julia = "1.13.1"
+
+[packages.CTBase]
+repo = "control-toolbox/CTBase.jl"
+version = "0.30.10"
+default_branch = "main"
+files = ["Project.toml", "docs/Project.toml"]
+tree = "cafe2bf5cbd697c5b239517aa8a699369ced443c"
+default_files = ["Project.toml", "docs/Project.toml"]
+uuid = "54762871-cc72-4466-b8e8-f6c8b58076cd"
+
+[packages.CTModels]
+repo = "control-toolbox/CTModels.jl"
+version = "0.19.8"
+default_branch = "main"
+files = ["Project.toml", "docs/Project.toml"]
+tree = "25682b75dd2149f0abea4d4264a83e92c6171114"
+default_files = ["Project.toml", "docs/Project.toml"]
+uuid = "34c4fa32-2049-4079-8329-de33c2a22e2d"
+
+[packages.CTFlows]
+repo = "control-toolbox/CTFlows.jl"
+version = "0.18.1"
+default_branch = "main"
+files = ["Project.toml", "docs/Project.toml"]
+tree = "d82116ac4932b8494e7f6f3deb312dce44753969"
+default_files = ["Project.toml", "docs/Project.toml"]
+uuid = "1c39547c-7794-42f7-af83-d98194f657c2"
+
+[packages.CTDirect]
+repo = "control-toolbox/CTDirect.jl"
+version = "1.1.8-beta"
+default_branch = "main"
+files = ["Project.toml", "docs/Project.toml"]
+tree = "38f6fbb168b844b7ceac71678b42c96daa20bba5"
+default_files = ["Project.toml", "docs/Project.toml"]
+uuid = "790bbbee-bee9-49ee-8912-a9de031322d5"
+
+[packages.OptimalControl]
+repo = "control-toolbox/OptimalControl.jl"
+version = "2.2.1-beta"
+default_branch = "main"
+files = ["Project.toml", "docs/Project.toml"]
+tree = "07c2d96cde77525ad4c354547a34a068132f314d"
+default_files = ["Project.toml", "docs/Project.toml"]
+uuid = "5f98b655-cc9a-415a-b60e-744165666948"
+
+[packages.CTParser]
+repo = "control-toolbox/CTParser.jl"
+version = "0.9.5-beta"
+default_branch = "main"
+files = ["Project.toml", "test/Project.toml", "docs/Project.toml"]
+tree = "3f745c73919729ca654d02e1091fce5583facacc"
+default_files = ["Project.toml", "test/Project.toml", "docs/Project.toml"]
+uuid = "32681960-a1b1-40db-9bff-a1ca817385d1"
+
+[packages.CTSolvers]
+repo = "control-toolbox/CTSolvers.jl"
+version = "0.5.8"
+default_branch = "main"
+files = ["Project.toml", "docs/Project.toml"]
+tree = "50e6edf7726eb7d620323fb4cc3c2e87392022c3"
+default_files = ["Project.toml", "docs/Project.toml"]
+uuid = "d3e8d392-8e4b-4d9b-8e92-d7d4e3650ef6"
+
+[packages.CTLie]
+repo = "control-toolbox/CTLie.jl"
+version = "0.2.3"
+default_branch = "main"
+files = ["Project.toml", "docs/Project.toml"]
+tree = "049bbb24dfa8b5d54cff2736352d76ce9e7782ae"
+default_files = ["Project.toml", "docs/Project.toml"]
+uuid = "6880e05b-3a7d-4cac-887c-30cb52c5fdde"

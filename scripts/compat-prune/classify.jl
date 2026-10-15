@@ -16,8 +16,6 @@
 
 include("common.jl")
 
-const FILES = ("Project.toml", "test/Project.toml", "docs/Project.toml")
-
 "Specifiers of a compat string, in declaration order."
 specifiers(s) = String.(strip.(split(s, ",")))
 
@@ -65,7 +63,7 @@ end
 "Every multi-specifier entry of the audited files, classified."
 function classify(root, results, audited)
     records = Dict{String,Any}[]
-    for owner in sort(collect(keys(audited))), file in FILES
+    for owner in sort(collect(keys(audited))), file in AUDITED_FILES
         path = joinpath(root, "registered", owner, file)
         isfile(path) || continue
         for (dep, compat) in sort(collect(get(TOML.parsefile(path), "compat", Dict())))
@@ -89,17 +87,26 @@ function withhold(prunes, results)
     return Dict{String,Any}[], [merge(p, Dict("status" => "withheld", "reason" => why)) for p in prunes]
 end
 
-if abspath(PROGRAM_FILE) == @__FILE__
-    root, outfile = ARGS[1], ARGS[2]
-    _, audited, _ = load_collected(root)
+"Baseline results of every Julia version, keyed `\"<env>@<major.minor>\"`."
+function load_results(files)
     results = Dict{String,Any}()
-    for f in ARGS[3:end]
+    for f in files
         b = TOML.parsefile(f)
         j = join(split(b["julia"], ".")[1:2], ".")
         for (name, r) in b["env"]; results["$name@$j"] = r; end
     end
+    return results
+end
+
+"""
+    classify_all(root, results) -> (prunes, others)
+
+Classify every entry; obsolete lanes of blocked entries become prunes of their own; every
+prune is withheld when a baseline failed.
+"""
+function classify_all(root, results)
+    _, audited, _ = load_collected(root)
     records = classify(root, results, audited)
-    # A blocked entry may also carry obsolete lanes: they are prunes in their own right.
     prunes = [r for r in records if r["status"] == "prune"]
     for r in records
         r["status"] == "blocked" && haskey(r, "prunable") || continue
@@ -109,9 +116,15 @@ if abspath(PROGRAM_FILE) == @__FILE__
     end
     prunes, withheld = withhold(prunes, results)
     others = vcat([r for r in records if r["status"] != "prune"], withheld)
+    return prunes, others
+end
+
+if abspath(PROGRAM_FILE) == @__FILE__
+    root, outfile = ARGS[1], ARGS[2]
+    prunes, others = classify_all(root, load_results(ARGS[3:end]))
     open(io -> TOML.print(io, Dict("prune" => prunes, "other" => others)), outfile, "w")
-    for r in records
+    for r in sort(vcat(prunes, others); by=r -> (r["owner"], r["file"], r["dep"]))
         println(rpad("$(r["owner"]) $(r["file"])", 34), rpad(r["dep"], 26), rpad(r["before"], 18), r["status"],
-                haskey(r, "removed") ? " → $(r["after"])" : "", haskey(r, "prunable") ? " (prunable: $(join(r["prunable"], ", ")))" : "")
+                haskey(r, "after") ? " → $(r["after"])" : "")
     end
 end
