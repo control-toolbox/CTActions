@@ -358,7 +358,7 @@ Two workflows are **conditional**: `Breakage` and `AddToProject`.
 | CTParser.jl | ✅ | ✅ | ✅ | split CI (`github-runner`/`occidata-runner`) |
 | CTFlows.jl | ✅ | ✅ | — | split CI (`github-runner`/`occidata-runner`), `CPUProbe`/`GPUProbe` (`run probe`) |
 | CTDirect.jl | ✅ | ✅ | ✅ | split CI (`github-runner`/`occidata-runner`, replacing the older dedicated `GPU.yml`); `Formatter` disabled — **stale**, not currently kept up to date with the rest of the fleet |
-| CTSolvers | ✅ | ✅ | ✅ | split CI (`github-runner`/`occidata-runner`) |
+| CTSolvers | ✅ | ✅ | ✅ | split CI (`github-runner`/`occidata-runner`); `Documentation` carries a `build-gpu` upgrade pass on `kkt` and opt-in PR previews (`documentation push preview`) |
 | OptimalControl | ✅ | ✅ | ✅ | `JOSS`, split CI (`github-runner`/`occidata-runner`); `Documentation` also carries an optional `build-gpu` upgrade pass on `occidata` (2026-09-02, control-toolbox/OptimalControl.jl#885) |
 | OptimalControlProblems | ✅ | — | — | — |
 | CTDiffFlow.jl | ✅ | — | — | — |
