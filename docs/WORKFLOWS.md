@@ -158,7 +158,7 @@ events the job actually needs.
 | `run breakage` | breakage tests against downstream **packages** | core packages |
 | `run breakage applications` | breakage against downstream **applications/tutorials** | OptimalControl |
 | `run documentation` | full Documenter build on the PR | most packages |
-| `documentation push preview` | Documenter build on the PR **and** deployment of its preview (`previews/PR<n>`); without it a PR build is never deployed (see §3.1) | CTSolvers (first adopter) |
+| `documentation push preview` | **Modifier of `run documentation`**, not a trigger: with `run documentation` present, the PR build also deploys its preview (`previews/PR<n>`); on its own it does nothing. Without it a PR build is never deployed (see §3.1) | CTSolvers (first adopter) |
 | `run probe` | standalone capability-probe scripts (see `CPUProbe.yml`/`GPUProbe.yml`, §3.3) | CTFlows.jl |
 
 **Split-CI labels are named after the *runner*, not the workload.** The two halves of a
@@ -269,19 +269,20 @@ DocumenterVitepress.deploydocs(;
 ```
 
 ```yaml
-# .github/workflows/Documentation.yml — the preview label also triggers the build
+# .github/workflows/Documentation.yml — `run documentation` stays the only trigger;
+# adding the preview label to a PR that already has it re-runs the build
 if: >
   github.event_name != 'pull_request' ||
-  (github.event.action == 'labeled' &&
-    (github.event.label.name == 'run documentation' || github.event.label.name == 'documentation push preview')) ||
-  (github.event.action != 'labeled' &&
-    (contains(github.event.pull_request.labels.*.name, 'run documentation') ||
-     contains(github.event.pull_request.labels.*.name, 'documentation push preview')))
+  (contains(github.event.pull_request.labels.*.name, 'run documentation') &&
+    (github.event.action != 'labeled' ||
+     github.event.label.name == 'run documentation' ||
+     github.event.label.name == 'documentation push preview'))
 ```
 
-`run documentation` alone builds the docs on the PR without deploying anything; adding
-`documentation push preview` (with or without `run documentation`) also deploys the
-preview. A `make.jl` that still hardcodes `push_preview=true` ignores the variable and keeps
+`run documentation` is the only trigger: alone, it builds the docs on the PR without
+deploying anything; with `documentation push preview` also present, the build deploys the
+preview. `documentation push preview` on its own does nothing. (On a `labeled` event the
+PR's label list already contains the label just added.) A `make.jl` that still hardcodes `push_preview=true` ignores the variable and keeps
 its old behaviour, so callers can migrate one at a time.
 
 ### 3.2 Maintenance workflows that live *in* `CTActions` (not called)
