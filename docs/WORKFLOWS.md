@@ -135,6 +135,25 @@ cancelling a Julia process was observed to leave an orphan process behind
 (`Terminate orphan process: pid (julia)`) and a pathologically slow next run. Not
 subscribing to the useless event is cheaper and has no such side effect.
 
+**Documentation callers with a GPU pass use a concurrency group, without cancelling a
+push.** A `Documentation.yml` that sets `gpu_runner` (§3.1) needs one thing a concurrency
+group gives: an older run's `build-gpu`, which can finish long after a newer `build`, must
+not redeploy older content over it. Queuing runs per ref, rather than cancelling them,
+gives that order without killing a Julia process on the self-hosted runner. On a pull
+request the build runs on a GitHub-hosted runner only (`build-gpu` is push/tag only), so
+cancelling the older run there is safe and saves time:
+
+```yaml
+# .github/workflows/Documentation.yml of a caller that sets gpu_runner
+concurrency:
+  group: documentation-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+```
+
+While a run is in progress, GitHub keeps only the newest pending run of the group, so a
+burst of merges builds the first and the last commit, not every one. Tags carry their own
+ref and never wait for `main`.
+
 **The rule is specific to `if`-guarded, opt-in workflows.** Workflows that are *not*
 label-gated legitimately keep `opened` — indeed some exist only to react to it:
 `AddToProject.yml` uses `types: [opened]` and `AutoAssign.yml` uses
@@ -152,14 +171,14 @@ events the job actually needs.
 | --- | --- | --- |
 | `run ci` | CI test matrix (single job) | most packages |
 | `github-runner` | CI on GitHub-hosted runners | packages with split CI: OptimalControl, CTParser.jl, CTDirect.jl, CTFlows.jl, CTSolvers, CTLie |
-| `kkt-runner` | CI on the self-hosted `kkt` GPU runner (CUDA, faster than `occidata`). Registered in the org and online as of 2026-10-15 (`gh api orgs/control-toolbox/actions/runners`: `kkt`, labels `self-hosted, gpu, cuda, kkt`). | CTFlows.jl (`test-gpu-kkt`); CTSolvers uses the `kkt` runner for its documentation `build-gpu` pass (not label-gated) |
+| `kkt-runner` | CI on the self-hosted `kkt` GPU runner (CUDA, faster than `occidata`). Registered in the org and online as of 2026-10-15 (`gh api orgs/control-toolbox/actions/runners`: `kkt`, labels `self-hosted, gpu, cuda, kkt`). | CTFlows.jl, CTSolvers (`test-gpu-kkt`); CTSolvers also uses the `kkt` runner for its documentation `build-gpu` pass and its GPU probe (not gated by this label) |
 | `occidata-runner` | CI on the self-hosted `occidata` GPU runner | every package with GPU-relevant code: OptimalControl, CTParser.jl, CTDirect.jl, CTFlows.jl, CTSolvers, CTLie |
 | `run GPU` | dedicated GPU test job | CTDirect (older, pre-split-CI pattern — not up to date, see §3.3) |
 | `run breakage` | breakage tests against downstream **packages** | core packages |
 | `run breakage applications` | breakage against downstream **applications/tutorials** | OptimalControl |
 | `run documentation` | full Documenter build on the PR | most packages |
-| `documentation push preview` | **Modifier of `run documentation`**, not a trigger: with `run documentation` present, the PR build also deploys its preview (`previews/PR<n>`); on its own it does nothing. Without it a PR build is never deployed (see §3.1) | CTSolvers (first adopter) |
-| `run probe` | standalone capability-probe scripts (see `CPUProbe.yml`/`GPUProbe.yml`, §3.3) | CTFlows.jl |
+| `documentation push preview` | **Modifier of `run documentation`**, not a trigger: with `run documentation` present, the PR build also deploys its preview (`previews/PR<n>`); on its own it does nothing. Without it a PR build is never deployed, and the preview is removed when the PR is closed (see §3.1) | every package with a documentation site |
+| `run probe` | standalone capability-probe scripts (see `CPUProbe.yml`/`GPUProbe.yml`, §3.3) | CTFlows.jl, CTSolvers |
 
 **Split-CI labels are named after the *runner*, not the workload.** The two halves of a
 split `CI.yml` (§3.1) are gated by **`github-runner`** and **`occidata-runner`** — not by
@@ -199,6 +218,7 @@ few **non-centralized / special** workflows (defined directly in a package).
 | `ci.yml` | `CI.yml` | Build + run the test suite over a Julia × OS × arch matrix | `push`, `tag`, PR | `versions`, `runs_on`, `archs`, `runner_type`, `use_ct_registry`; `SSH_KEY` | `run ci` (or `github-runner` / `occidata-runner` when split, see below) |
 | `coverage.yml` | `Coverage.yml` | Run tests with coverage, upload to Codecov | `push`/`tag` to `main` | `use_ct_registry`; `codecov-secret`, `SSH_KEY` | — (push only) |
 | `documentation.yml` | `Documentation.yml` | Build & deploy the Documenter site; optionally a `build-gpu` upgrade pass that redeploys with real GPU output once `build` has already published | `push`, `tag`, PR | `use_ct_registry`, `gpu_runner`, `gpu_timeout_minutes`; `SSH_KEY`, `DOCUMENTER_KEY` | `run documentation` |
+| `documentation-preview-cleanup.yml` | `DocPreviewCleanup.yml` | Remove from `gh-pages` the previews (`previews/PR<n>`) of every PR that is no longer open | PR `closed`, `workflow_dispatch` | — | — |
 | `breakage.yml` | `Breakage.yml` | Test that a change doesn't break downstream packages/apps (`latest`/`stable`); comment a result table on the PR | PR (labeled) | `pkgname`, `pkgpath`, `pkgversion`, `pkgbreak` (`test`/`doc`), `use_ct_registry`; `SSH_KEY` | `run breakage` |
 | `formatter.yml` | `Formatter.yml` | Run JuliaFormatter (BlueStyle) and open an auto PR | scheduled (nightly), `workflow_dispatch` | — | — |
 | `spell-check.yml` | `SpellCheck.yml` | Spell-check with `crate-ci/typos` | PR, `workflow_dispatch` | `locale`, `extend-identifiers`, `config-path` | — |
@@ -222,7 +242,8 @@ retired (it was not listed by `gh api orgs/control-toolbox/actions/runners` on
 X64, gpu, cuda, kkt`), visible to every repository through the `Default` runner group, and
 in use: CTFlows.jl runs a three-way split (`github-runner`, `occidata-runner`,
 `kkt-runner`), and CTSolvers' documentation `build-gpu` pass targets it. `occidata` was
-offline on the same date, which is when having a second CUDA box matters.
+offline on the same date, then put back online, which is when having a second CUDA box
+matters.
 
 **A third self-hosted GPU box, `pinwheel`, exists and is currently unused by any
 workflow.** Discovered 2026-09-02 while probing `occidata` for
@@ -285,6 +306,34 @@ preview. `documentation push preview` on its own does nothing. (On a `labeled` e
 PR's label list already contains the label just added.) A `make.jl` that still hardcodes `push_preview=true` ignores the variable and keeps
 its old behaviour, so callers can migrate one at a time.
 
+**Previews are removed when the PR is closed.** `documentation-preview-cleanup.yml` checks
+out `gh-pages`, removes `previews/PR<n>` for every PR that is no longer open, and pushes a
+normal commit (no force push, no history rewrite, so a deployment running at the same time
+is never lost; a rejected push is rebased and retried). Because it removes *every* stale
+preview, the first run also clears the backlog left by `push_preview=true`, and
+`workflow_dispatch` runs it on demand. The caller:
+
+```yaml
+# .github/workflows/DocPreviewCleanup.yml
+name: Documentation preview cleanup
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+
+jobs:
+  call:
+    # A PR from a fork gets a read-only token, and its build never deployed a preview.
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: write
+      pull-requests: read
+    uses: control-toolbox/CTActions/.github/workflows/documentation-preview-cleanup.yml@main
+```
+
 ### 3.2 Maintenance workflows that live *in* `CTActions` (not called)
 
 These run on `CTActions` itself, on a schedule, to keep the **self-hosted runners**
@@ -340,15 +389,34 @@ their modes and how to add one are documented in control-toolbox/occidata,
 | `setup-repo.yml` | **CTAppTemplate only** | One-shot bootstrap: renames the package, regenerates the UUID, sets authors/assignees, opens a setup PR. Meaningful only on a fresh clone of the template. |
 | `JOSS.yml` | **OptimalControl only** | Compiles the JOSS paper under `joss/`. Specific to the package that has a paper. |
 | `GPU.yml` | **CTDirect only** | Dedicated GPU test job on a self-hosted GPU runner, gated by `run GPU`. Predates the `ci.yml` runner split (§3.1); `CTDirect.jl` is not currently kept up to date with the rest of the fleet, so treat this entry as historical rather than the pattern to copy — copy the split-`ci.yml` pattern instead. |
-| `CPUProbe.yml`, `GPUProbe.yml` | **CTFlows.jl only** (so far) | Run standalone capability-probe scripts (`probe/cpu/probe_cpu.jl`, `probe/gpu/probe_gpu.jl`) on demand, separately from CI. Diagnostic only — always succeeds, prints a capability matrix. Used to keep documentation claims accurate and to support proof-of-concept exploration, not to gate merges. Gated by the `run probe` label (or `workflow_dispatch`); not centralized because the probe scripts are package-specific experiments, not shared CI logic. |
+| `CPUProbe.yml`, `GPUProbe.yml` | **CTFlows.jl, CTSolvers** | Run standalone capability-probe scripts (`probe/cpu/probe_cpu.jl`, `probe/gpu/probe_gpu.jl`) on demand, separately from CI. Diagnostic only — always succeeds, prints a capability matrix. Used to keep documentation claims accurate and to support proof-of-concept exploration, not to gate merges. Gated by the `run probe` label (or `workflow_dispatch`); not centralized because the probe scripts are package-specific experiments, not shared CI logic. The shape is shared, see below. |
 | `benchmark-reusable.yml`, `benchmarks-orchestrator.yml` | **CTBenchmarks.jl only** | Benchmark orchestration specific to the benchmarking repo. |
+
+**Probes: one shape, package-specific content.** A package whose documentation states what
+works (which solver accepts which model, what runs on a GPU) backs those statements with a
+probe rather than with tests, which would fail the CI for what is a capability, not a bug.
+The layout is the same in every package:
+
+| Path | Content |
+| --- | --- |
+| `probe/common.jl` | Helpers: a cell runs one experiment in `try/catch`, records warnings, and is marked ✓ (works and correct), ⚠ (runs, but wrong, not converged, or warned) or ✗ (throws); a matrix printer |
+| `probe/cpu/probe_cpu.jl`, `probe/cpu/Project.toml` | CPU experiments; the script activates its folder and `dev`s the repository, so it measures the working tree |
+| `probe/gpu/probe_gpu.jl`, `probe/gpu/Project.toml` | Device experiments; without a functional device every cell reports the error it really raises |
+| `probe/README.md` | How to run, and the latest known results with their date and machine |
+| `.github/workflows/CPUProbe.yml`, `GPUProbe.yml` | `ubuntu-latest` and a self-hosted GPU runner, `run probe` label or `workflow_dispatch` |
+
+Judge a numerical result against a well-conditioned problem with an analytic solution:
+solvers stop at a tolerance and may relax bounds by about that tolerance, so on a badly
+conditioned problem a correct solve can look wrong (CTSolvers, MadNLP on GPU). On
+`occidata`, the GPU step needs the `$OCCIDATA_GPU_RUN` prefix (§3.2).
 
 ---
 
 ## 4. Which repo has which workflow — and why
 
 Not every package carries every workflow. The base set (CI, Coverage, Documentation,
-Formatter, SpellCheck, CompatHelper, UpdateReadme, AutoAssign, TagBot) is **universal**.
+DocPreviewCleanup, Formatter, SpellCheck, CompatHelper, UpdateReadme, AutoAssign, TagBot)
+is **universal**.
 Two workflows are **conditional**: `Breakage` and `AddToProject`.
 
 | Repo | Base set | Breakage | AddToProject | Extra |
@@ -359,7 +427,7 @@ Two workflows are **conditional**: `Breakage` and `AddToProject`.
 | CTParser.jl | ✅ | ✅ | ✅ | split CI (`github-runner`/`occidata-runner`) |
 | CTFlows.jl | ✅ | ✅ | — | split CI (`github-runner`/`occidata-runner`), `CPUProbe`/`GPUProbe` (`run probe`) |
 | CTDirect.jl | ✅ | ✅ | ✅ | split CI (`github-runner`/`occidata-runner`, replacing the older dedicated `GPU.yml`); `Formatter` disabled — **stale**, not currently kept up to date with the rest of the fleet |
-| CTSolvers | ✅ | ✅ | ✅ | split CI (`github-runner`/`occidata-runner`); `Documentation` carries a `build-gpu` upgrade pass on `kkt` and opt-in PR previews (`documentation push preview`) |
+| CTSolvers | ✅ | ✅ | ✅ | split CI (`github-runner`/`kkt-runner`/`occidata-runner`); `Documentation` carries a `build-gpu` upgrade pass on `kkt`; `CPUProbe`/`GPUProbe` (`run probe`, GPU on `kkt`) |
 | OptimalControl | ✅ | ✅ | ✅ | `JOSS`, split CI (`github-runner`/`occidata-runner`); `Documentation` also carries an optional `build-gpu` upgrade pass on `occidata` (2026-09-02, control-toolbox/OptimalControl.jl#885) |
 | OptimalControlProblems | ✅ | — | — | — |
 | CTDiffFlow.jl | ✅ | — | — | — |
@@ -499,7 +567,8 @@ the caller's whole secret set; otherwise pass secrets explicitly, one by one.
 ## 8. Quick checklist for a new repo
 
 - [ ] Created from `CTAppTemplate.jl`; `setup-repo` run and merged; `setup-repo.yml` removed.
-- [ ] Base set present (CI, Coverage, Documentation, Formatter, SpellCheck, CompatHelper, UpdateReadme, AutoAssign, TagBot).
+- [ ] Base set present (CI, Coverage, Documentation, DocPreviewCleanup, Formatter, SpellCheck, CompatHelper, UpdateReadme, AutoAssign, TagBot).
+- [ ] `docs/make.jl` reads `DOCUMENTER_PUSH_PREVIEW` (`push_preview` is never hardcoded), and the labels `run documentation` and `documentation push preview` exist.
 - [ ] `Breakage.yml` added **iff** the repo has internal downstream consumers; matrix filled.
 - [ ] `AddToProject.yml` added **iff** tracked on the project board (`PROJECT_TOKEN` set).
 - [ ] CI inputs set (`versions`, `runs_on` — include `windows-latest`, `use_ct_registry`).
