@@ -1,0 +1,82 @@
+name: Documentation preview cleanup
+
+# Removes from `gh-pages` the documentation previews (`previews/PR<n>`) of every pull
+# request that is no longer open. Called by a package's `DocPreviewCleanup.yml` when a
+# pull request is closed (merged or not), and by hand (`workflow_dispatch`) to clear a
+# backlog: each run removes every stale preview, not only the one of the closed PR.
+#
+# Previews are deployed only on request (label `documentation push preview`, see
+# docs/WORKFLOWS.md §3.1), and this workflow removes them once the PR is closed.
+#
+# The history of `gh-pages` is kept: the previews are removed by a normal commit, never by
+# a force push, so a documentation deployment running at the same time is never lost.
+
+on:
+  workflow_call:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Two cleanups of the same repository would push to `gh-pages` concurrently.
+    concurrency:
+      group: documentation-preview-cleanup-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - name: Check for a gh-pages branch
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/branches/gh-pages" --silent 2>/dev/null; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No gh-pages branch: nothing to clean up."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v6
+        if: steps.pages.outputs.exists == 'true'
+        with:
+          ref: gh-pages
+
+      - name: Remove the previews of closed pull requests
+        if: steps.pages.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          removed=()
+          for dir in previews/PR*/; do
+            n="${dir#previews/PR}"
+            n="${n%/}"
+            [[ "$n" =~ ^[0-9]+$ ]] || continue
+            # Skip the preview when its state cannot be read (API error): it is retried
+            # on the next run instead of being removed by mistake.
+            if ! state=$(gh pr view "$n" --repo "$GITHUB_REPOSITORY" --json state --jq .state); then
+              echo "::warning::Could not read the state of PR #$n; its preview is kept."
+              continue
+            fi
+            if [ "$state" != "OPEN" ]; then
+              git rm -rq "$dir"
+              removed+=("PR$n")
+            fi
+          done
+          if [ ${#removed[@]} -eq 0 ]; then
+            echo "No preview of a closed pull request."
+            exit 0
+          fi
+          echo "Removing: ${removed[*]}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -qm "Remove documentation previews of closed pull requests: ${removed[*]}"
+          # A deployment may push to gh-pages meanwhile: rebase on it and retry.
+          for attempt in 1 2 3; do
+            git push -q origin HEAD:gh-pages && exit 0
+            echo "Push rejected (attempt $attempt), rebasing on gh-pages."
+            git pull -q --rebase origin gh-pages
+          done
+          exit 1
