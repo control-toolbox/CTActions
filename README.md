@@ -22,6 +22,7 @@ repository and for org-wide updates — is described in
 | `documentation.yml` | Build and deploy documentation with Documenter.jl | `use_ct_registry` |
 | `formatter.yml` | Run JuliaFormatter (BlueStyle) and open a PR if needed | — |
 | `compat-helper.yml` | Keep `[compat]` entries in `Project.toml` up to date | `subdirs` |
+| `compat-prune.yml` | Drop the `[compat]` specifiers no supported Julia version selects, across all CT\* packages (one PR per repository, one tracking issue); scripts and tests in `scripts/compat-prune/` | `packages`, `julia_versions`, `dry_run` |
 | `spell-check.yml` | Spell check with `typos` | `locale`, `extend-identifiers`, `config-path` |
 | `breakage.yml` | Test downstream packages against a new version; comment results on PR | `pkgname`, `pkgpath`, `pkgversion`, `pkgbreak` |
 | `add-to-project.yml` | Auto-add issues/PRs to the org GitHub project | `project-url`, `status` |
