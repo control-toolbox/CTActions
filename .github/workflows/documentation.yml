@@ -76,10 +76,16 @@ jobs:
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
 
+      # PR previews are opt-in: `DOCUMENTER_PUSH_PREVIEW` is "true" only on a PR carrying
+      # the `documentation push preview` label, "false" otherwise. A caller's make.jl reads
+      # it as `push_preview = get(ENV, "DOCUMENTER_PUSH_PREVIEW", "false") == "true"`.
+      # Inside a reusable workflow `github.event` is the caller's event, so the PR's labels
+      # are visible here. A make.jl that still hardcodes `push_preview` ignores it.
       - name: Build and deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
+          DOCUMENTER_PUSH_PREVIEW: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'documentation push preview') }}
           GKSwstype: 100
         run: |
           julia --project=docs/ -e 'ENV["GKSwstype"]="nul"; include("docs/make.jl")'

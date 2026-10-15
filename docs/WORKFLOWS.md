@@ -152,12 +152,13 @@ events the job actually needs.
 | --- | --- | --- |
 | `run ci` | CI test matrix (single job) | most packages |
 | `github-runner` | CI on GitHub-hosted runners | packages with split CI: OptimalControl, CTParser.jl, CTDirect.jl, CTFlows.jl, CTSolvers, CTLie |
-| `kkt-runner` | **Retired** — `kkt` is no longer a registered self-hosted runner in the org at all (`gh api orgs/control-toolbox/actions/runners` lists only `occidata-runner` and `pinwheel`). No `CI.yml` in the fleet defines a job for it any more. The label survives only as an unused leftover in OptimalControl, CTFlows.jl and CTLie — delete it there rather than reuse it. | none |
-| `occidata-runner` | CI on the self-hosted `occidata` GPU runner — the fleet's sole self-hosted CUDA CI target now that `kkt` is retired | every package with GPU-relevant code: OptimalControl, CTParser.jl, CTDirect.jl, CTFlows.jl, CTSolvers, CTLie |
+| `kkt-runner` | CI on the self-hosted `kkt` GPU runner (CUDA, faster than `occidata`). Registered in the org and online as of 2026-10-15 (`gh api orgs/control-toolbox/actions/runners`: `kkt`, labels `self-hosted, gpu, cuda, kkt`). | CTFlows.jl (`test-gpu-kkt`); CTSolvers uses the `kkt` runner for its documentation `build-gpu` pass (not label-gated) |
+| `occidata-runner` | CI on the self-hosted `occidata` GPU runner | every package with GPU-relevant code: OptimalControl, CTParser.jl, CTDirect.jl, CTFlows.jl, CTSolvers, CTLie |
 | `run GPU` | dedicated GPU test job | CTDirect (older, pre-split-CI pattern — not up to date, see §3.3) |
 | `run breakage` | breakage tests against downstream **packages** | core packages |
 | `run breakage applications` | breakage against downstream **applications/tutorials** | OptimalControl |
 | `run documentation` | full Documenter build on the PR | most packages |
+| `documentation push preview` | Documenter build on the PR **and** deployment of its preview (`previews/PR<n>`); without it a PR build is never deployed (see §3.1) | CTSolvers (first adopter) |
 | `run probe` | standalone capability-probe scripts (see `CPUProbe.yml`/`GPUProbe.yml`, §3.3) | CTFlows.jl |
 
 **Split-CI labels are named after the *runner*, not the workload.** The two halves of a
@@ -171,7 +172,7 @@ the same thing, and it extends by construction to a future runner (`<name>-runne
 inventing a new workload adjective — that is exactly how `occidata-runner` itself started
 (added to CTFlows.jl on 2026-08-24, when it was a *second* self-hosted GPU box alongside
 `kkt` for heavier GPU workloads specifically). `kkt-runner` was the first label this
-convention produced and is now the retired one — the convention outlives any one runner.
+convention produced — the convention outlives any one runner.
 
 **This vocabulary is fleet-wide, not a per-repo choice.** Labels are the user-facing
 trigger surface: someone applying a label from muscle memory in a sibling repo, or
@@ -215,12 +216,13 @@ OptimalControl-specific quirk — `CTParser.jl`, `CTDirect.jl`, `CTFlows.jl`, `C
 package with no GPU-relevant code (`CTModels.jl`, `CTBase`) keeps the single `call` job
 gated by plain `run ci`.
 
-**`kkt` is fully retired — a three-way split (`github` + `kkt` + `occidata`) does not
-currently exist anywhere.** Earlier drafts of this document described `kkt` as a live target
-and CTFlows.jl as running a three-way split; the fleet moved past both. `kkt` is no longer
-even a registered runner in the org (confirmed via
-`gh api orgs/control-toolbox/actions/runners`, 2026-09-02) — only `occidata-runner` and
-`pinwheel` are — and no `CI.yml` in the fleet still calls it.
+**`kkt` is back in service.** Earlier revisions of this document described `kkt` as
+retired (it was not listed by `gh api orgs/control-toolbox/actions/runners` on
+2026-09-02). As of 2026-10-15 it is registered and online again (labels `self-hosted, Linux,
+X64, gpu, cuda, kkt`), visible to every repository through the `Default` runner group, and
+in use: CTFlows.jl runs a three-way split (`github-runner`, `occidata-runner`,
+`kkt-runner`), and CTSolvers' documentation `build-gpu` pass targets it. `occidata` was
+offline on the same date, which is when having a second CUDA box matters.
 
 **A third self-hosted GPU box, `pinwheel`, exists and is currently unused by any
 workflow.** Discovered 2026-09-02 while probing `occidata` for
@@ -249,6 +251,38 @@ simply leaves the already-published site in place. This shape exists because, un
 and putting a self-hosted box on the critical path of *publishing* is a reliability
 regression `ci.yml`'s split never risked. Any caller that wants GPU-backed docs numbers
 should follow this pattern, not the `ci.yml` one.
+
+**PR previews are opt-in, through the `documentation push preview` label.** Deploying a
+preview of every PR build fills `gh-pages` with `previews/PR<n>` directories nobody looks
+at. `documentation.yml` therefore passes `DOCUMENTER_PUSH_PREVIEW` to `docs/make.jl`:
+`"true"` only on a PR carrying the label, `"false"` otherwise (inside a reusable workflow
+`github.event` is the caller's event, so the PR's labels are visible). The caller needs two
+changes:
+
+```julia
+# docs/make.jl
+DocumenterVitepress.deploydocs(;
+    repo=repo_url * ".git",
+    devbranch="main",
+    push_preview=get(ENV, "DOCUMENTER_PUSH_PREVIEW", "false") == "true",
+)
+```
+
+```yaml
+# .github/workflows/Documentation.yml — the preview label also triggers the build
+if: >
+  github.event_name != 'pull_request' ||
+  (github.event.action == 'labeled' &&
+    (github.event.label.name == 'run documentation' || github.event.label.name == 'documentation push preview')) ||
+  (github.event.action != 'labeled' &&
+    (contains(github.event.pull_request.labels.*.name, 'run documentation') ||
+     contains(github.event.pull_request.labels.*.name, 'documentation push preview')))
+```
+
+`run documentation` alone builds the docs on the PR without deploying anything; adding
+`documentation push preview` (with or without `run documentation`) also deploys the
+preview. A `make.jl` that still hardcodes `push_preview=true` ignores the variable and keeps
+its old behaviour, so callers can migrate one at a time.
 
 ### 3.2 Maintenance workflows that live *in* `CTActions` (not called)
 
@@ -324,7 +358,7 @@ Two workflows are **conditional**: `Breakage` and `AddToProject`.
 | CTParser.jl | ✅ | ✅ | ✅ | split CI (`github-runner`/`occidata-runner`) |
 | CTFlows.jl | ✅ | ✅ | — | split CI (`github-runner`/`occidata-runner`), `CPUProbe`/`GPUProbe` (`run probe`) |
 | CTDirect.jl | ✅ | ✅ | ✅ | split CI (`github-runner`/`occidata-runner`, replacing the older dedicated `GPU.yml`); `Formatter` disabled — **stale**, not currently kept up to date with the rest of the fleet |
-| CTSolvers | ✅ | ✅ | ✅ | split CI (`github-runner`/`occidata-runner`) |
+| CTSolvers | ✅ | ✅ | ✅ | split CI (`github-runner`/`occidata-runner`); `Documentation` carries a `build-gpu` upgrade pass on `kkt` and opt-in PR previews (`documentation push preview`) |
 | OptimalControl | ✅ | ✅ | ✅ | `JOSS`, split CI (`github-runner`/`occidata-runner`); `Documentation` also carries an optional `build-gpu` upgrade pass on `occidata` (2026-09-02, control-toolbox/OptimalControl.jl#885) |
 | OptimalControlProblems | ✅ | — | — | — |
 | CTDiffFlow.jl | ✅ | — | — | — |
@@ -420,9 +454,9 @@ the caller's whole secret set; otherwise pass secrets explicitly, one by one.
    `CI.yml` into a `github` job (`github-runner`) and a `self-hosted` GPU job on the
    `occidata` runner (`occidata-runner`) instead of a single `run ci` job — see §3.1
    and `CTParser.jl`/`CTDirect.jl`/`CTFlows.jl`/`CTSolvers`/`CTLie` for the current
-   pattern, all identical. There is no third job and no `kkt` runner any more — `kkt`
-   is retired (§2), and `CTDirect.jl`'s older, separate `GPU.yml` has been replaced by
-   this same split, not kept alongside it. Use the label names verbatim; the former
+   pattern. A third job on the `kkt` runner (`kkt-runner`) can be added, as CTFlows.jl
+   does (§3.1). `CTDirect.jl`'s older, separate `GPU.yml` has been replaced by this same
+   split, not kept alongside it. Use the label names verbatim; the former
    `run ci cpu` / `run ci gpu` spelling is deprecated (§2).
 8. **Create the trigger labels** you reference (`run ci`, `run breakage`, `run
    documentation`, `github-runner`/`occidata-runner` when split, …) in the repo's
