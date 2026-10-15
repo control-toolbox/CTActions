@@ -11,6 +11,12 @@ name: Compat prune
 # classifies the multi-specifier entries, validates the prunes, applies them to fresh
 # checkouts of the default branches, and uploads the result (`compat-prune` artifact,
 # report in the job summary). Scripts and tests: scripts/compat-prune/.
+#
+# The `publish` job (skipped on dry runs) is the only one that writes, with a token of the
+# organization's GitHub App (secrets CT_APP_CLIENT_ID, CT_APP_PRIVATE_KEY; permissions:
+# contents, pull requests, issues). It re-applies the prunes to fresh checkouts, then keeps
+# one branch `ct/compat-prune` and one PR per repository, and one tracking issue in the
+# calling repository: a rerun updates them in place, and closes what has nothing left.
 
 on:
   workflow_call:
@@ -35,6 +41,13 @@ on:
         required: false
         type: string
         default: main
+    secrets:
+      CT_APP_CLIENT_ID:
+        description: 'Client ID of the GitHub App that publishes (not needed for a dry run)'
+        required: false
+      CT_APP_PRIVATE_KEY:
+        description: 'Private key of that GitHub App'
+        required: false
 
 jobs:
   audit:
@@ -80,14 +93,7 @@ jobs:
 
       - name: Apply the prunes to fresh checkouts of the default branches
         run: |
-          mkdir -p checkouts
-          julia --startup-file=no -e 'using TOML
-            for (n, p) in TOML.parsefile(ARGS[1])["packages"]
-                println(n, " ", p["repo"], " ", p["default_branch"])
-            end' "$OUT/index.toml" |
-          while read -r name repo branch; do
-            git clone --quiet --depth 1 --branch "$branch" "https://github.com/$repo.git" "checkouts/$name"
-          done
+          "$SCRIPTS/checkout.sh" "$OUT" checkouts
           julia --startup-file=no "$SCRIPTS/edit.jl" "$OUT" checkouts
           for d in checkouts/*/; do
             git -C "$d" diff --src-prefix="a/$(basename "$d")/" --dst-prefix="b/$(basename "$d")/"
@@ -113,3 +119,60 @@ jobs:
           name: compat-prune
           path: compat-prune/
           retention-days: 30
+
+  publish:
+    needs: audit
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Two publications at once would race on the same branches and issue.
+    concurrency:
+      group: compat-prune-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      SCRIPTS: ctactions/scripts/compat-prune
+      OUT: ${{ github.workspace }}/compat-prune
+    steps:
+      - name: Check the App credentials
+        env:
+          CLIENT_ID: ${{ secrets.CT_APP_CLIENT_ID }}
+          PRIVATE_KEY: ${{ secrets.CT_APP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "::error::Publishing needs the secrets CT_APP_CLIENT_ID and CT_APP_PRIVATE_KEY (or run with dry_run: true)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: ctactions
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: compat-prune
+          path: compat-prune
+
+      - uses: julia-actions/install-juliaup@v3
+        with:
+          channel: release
+
+      - uses: actions/create-github-app-token@v3
+        id: app
+        with:
+          client-id: ${{ secrets.CT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CT_APP_PRIVATE_KEY }}
+          owner: control-toolbox
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh auth setup-git
+          "$SCRIPTS/checkout.sh" "$OUT" checkouts
+          julia --startup-file=no "$SCRIPTS/edit.jl" "$OUT" checkouts
+          RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            julia --startup-file=no "$SCRIPTS/publish.jl" "$OUT" checkouts "$GITHUB_REPOSITORY" | tee -a "$GITHUB_STEP_SUMMARY"

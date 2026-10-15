@@ -97,6 +97,28 @@ function render_report(audit, edits; prs=Dict(), run_url="")
     return join(out, "\n\n") * "\n"
 end
 
+"""
+    render_pr_body(owner, edits; issue_url="", run_url="") -> String
+
+Body of the PR of `owner`: its edited entries, why they can go, where the audit is.
+"""
+function render_pr_body(owner, edits; issue_url="", run_url="")
+    mine = sort([e for e in edits if e["owner"] == owner && e["status"] == "edited"]; by=entry_key)
+    rows = [[code(e["file"]), code(e["dep"]), code(e["before"]), code(e["after"]), selected(e["evidence"])] for e in mine]
+    links = String[]
+    isempty(issue_url) || push!(links, "tracking issue: $issue_url")
+    isempty(run_url) || push!(links, "[audit run]($run_url)")
+    return join([MARKER, """
+        Drops the `[compat]` specifiers that no supported Julia version selects, in any
+        environment of the control-toolbox packages (joint, tests and docs of every package).
+        Without them every audited manifest is unchanged: this PR changes no version that
+        these environments resolve, needs no release of its own, and can be merged in any
+        order with the PRs of the other packages.""",
+        table(["file", "dependency", "before", "after", "selected"], rows),
+        "Opened by the [`compat-prune`]($WORKFLOW_URL) workflow" * (isempty(links) ? "" : " ($(join(links, ", ")))") *
+        ". The branch is rewritten by every run: push nothing to it."], "\n\n") * "\n"
+end
+
 if abspath(PROGRAM_FILE) == @__FILE__
     root = ARGS[1]
     prs = length(ARGS) ≥ 2 ? TOML.parsefile(ARGS[2]) : Dict()

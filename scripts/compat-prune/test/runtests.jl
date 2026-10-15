@@ -21,6 +21,7 @@ include("helpers.jl")
     include("test_validate.jl")
     include("test_edit.jl")
     include("test_report.jl")
+    include("test_publish.jl")
     include("test_regression.jl")
     if get(ENV, "COMPAT_PRUNE_INTEGRATION", "") == "1"
         include("test_integration.jl")
