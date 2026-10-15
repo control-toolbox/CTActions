@@ -158,6 +158,7 @@ events the job actually needs.
 | `run breakage` | breakage tests against downstream **packages** | core packages |
 | `run breakage applications` | breakage against downstream **applications/tutorials** | OptimalControl |
 | `run documentation` | full Documenter build on the PR | most packages |
+| `documentation push preview` | Documenter build on the PR **and** deployment of its preview (`previews/PR<n>`); without it a PR build is never deployed (see §3.1) | CTSolvers (first adopter) |
 | `run probe` | standalone capability-probe scripts (see `CPUProbe.yml`/`GPUProbe.yml`, §3.3) | CTFlows.jl |
 
 **Split-CI labels are named after the *runner*, not the workload.** The two halves of a
@@ -249,6 +250,38 @@ simply leaves the already-published site in place. This shape exists because, un
 and putting a self-hosted box on the critical path of *publishing* is a reliability
 regression `ci.yml`'s split never risked. Any caller that wants GPU-backed docs numbers
 should follow this pattern, not the `ci.yml` one.
+
+**PR previews are opt-in, through the `documentation push preview` label.** Deploying a
+preview of every PR build fills `gh-pages` with `previews/PR<n>` directories nobody looks
+at. `documentation.yml` therefore passes `DOCUMENTER_PUSH_PREVIEW` to `docs/make.jl`:
+`"true"` only on a PR carrying the label, `"false"` otherwise (inside a reusable workflow
+`github.event` is the caller's event, so the PR's labels are visible). The caller needs two
+changes:
+
+```julia
+# docs/make.jl
+DocumenterVitepress.deploydocs(;
+    repo=repo_url * ".git",
+    devbranch="main",
+    push_preview=get(ENV, "DOCUMENTER_PUSH_PREVIEW", "false") == "true",
+)
+```
+
+```yaml
+# .github/workflows/Documentation.yml — the preview label also triggers the build
+if: >
+  github.event_name != 'pull_request' ||
+  (github.event.action == 'labeled' &&
+    (github.event.label.name == 'run documentation' || github.event.label.name == 'documentation push preview')) ||
+  (github.event.action != 'labeled' &&
+    (contains(github.event.pull_request.labels.*.name, 'run documentation') ||
+     contains(github.event.pull_request.labels.*.name, 'documentation push preview')))
+```
+
+`run documentation` alone builds the docs on the PR without deploying anything; adding
+`documentation push preview` (with or without `run documentation`) also deploys the
+preview. A `make.jl` that still hardcodes `push_preview=true` ignores the variable and keeps
+its old behaviour, so callers can migrate one at a time.
 
 ### 3.2 Maintenance workflows that live *in* `CTActions` (not called)
 
