@@ -182,6 +182,13 @@ jobs:
         with:
           git_cli: ${{ (inputs.use_ct_registry && runner.os == 'Windows') && 'true' || 'false' }}
 
+      # A manifest generated with a newer Julia can pin packages to versions
+      # incompatible with this matrix entry. Resolve it before Pkg.test so
+      # CompatHelper jobs can select the newest version supported here.
+      - name: Resolve dependencies for this Julia version
+        shell: bash
+        run: julia --project=. -e 'using Pkg; Pkg.resolve()'
+
       - name: Run tests
         if: inputs.runner_type != 'self-hosted'
         uses: julia-actions/julia-runtest@latest
