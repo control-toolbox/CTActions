@@ -99,6 +99,34 @@ run_script(script, args...) = read(`$JULIA --startup-file=no $(joinpath(SCRIPTS,
         end
     end
 
+    @testset "checkout.sh (local origins)" begin
+        mktempdir() do dir
+            # two packages, one with a dict-valued index entry each (sorting must not compare them)
+            index = Dict("Beta" => Dict("repo" => "org/Beta.jl", "default_branch" => "dev"),
+                         "Alpha" => Dict("repo" => "org/Alpha.jl", "default_branch" => "main"))
+            for (name, p) in index
+                bare = joinpath(dir, "org", "$name.jl.git")
+                work = joinpath(dir, "seed-$name")
+                run(`git -c init.defaultBranch=$(p["default_branch"]) init --quiet $work`)
+                write(joinpath(work, "Project.toml"), "name = \"$name\"\n")
+                run(`git -C $work add --all`)
+                run(`git -C $work -c user.name=t -c user.email=t@example.org commit --quiet -m init`)
+                run(`git clone --quiet --bare $work $bare`)
+            end
+            audit = joinpath(dir, "audit")
+            mkpath(audit)
+            open(io -> TOML.print(io, Dict("packages" => index)), joinpath(audit, "index.toml"), "w")
+            withenv("COMPAT_PRUNE_GIT_BASE" => "file://$dir") do
+                run(`$(joinpath(SCRIPTS, "checkout.sh")) $audit $(joinpath(dir, "checkouts"))`)
+            end
+            for (name, p) in index
+                co = joinpath(dir, "checkouts", name)
+                @test read(joinpath(co, "Project.toml"), String) == "name = \"$name\"\n"
+                @test readchomp(`git -C $co rev-parse --abbrev-ref HEAD`) == p["default_branch"]
+            end
+        end
+    end
+
     @testset "simulate" begin
         env = Dict("deps" => Dict("Example" => EXAMPLE), "compat" => Dict("Example" => "=0.5.5"),
                    "pins" => Dict("Example" => "0.5.5"))
