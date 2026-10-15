@@ -182,18 +182,17 @@ jobs:
         with:
           git_cli: ${{ (inputs.use_ct_registry && runner.os == 'Windows') && 'true' || 'false' }}
 
-      # CompatHelper uses KeepEntry() to widen [compat] bounds while keeping
-      # older entries needed by older Julia versions or downstream packages.
-      # Disable julia-runtest's auto force_latest_compatible_version (matching
-      # the self-hosted step below), whose Julia stdlib implementation ignores
-      # Julia version compatibility when picking the latest version of each
-      # dependency (e.g. forcing JET 0.12 on Julia 1.10).
+      # force_latest_compatible_version (auto: only on Dependabot/CompatHelper
+      # branches) is skipped on Julia 1.10: Pkg's implementation picks the latest
+      # registered version of each dependency without checking Julia
+      # compatibility, e.g. it forces JET 0.12 (needs Julia >= 1.11), which makes
+      # resolution fail. The latest versions are still tested on newer Julia.
       - name: Run tests
         if: inputs.runner_type != 'self-hosted'
         uses: julia-actions/julia-runtest@latest
         with:
           test_args: ${{ inputs.test_args }}
-          force_latest_compatible_version: 'false'
+          force_latest_compatible_version: ${{ matrix.version == '1.10' && 'false' || 'auto' }}
 
       # Self-hosted runners reuse a persistent Julia depot across every run
       # (unlike GitHub-hosted runners, whose disk is wiped between jobs), so a
@@ -218,8 +217,21 @@ jobs:
         shell: bash
         env:
           TEST_ARGS: ${{ inputs.test_args }}
+          JULIA_MATRIX_VERSION: ${{ matrix.version }}
           COMPILED_DIR: ${{ steps.depot.outputs.path }}/compiled
         run: |
+          # Same as julia-runtest's force_latest_compatible_version=auto: force
+          # the latest compatible versions on Dependabot/CompatHelper branches
+          # only (see julia-runtest's autodetect-dependabot.jl).
+          # Skipped on Julia 1.10, see "Run tests" above.
+          FORCE_LATEST=false
+          for ref in "${GITHUB_BASE_REF:-}" "${GITHUB_HEAD_REF:-}" "${GITHUB_REF:-}"; do
+            ref="${ref#refs/heads/}"
+            case "$ref" in dependabot/julia*|compathelper/*) FORCE_LATEST=true ;; esac
+          done
+          [ "$JULIA_MATRIX_VERSION" = "1.10" ] && FORCE_LATEST=false
+          echo "force_latest_compatible_version=$FORCE_LATEST"
+          export FORCE_LATEST
           run_tests() {
             # shellcheck disable=SC2086  # TEST_ARGS splits like julia-runtest's test_args
             ${OCCIDATA_GPU_RUN:-} julia --color=yes --project=@. -e '
@@ -227,7 +239,7 @@ jobs:
               Pkg.test(;
                 coverage=true,
                 julia_args=["--check-bounds=yes", "--compiled-modules=yes", "--depwarn=yes"],
-                force_latest_compatible_version=false,
+                force_latest_compatible_version=parse(Bool, ENV["FORCE_LATEST"]),
                 allow_reresolve=true,
                 test_args=ARGS,
               )' -- $TEST_ARGS
