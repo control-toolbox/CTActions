@@ -1,47 +1,34 @@
 # CTActions
 
-Centralized GitHub Actions workflows, issue templates, and configuration for the [control-toolbox](https://github.com/control-toolbox) organization's Julia packages.
+Centralized GitHub Actions workflows, issue templates and configuration for the
+[control-toolbox](https://github.com/control-toolbox) organization's Julia packages.
 
-## Overview
+## What is here
 
-This repository provides **reusable workflows** (`workflow_call`) that every control-toolbox package can include via `uses: control-toolbox/CTActions/.github/workflows/<file>@main`. It also ships standard issue templates and a Dependabot configuration for keeping GitHub Actions versions up to date.
+- **Reusable workflows** (`on: workflow_call`) that every package calls with a thin
+  caller: `uses: control-toolbox/CTActions/.github/workflows/<name>.yml@main`. CI,
+  coverage, documentation, breakage, formatting, spell check, CompatHelper, README
+  generation, issue assignment, project board.
+- **Workflows for the whole organization**, run here on a schedule: the monthly
+  [`[compat]` prune](docs/workflows/compat-prune.md) of every CT\* package, the
+  maintenance and watchdog of the `occidata` self-hosted runner.
+- The organization's **GitHub App**, [`control-toolbox-bot`](docs/conventions/github-app.md),
+  used by the workflows that write to other repositories.
+- Issue templates and the Dependabot configuration.
 
-## Design and conventions
+## Documentation
 
-How the organization manages its workflows — centralize then call, label-gated
-triggers, the catalog, which repository has which workflow and why, recipes for a new
-repository and for org-wide updates — is described in
-[`docs/WORKFLOWS.md`](docs/WORKFLOWS.md).
+**[docs/README.md](docs/README.md)**: the philosophy (centralize then call, opt-in
+labels), the catalog of every workflow with its page, and the conventions:
 
-## Reusable workflows
-
-| Workflow | Description | Key inputs |
-|---|---|---|
-| `ci.yml` | Build and test on a matrix of Julia versions, OS, and archs | `versions`, `runs_on`, `archs`, `use_ct_registry`, `test_args` |
-| `coverage.yml` | Run tests and upload coverage to Codecov | `use_ct_registry` |
-| `documentation.yml` | Build and deploy documentation with Documenter.jl | `use_ct_registry` |
-| `formatter.yml` | Run JuliaFormatter (BlueStyle) and open a PR if needed | — |
-| `compat-helper.yml` | Keep `[compat]` entries in `Project.toml` up to date | `subdirs` |
-| `spell-check.yml` | Spell check with `typos` | `locale`, `extend-identifiers`, `config-path` |
-| `breakage.yml` | Test downstream packages against a new version; comment results on PR | `pkgname`, `pkgpath`, `pkgversion`, `pkgbreak` |
-| `add-to-project.yml` | Auto-add issues/PRs to the org GitHub project | `project-url`, `status` |
-| `auto-assign.yml` | Auto-assign issues to maintainers | `assignees`, `numOfAssignee` |
-| `update-readme.yml` | Generate README from `ABOUT.md`, `INSTALL.md`, `CONTRIBUTING.md` + badges | `template_file`, `package_name`, `repo_name`, `doc_url` |
-
-## Scheduled / maintenance workflows
-
-| Workflow | Schedule | Description |
-|---|---|---|
-| `occidata-runner-maintenance.yml` | Weekly (Mon 02:30 UTC) | Purge Julia cache, update TeXLive, rotate logs on self-hosted runner |
-| `occidata-runner-watchdog.yml` | Daily (03:15 UTC) | Restart, through SSH, the Occidata runner jobs (one per organization) that are neither pending nor running |
-| `compat-prune-monthly.yml` | Monthly (1st, 04:00 UTC) | Drop the `[compat]` specifiers no supported Julia version selects, across all CT\* packages: one PR per repository, one tracking issue here (logic: reusable `compat-prune.yml`, scripts and tests in `scripts/compat-prune/`) |
-
-The Occidata watchdog requires these CTActions repository or organization secrets:
-
-- `OCCIDATA_SSH_KEY`: private SSH key authorized for `ocots@occidata-cluster.irit.fr`;
-- `OCCIDATA_KNOWN_HOSTS`: pinned `known_hosts` entry for `occidata-cluster.irit.fr`.
-
-It runs `scripts/start_runners.sh` (control-toolbox/occidata) on the cluster, which starts every runner instance listed in `runners.conf` whose SLURM job is neither pending nor running, and never starts a duplicate. If the cluster is unreachable, the watchdog fails.
+| Page | Content |
+| --- | --- |
+| [Labels](docs/conventions/labels.md) | Opt-in triggers on pull requests, and their vocabulary |
+| [Runners](docs/conventions/runners.md) | GitHub-hosted and self-hosted (GPU) runners, split CI |
+| [Secrets and registries](docs/conventions/secrets.md) | Every secret, `ct-registry` |
+| [GitHub App](docs/conventions/github-app.md) | `control-toolbox-bot`, and how to use it for something new |
+| [Repositories](docs/repositories.md) | Which repository has which workflow, and why |
+| [Recipes](docs/recipes.md) | A new repository, a change across the organization |
 
 ## Usage example
 
@@ -51,28 +38,38 @@ name: CI
 on:
   push:
     branches: [main]
+    tags: '*'
   pull_request:
+    types: [labeled, synchronize, reopened]
 
 jobs:
-  test:
+  test-cpu-github:
+    if: >
+      github.event_name != 'pull_request' ||
+      (github.event.action == 'labeled' && github.event.label.name == 'run ci github-runner') ||
+      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'run ci github-runner'))
     uses: control-toolbox/CTActions/.github/workflows/ci.yml@main
     with:
-      versions: '["1.10", "1.12"]'
+      runs_on: '["ubuntu-latest", "macos-latest", "windows-latest"]'
       use_ct_registry: true
     secrets:
       SSH_KEY: ${{ secrets.SSH_KEY }}
 ```
 
+More callers: one per page in [`docs/workflows/`](docs/workflows/).
+
 ## Issue templates
 
-Five templates are provided: **Bug report**, **Feature request**, **Documentation suggestion**, **Developers** (internal), and **Blank issue**. Discussions are redirected to [GitHub Discussions](https://github.com/control-toolbox/CTActions/discussions).
+Five templates: **Bug report**, **Feature request**, **Documentation suggestion**,
+**Developers** (internal) and **Blank issue**. Discussions are redirected to
+[GitHub Discussions](https://github.com/orgs/control-toolbox/discussions).
 
 ## Dependabot
 
-Weekly updates for GitHub Actions versions (see `dependabot.yml`).
+Weekly updates of the GitHub Actions versions (`.github/dependabot.yml`).
 
 ## Links
 
 - [control-toolbox organization](https://github.com/control-toolbox)
-- [Organization profile repo](https://github.com/control-toolbox/.github)
+- [Organization profile repository](https://github.com/control-toolbox/.github)
 - [Discussions](https://github.com/orgs/control-toolbox/discussions)

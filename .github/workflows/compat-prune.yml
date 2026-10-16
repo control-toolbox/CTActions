@@ -5,7 +5,7 @@ name: Compat prune
 # unchanged, and (unless dry_run) opens one PR per affected repository plus one tracking
 # issue (in CTActions by default), both updated in place by later runs. The prune is the
 # organization's: it is called monthly by `compat-prune-monthly.yml`, here in CTActions, and
-# by the self-test `compat-prune-tests.yml`; see docs/WORKFLOWS.md §3.2.
+# by the self-test `compat-prune-tests.yml`; see docs/workflows/compat-prune.md.
 #
 # The `audit` job is read-only: it resolves the joint, test and docs environments of every
 # package on every Julia version (Pkg's resolver only: nothing is downloaded or installed),
