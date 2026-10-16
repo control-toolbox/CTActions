@@ -156,6 +156,15 @@ jobs:
       - name: Install dependencies
         run: julia --project=docs/ -e 'using Pkg; Pkg.develop(PackageSpec(path=pwd())); Pkg.instantiate()'
 
+      # Self-hosted depots persist, and are shared across jobs: Pkg runs a package's
+      # `deps/build.jl` only when it installs the package, never when the sources are
+      # already in the depot. A package whose build output is missing there (KNITRO.jl:
+      # `deps/deps.jl`, "KNITRO.jl is not installed correctly") then fails to load for
+      # good, while the same build on a GitHub-hosted runner (fresh depot) succeeds. Run
+      # every build script of the docs environment again; it is idempotent.
+      - name: Build the packages of the docs environment
+        run: julia --project=docs/ -e 'using Pkg; Pkg.build(; verbose=true)'
+
       # Only the builds themselves need CUDA: on occidata they run on a GPU node
       # through $OCCIDATA_GPU_RUN (see ci.yml's self-hosted "Run tests" step);
       # the expansion is empty on any other runner. SLURM reads a bare number as
