@@ -336,15 +336,18 @@ jobs:
 
 ### 3.2 Maintenance workflows that live *in* `CTActions` (not called)
 
-These run on `CTActions` itself, on a schedule, to keep the **self-hosted runners**
-healthy. They are not `workflow_call` reusables.
+These run on `CTActions` itself: on a schedule, to keep the **self-hosted runners**
+healthy or to act on the whole organization, or on its own PRs, to test the scripts behind
+a workflow. No package calls them.
 
 | Workflow (`CTActions`) | Role | Trigger |
 | --- | --- | --- |
 | `occidata-runner-maintenance.yml` | Purge Julia compile cache, update TeXLive, rotate logs on the `occidata` self-hosted runner | weekly cron, `workflow_dispatch` |
 | `occidata-runner-watchdog.yml` | Over SSH, run `scripts/start_runners.sh` (control-toolbox/occidata), which restarts every Occidata runner instance whose SLURM job is neither pending nor running | daily cron, `workflow_dispatch` |
+| `compat-prune-monthly.yml` | The organization's `[compat]` prune: runs the reusable `compat-prune.yml` on every CT\* package; one PR per repository with something to drop, one tracking issue in CTActions | monthly cron (1st, 04:00 UTC), `workflow_dispatch` (`dry_run`) |
+| `compat-prune-tests.yml` | Self-test of `compat-prune`: the test suite of `scripts/compat-prune` on every audited Julia version, then a real dry-run audit through `compat-prune.yml` | PR or push touching `scripts/compat-prune/` or `compat-prune*.yml`, `workflow_dispatch` |
 
-`occidata` started as the target of this maintenance workflow only; since CTFlows.jl's
+`occidata` started as the target of the maintenance workflow only; since CTFlows.jl's
 `occidata-runner` job (§3.1, added 2026-08-24) it is also a live GPU CI target for every
 package's test matrix that needs one, and (2026-09-02, control-toolbox/OptimalControl.jl#885)
 a documentation-build target too — not just a runner kept healthy for its own sake. Two
@@ -380,6 +383,82 @@ Occidata also hosts a second runner instance, `occidata-cpu`, for the `ocourses`
 organization. It runs in `cpu` mode: no `$OCCIDATA_GPU_RUN`, so no GPU ever. Instances,
 their modes and how to add one are documented in control-toolbox/occidata,
 `docs/gha-runner-config.md` § 9.
+
+**`[compat]` entries are pruned for the whole organization, once a month.**
+`compat-helper.yml` runs with `KeepEntry()`: a new major is added next to the old ones
+(`JET = "0.9, 0.11, 0.12"`), and
+`ci.yml` tests the newest on CompatHelper PRs (`force_latest_compatible_version=auto`,
+except on Julia 1.10, CTActions#93). Old specifiers therefore pile up, and none can be
+dropped from inside one package: `JET 0.9` is still what Julia 1.10 selects, and
+CTSolvers' `CUDSS 0.7` is what OptimalControl's tests select. The prune is therefore the
+organization's, decided for all CT\* packages at once (control-toolbox/OptimalControl.jl#986),
+and lives here: `compat-prune-monthly.yml` runs the reusable `compat-prune.yml` (also run
+by the self-test) on the 1st of every month, and keeps its tracking issue in CTActions
+(input `tracking_repo`). No package carries a caller.
+
+- **What is audited.** The version of each package that the joint resolution of all of
+  them selects, read from its registered tree (not from a branch), and 17 environments: the
+  joint one, plus the test environment (`test/Project.toml` or `[targets] test`) and the
+  docs environment of every package, each on every Julia version of `julia_versions`.
+  Resolution calls Pkg's resolver only: nothing is downloaded or installed, and one
+  registry snapshot serves the whole audit (about 4 minutes on a runner).
+- **What is pruned.** In an entry with several specifiers, those older than the newest one
+  in use, that no environment selects on any Julia version, counting only the environments
+  where the entry applies (where its package is at its audited version, or the very `test/`
+  or `docs/` environment of the file). Every prune is then simulated, by intersecting the
+  compat of the environments where it applies, and kept only if all manifests stay
+  identical. A prune therefore changes nothing that is resolved: the PRs can be merged in
+  any order and need no release.
+- **What is reported.** The tracking issue (hidden marker `<!-- ct-compat-prune -->`)
+  opens with the record of the audit (environments resolved per Julia version, entries
+  examined by status, registry snapshot, and, folded, the entries kept or idle with why),
+  then lists the prunes per repository with their PR, those merged but not yet released, the
+  *drifts* (the default branch no longer has the audited line: untouched), the prunes
+  rejected by the simulation, the *withheld* ones (an environment failed to resolve: nothing
+  is pruned that run), and the *blocked* entries (the newest specifier is never selected,
+  with the packages that cap it: information only).
+- **Idempotence.** One branch `ct/compat-prune` and one PR per repository, one issue: a
+  rerun rewrites them in place (the branch is pushed only when its content changes), closes
+  the PR and deletes the branch of a repository with nothing left, and closes the issue
+  (reopened, never recreated) when nothing is left at all. The edits are re-applied to the
+  current default branch, one `[compat]` line at a time, never copied from the audit.
+- **Dry run.** `dry_run: true` (the default) runs the read-only `audit` job only: report
+  and diff in the job summary, everything in the `compat-prune` artifact. The `publish`
+  job writes with a token of the organization's GitHub App (`CT_APP_CLIENT_ID`,
+  `CT_APP_PRIVATE_KEY`; permissions: contents, pull requests, issues, on the CT\*
+  repositories) and is the only one that does.
+
+`ct-registry` is added over HTTPS (it is public), so no `SSH_KEY` is needed. The scripts
+live in `scripts/compat-prune/` and run locally the same way (juliaup channels):
+
+```bash
+julia scripts/compat-prune/audit.jl '["CTBase","CTParser","CTModels","CTLie","CTFlows","CTDirect","CTSolvers","OptimalControl"]' '["1.10","1.12","1.13"]' /tmp/audit
+COMPAT_PRUNE_INTEGRATION=1 julia scripts/compat-prune/test/runtests.jl   # unit, non-regression, integration
+```
+
+The monthly workflow:
+
+```yaml
+# .github/workflows/compat-prune-monthly.yml (CTActions)
+on:
+  schedule:
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+    inputs:
+      dry_run: { type: boolean, default: true }
+jobs:
+  prune:
+    uses: ./.github/workflows/compat-prune.yml
+    with:
+      dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+      ctactions_ref: ${{ github.sha }}
+    secrets:
+      CT_APP_CLIENT_ID: ${{ secrets.CT_APP_CLIENT_ID }}
+      CT_APP_PRIVATE_KEY: ${{ secrets.CT_APP_PRIVATE_KEY }}
+```
+
+Until the GitHub App is set up, every trigger is a dry run
+(`dry_run: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}`).
 
 ### 3.3 Non-centralized / per-repo special workflows
 
@@ -495,6 +574,7 @@ runner is the one maintained by the scheduled `CTActions` maintenance workflows 
 | `DOCUMENTER_KEY` | Documentation, CompatHelper, TagBot | Deploy docs / sign tags (Documenter deploy key) |
 | `CODECOV_TOKEN` → `codecov-secret` | Coverage | Upload coverage to Codecov |
 | `PROJECT_TOKEN` → `project_token` | AddToProject | Write to the org project board |
+| `CT_APP_CLIENT_ID`, `CT_APP_PRIVATE_KEY` | `compat-prune-monthly.yml` in CTActions (`publish` job) | Token of the organization's GitHub App: push `ct/compat-prune` and open PRs in the CT\* repositories, keep the tracking issue |
 | `GITHUB_TOKEN` | (built-in) most | Default repo-scoped token |
 
 Use `secrets: inherit` (as `UpdateReadme` does) only when the reusable workflow needs

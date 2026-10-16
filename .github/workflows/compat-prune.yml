@@ -1,0 +1,185 @@
+name: Compat prune
+
+# Finds the [compat] specifiers that no supported Julia version ever selects across the
+# control-toolbox packages, proves that dropping them leaves every resolved manifest
+# unchanged, and (unless dry_run) opens one PR per affected repository plus one tracking
+# issue (in CTActions by default), both updated in place by later runs. The prune is the
+# organization's: it is called monthly by `compat-prune-monthly.yml`, here in CTActions, and
+# by the self-test `compat-prune-tests.yml`; see docs/WORKFLOWS.md §3.2.
+#
+# The `audit` job is read-only: it resolves the joint, test and docs environments of every
+# package on every Julia version (Pkg's resolver only: nothing is downloaded or installed),
+# classifies the multi-specifier entries, validates the prunes, applies them to fresh
+# checkouts of the default branches, and uploads the result (`compat-prune` artifact,
+# report in the job summary). Scripts and tests: scripts/compat-prune/.
+#
+# The `publish` job (skipped on dry runs) is the only one that writes, with a token of the
+# organization's GitHub App (secrets CT_APP_CLIENT_ID, CT_APP_PRIVATE_KEY; permissions:
+# contents, pull requests, issues). It re-applies the prunes to fresh checkouts, then keeps
+# one branch `ct/compat-prune` and one PR per repository, and one tracking issue in
+# `tracking_repo`: a rerun updates them in place, and closes what has nothing left.
+
+on:
+  workflow_call:
+    inputs:
+      packages:
+        description: 'JSON list of the audited packages (registered names)'
+        required: false
+        type: string
+        default: '["CTBase","CTParser","CTModels","CTLie","CTFlows","CTDirect","CTSolvers","OptimalControl"]'
+      julia_versions:
+        description: 'JSON list of the Julia versions (juliaup channels); the last one is the newest'
+        required: false
+        type: string
+        default: '["1.10","1.12","1.13"]'
+      dry_run:
+        description: 'Only audit and report: no PR, no issue'
+        required: false
+        type: boolean
+        default: true
+      ctactions_ref:
+        description: 'Ref of CTActions the scripts are checked out from'
+        required: false
+        type: string
+        default: main
+      tracking_repo:
+        description: 'Repository of the tracking issue'
+        required: false
+        type: string
+        default: control-toolbox/CTActions
+    secrets:
+      CT_APP_CLIENT_ID:
+        description: 'Client ID of the GitHub App that publishes (not needed for a dry run)'
+        required: false
+      CT_APP_PRIVATE_KEY:
+        description: 'Private key of that GitHub App'
+        required: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      PACKAGES: ${{ inputs.packages }}
+      JULIA_VERSIONS: ${{ inputs.julia_versions }}
+      SCRIPTS: ctactions/scripts/compat-prune
+      OUT: ${{ github.workspace }}/compat-prune
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: ctactions
+
+      - uses: julia-actions/install-juliaup@v3
+        with:
+          channel: release
+
+      - name: Install the audited Julia versions
+        run: |
+          for v in $(jq -r '.[]' <<< "$JULIA_VERSIONS"); do juliaup add "$v"; done
+          juliaup status
+
+      # ct-registry is public: added over HTTPS, no SSH key needed. The registries are
+      # updated once more by audit.jl, then frozen for the whole audit.
+      - name: Add the registries
+        run: |
+          julia --startup-file=no -e 'using Pkg
+            Pkg.Registry.add("General")
+            Pkg.Registry.add(url="https://github.com/control-toolbox/ct-registry.git")'
+
+      - name: Test the scripts
+        run: julia --startup-file=no "$SCRIPTS/test/runtests.jl"
+
+      - name: Audit
+        run: julia --startup-file=no "$SCRIPTS/audit.jl" "$PACKAGES" "$JULIA_VERSIONS" "$OUT"
+
+      - name: Apply the prunes to fresh checkouts of the default branches
+        run: |
+          "$SCRIPTS/checkout.sh" "$OUT" checkouts
+          julia --startup-file=no "$SCRIPTS/edit.jl" "$OUT" checkouts
+          for d in checkouts/*/; do
+            git -C "$d" diff --src-prefix="a/$(basename "$d")/" --dst-prefix="b/$(basename "$d")/"
+          done > "$OUT/edits.diff"
+
+      - name: Report
+        run: |
+          RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            julia --startup-file=no "$SCRIPTS/report.jl" "$OUT"
+          {
+            cat "$OUT/report.md"
+            echo
+            echo "<details><summary>Edits on the default branches (diff)</summary>"
+            echo
+            echo '```diff'
+            cat "$OUT/edits.diff"
+            echo '```'
+            echo "</details>"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: compat-prune
+          path: compat-prune/
+          retention-days: 30
+
+  publish:
+    needs: audit
+    if: ${{ !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Two publications at once would race on the same branches and issue.
+    concurrency:
+      group: compat-prune-publish
+      cancel-in-progress: false
+    permissions:
+      contents: read
+    env:
+      SCRIPTS: ctactions/scripts/compat-prune
+      OUT: ${{ github.workspace }}/compat-prune
+    steps:
+      - name: Check the App credentials
+        env:
+          CLIENT_ID: ${{ secrets.CT_APP_CLIENT_ID }}
+          PRIVATE_KEY: ${{ secrets.CT_APP_PRIVATE_KEY }}
+        run: |
+          if [ -z "$CLIENT_ID" ] || [ -z "$PRIVATE_KEY" ]; then
+            echo "::error::Publishing needs the secrets CT_APP_CLIENT_ID and CT_APP_PRIVATE_KEY (or run with dry_run: true)."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: ctactions
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: compat-prune
+          path: compat-prune
+
+      - uses: julia-actions/install-juliaup@v3
+        with:
+          channel: release
+
+      - uses: actions/create-github-app-token@v3
+        id: app
+        with:
+          client-id: ${{ secrets.CT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CT_APP_PRIVATE_KEY }}
+          owner: control-toolbox
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TRACKING_REPO: ${{ inputs.tracking_repo }}
+        run: |
+          gh auth setup-git
+          "$SCRIPTS/checkout.sh" "$OUT" checkouts
+          julia --startup-file=no "$SCRIPTS/edit.jl" "$OUT" checkouts
+          RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            julia --startup-file=no "$SCRIPTS/publish.jl" "$OUT" checkouts "$TRACKING_REPO" | tee -a "$GITHUB_STEP_SUMMARY"

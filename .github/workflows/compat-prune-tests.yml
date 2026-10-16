@@ -1,0 +1,51 @@
+name: Compat prune tests
+
+# Self-test of compat-prune, in CTActions itself: the test suite of scripts/compat-prune on
+# every audited Julia version (unit, non-regression and integration tests), then a real
+# dry-run audit of the ecosystem through the reusable workflow. Runs when the scripts or the
+# workflows change; nothing is written anywhere (dry run).
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/compat-prune/**'
+      - '.github/workflows/compat-prune*.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/compat-prune/**'
+      - '.github/workflows/compat-prune*.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: compat-prune-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['1.10', '1.12', '1.13']
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+      - name: Add the General registry
+        run: julia --startup-file=no -e 'using Pkg; Pkg.Registry.add("General")'
+      - name: Tests (with integration)
+        env:
+          COMPAT_PRUNE_INTEGRATION: '1'
+        run: julia --startup-file=no scripts/compat-prune/test/runtests.jl
+
+  dry-run:
+    needs: tests
+    uses: ./.github/workflows/compat-prune.yml
+    with:
+      dry_run: true
+      ctactions_ref: ${{ github.event.pull_request.head.sha || github.sha }}

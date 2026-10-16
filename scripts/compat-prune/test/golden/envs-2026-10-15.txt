@@ -1,0 +1,17 @@
+CTBase/docs: deps=ADTypes,CTBase,CairoMakie,Coverage,DifferentiationInterface,Documenter,DocumenterInterLinks,DocumenterVitepress,ForwardDiff,JET,LiveServer,MarkdownAST,Plots pins=CTBase=0.30.10
+CTBase/test: deps=Aqua,BenchmarkTools,CTBase,CairoMakie,Coverage,DifferentiationInterface,Documenter,ForwardDiff,JET,Logging,Markdown,MarkdownAST,Plots,Test pins=CTBase=0.30.10
+CTDirect/docs: deps=CTBase,CTDirect,Documenter,DocumenterMermaid,Markdown,MarkdownAST pins=CTDirect=1.1.8-beta
+CTDirect/test: deps=AMDGPU,CTDirect,CTParser,CUDA,CUDSS,CommonSolve,MadNLP,MadNLPGPU,NLPModels,NLPModelsIpopt,SplitApplyCombine,Test pins=CTDirect=1.1.8-beta
+CTFlows/docs: deps=CTBase,CTFlows,CTModels,CTSolvers,CairoMakie,DiffEqBase,DifferentiationInterface,Documenter,DocumenterInterLinks,DocumenterVitepress,ForwardDiff,LiveServer,MarkdownAST,OrdinaryDiffEqRosenbrock,OrdinaryDiffEqTsit5,Plots,SciMLBase,StaticArrays pins=CTFlows=0.18.1
+CTFlows/test: deps=Aqua,CTFlows,CTLie,CUDA,CairoMakie,DiffEqBase,DiffEqGPU,DifferentiationInterface,ForwardDiff,Mooncake,NonlinearSolve,OrdinaryDiffEqTsit5,Plots,SciMLBase,StaticArrays,Test,Zygote pins=CTFlows=0.18.1
+CTLie/docs: deps=ADTypes,CTBase,CTLie,DifferentiationInterface,Documenter,DocumenterInterLinks,DocumenterVitepress,ForwardDiff,LiveServer,MarkdownAST pins=CTLie=0.2.3
+CTLie/test: deps=ADTypes,Aqua,BenchmarkTools,CTLie,CUDA,DifferentiationInterface,ForwardDiff,JET,Mooncake,Test pins=CTLie=0.2.3
+CTModels/docs: deps=CTBase,CTModels,CairoMakie,Documenter,DocumenterInterLinks,DocumenterVitepress,JET,JLD2,JSON3,LiveServer,MarkdownAST,Plots pins=CTModels=0.19.8
+CTModels/test: deps=Aqua,BenchmarkTools,CTModels,CairoMakie,JET,JLD2,JSON3,Plots,Random,Test pins=CTModels=0.19.8
+CTParser/docs: deps=CTBase,CTParser,Documenter,Markdown,MarkdownAST pins=CTParser=0.9.5-beta
+CTParser/test: deps=Aqua,BenchmarkTools,CTBase,CTModels,CTParser,CUDA,CUDSS,ExaModels,Interpolations,KernelAbstractions,LinearAlgebra,MadNLP,MadNLPGPU,NLPModels,OrderedCollections,Test pins=CTParser=0.9.5-beta
+CTSolvers/docs: deps=ADNLPModels,CTBase,CTSolvers,CUDA,CUDSS,CommonSolve,DiffEqBase,Documenter,DocumenterInterLinks,DocumenterVitepress,Enzyme,ExaModels,ForwardDiff,JET,LiveServer,MadNCL,MadNLP,MadNLPGPU,MarkdownAST,NLPModels,NLPModelsIpopt,NLPModelsKnitro,OrdinaryDiffEqTsit5,OrdinaryDiffEqVerner,SciMLBase,UnoSolver,Zygote pins=CTSolvers=0.5.8
+CTSolvers/test: deps=ADNLPModels,Aqua,BenchmarkTools,CTSolvers,CUDA,CUDSS,DiffEqBase,Enzyme,ExaModels,ForwardDiff,JET,MadNCL,MadNLP,MadNLPGPU,NLPModels,NLPModelsIpopt,OrderedCollections,OrdinaryDiffEqTsit5,Random,SciMLBase,Test,UnoSolver,Zygote pins=CTSolvers=0.5.8
+OptimalControl/docs: deps=ADNLPModels,CTBase,CTDirect,CTFlows,CTLie,CTModels,CTParser,CTSolvers,CUDA,CUDSS,CairoMakie,Colors,CommonSolve,DifferentiationInterface,Documenter,DocumenterInterLinks,DocumenterVitepress,ExaModels,ForwardDiff,JLD2,JSON3,Literate,LiveServer,MadNCL,MadNLP,MadNLPGPU,MarkdownAST,NLPModelsIpopt,NLPModelsKnitro,NonlinearSolve,OptimalControl,OrdinaryDiffEq,OrdinaryDiffEqTsit5,Plots,UnoSolver pins=OptimalControl=2.2.1-beta
+OptimalControl/test: deps=BenchmarkTools,CUDA,CUDSS,DiffEqBase,MadNCL,MadNLP,MadNLPGPU,NLPModelsIpopt,NonlinearSolve,OptimalControl,OrdinaryDiffEq,OrdinaryDiffEqTsit5,Printf,SciMLBase,SolverCore,SplitApplyCombine,Test,UnoSolver pins=OptimalControl=2.2.1-beta
+joint: deps=CTBase,CTDirect,CTFlows,CTLie,CTModels,CTParser,CTSolvers,OptimalControl pins=CTBase=0.30.10,CTDirect=1.1.8-beta,CTFlows=0.18.1,CTLie=0.2.3,CTModels=0.19.8,CTParser=0.9.5-beta,CTSolvers=0.5.8,OptimalControl=2.2.1-beta

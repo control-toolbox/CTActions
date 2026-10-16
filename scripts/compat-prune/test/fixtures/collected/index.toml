@@ -1,0 +1,19 @@
+julia = "1.13.1"
+
+[packages.Alpha]
+uuid = "aaaaaaaa-0000-4000-8000-000000000001"
+version = "0.3.1"
+repo = "example-org/Alpha.jl"
+tree = "1111111111111111111111111111111111111111"
+default_branch = "main"
+files = ["Project.toml", "test/Project.toml", "docs/Project.toml"]
+default_files = ["Project.toml", "docs/Project.toml"]
+
+[packages.Beta]
+uuid = "bbbbbbbb-0000-4000-8000-000000000002"
+version = "1.2.0-beta"
+repo = "example-org/Beta.jl"
+tree = "2222222222222222222222222222222222222222"
+default_branch = "dev"
+files = ["Project.toml"]
+default_files = ["Project.toml"]
