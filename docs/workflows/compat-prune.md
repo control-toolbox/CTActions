@@ -105,9 +105,7 @@ the REST API, with a token of the [GitHub App](../conventions/github-app.md).
 default by hand) runs only the read-only `audit` job: report and diff in the job summary,
 everything in the `compat-prune` artifact (30 days). `dry_run: false` publishes.
 
-**The schedule** runs in dry run until the first publications are checked; it publishes
-once `compat-prune-monthly.yml` passes
-`dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}`.
+**The schedule** publishes: the 1st of every month, 04:00 UTC. A manual run stays a dry run (`dry_run` is ticked by default) unless you untick it.
 
 **Inputs of `compat-prune.yml`:**
 

@@ -22,9 +22,8 @@ jobs:
   prune:
     uses: ./.github/workflows/compat-prune.yml
     with:
-      # Dry run on every trigger until the GitHub App is set up; then the schedule
-      # publishes: `github.event_name == 'workflow_dispatch' && inputs.dry_run`.
-      dry_run: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
+      # The schedule publishes; a manual run is a dry run unless `dry_run` is unticked.
+      dry_run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
       # the scripts of the same commit as this workflow
       ctactions_ref: ${{ github.sha }}
     secrets:
