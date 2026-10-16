@@ -166,12 +166,31 @@ jobs:
         with:
           channel: release
 
+      # The token covers exactly the repositories this job writes to: the audited packages
+      # and the tracking repository. When one of them is not in the App's installation,
+      # minting the token fails here, before anything is published, instead of a 403
+      # halfway through.
+      - name: Repositories the token needs
+        id: repos
+        env:
+          TRACKING_REPO: ${{ inputs.tracking_repo }}
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import os, tomllib
+          audit = tomllib.load(open("compat-prune/audit.toml", "rb"))
+          repos = {p["repo"] for p in audit["packages"].values()} | {os.environ["TRACKING_REPO"]}
+          owners = {r.split("/")[0] for r in repos}
+          assert owners == {"control-toolbox"}, f"repositories outside control-toolbox: {sorted(repos)}"
+          print("names=" + ",".join(sorted(r.split("/")[1] for r in repos)))
+          PY
+
       - uses: actions/create-github-app-token@v3
         id: app
         with:
           client-id: ${{ secrets.CT_APP_CLIENT_ID }}
           private-key: ${{ secrets.CT_APP_PRIVATE_KEY }}
           owner: control-toolbox
+          repositories: ${{ steps.repos.outputs.names }}
 
       - name: Publish
         env:
