@@ -177,7 +177,9 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
           TRACKING_REPO: ${{ inputs.tracking_repo }}
+        # pipefail: without it, `| tee` would hide a failure of publish.jl and the job would pass
         run: |
+          set -o pipefail
           gh auth setup-git
           "$SCRIPTS/checkout.sh" "$OUT" checkouts
           julia --startup-file=no "$SCRIPTS/edit.jl" "$OUT" checkouts
