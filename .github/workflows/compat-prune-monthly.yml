@@ -2,7 +2,7 @@ name: Compat prune (monthly)
 
 # The organization's monthly [compat] prune: every CT* package audited together, one PR per
 # repository with something to drop, one tracking issue here in CTActions. The logic is the
-# reusable compat-prune.yml; see docs/WORKFLOWS.md §3.2.
+# reusable compat-prune.yml; see docs/workflows/compat-prune.md.
 
 on:
   schedule:

@@ -6,7 +6,7 @@ name: Documentation preview cleanup
 # backlog: each run removes every stale preview, not only the one of the closed PR.
 #
 # Previews are deployed only on request (label `documentation push preview`, see
-# docs/WORKFLOWS.md §3.1), and this workflow removes them once the PR is closed.
+# docs/workflows/documentation.md), and this workflow removes them once the PR is closed.
 #
 # The history of `gh-pages` is kept: the previews are removed by a normal commit, never by
 # a force push, so a documentation deployment running at the same time is never lost.
