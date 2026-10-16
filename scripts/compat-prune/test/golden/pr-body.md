@@ -1,10 +1,6 @@
 <!-- ct-compat-prune -->
 
-Drops the `[compat]` specifiers that no supported Julia version selects, in any
-environment of the control-toolbox packages (joint, tests and docs of every package).
-Without them every audited manifest is unchanged: this PR changes no version that
-these environments resolve, needs no release of its own, and can be merged in any
-order with the PRs of the other packages.
+Drops the `[compat]` specifiers that no supported Julia version selects, in any environment of the control-toolbox packages (joint, tests and docs of every package). Without them every audited manifest is unchanged: this PR changes no version that these environments resolve, needs no release of its own, and can be merged in any order with the PRs of the other packages.
 
 | file | dependency | before | after | selected |
 | --- | --- | --- | --- | --- |

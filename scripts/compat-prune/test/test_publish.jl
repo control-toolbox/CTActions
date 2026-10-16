@@ -140,6 +140,7 @@ branch_exists(origin) = success(`git -C $origin rev-parse --verify --quiet refs/
         @test golden("pr-body.md", body)
         @test startswith(body, MARKER)
         @test !occursin("Beta", body)
+        @test isempty(wrapped_prose(body))
     end
 
     mktempdir() do dir
@@ -164,6 +165,7 @@ branch_exists(origin) = success(`git -C $origin rev-parse --verify --quiet refs/
             # the PR links the issue, the issue links the PR
             @test occursin(done["issue"], pr["body"])
             @test occursin("### Alpha — $(pr["url"])", issue["body"])
+            @test isempty(wrapped_prose(issue["body"])) && isempty(wrapped_prose(pr["body"]))
             # the branch holds the edits on top of the default branch, nothing else
             @test branch_exists(alpha) && !branch_exists(beta)
             diff = read(`git -C $alpha diff main $BRANCH`, String)

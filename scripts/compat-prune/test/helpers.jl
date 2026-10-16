@@ -86,3 +86,16 @@ fixture_results() = Dict{String,Any}(
     "Alpha/docs@1.12" => ok("Alpha" => "0.3.1", "Beta" => "1.2.0-beta", "Dep1" => "0.7.2", "Doc" => "0.9.3"),
     "Beta/test@1.12" => ok("Beta" => "1.2.0-beta", "Dep1" => "0.7.2", "Tool" => "2.1.0"),
 )
+
+"""
+    wrapped_prose(markdown) -> Vector{String}
+
+The prose lines followed directly by another prose line. GitHub renders the newlines of an
+issue or PR body as line breaks, so a paragraph must be ONE line: this must be empty for
+every body the workflow writes. Tables, headings, HTML, lists and code blocks are not prose.
+"""
+function wrapped_prose(md)
+    prose(l) = !isempty(strip(l)) && !occursin(r"^\s*([|#<>*-]|\d+\.|```)", l)
+    lines = split(md, '\n')
+    return [String(l) for (l, next) in zip(lines, lines[2:end]) if prose(l) && prose(next)]
+end

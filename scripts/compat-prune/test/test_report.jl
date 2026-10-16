@@ -89,6 +89,12 @@ end
         @test short_state("unknown") == "unknown"
     end
 
+    @testset "paragraphs are single lines (GitHub renders newlines as line breaks)" begin
+        @test isempty(wrapped_prose(body))
+        @test wrapped_prose("one\ntwo\n\n| a |\n| b |\n\n- x\n- y\n") == ["one"]
+        @test !isempty(wrapped_prose("a wrapped\nparagraph"))
+    end
+
     @testset "deterministic" begin
         shuffled = deepcopy(audit)
         reverse!(shuffled["blocked"])
