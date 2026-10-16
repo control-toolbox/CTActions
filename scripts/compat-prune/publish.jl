@@ -20,7 +20,7 @@ include("report.jl")
 const BRANCH = "ct/compat-prune"
 const ISSUE_TITLE = "[compat] prune report"
 const PR_TITLE = "chore(compat): drop [compat] specifiers no supported Julia version selects"
-# the GitHub App the publish job runs as (its bot user: id 343432246), see docs/github-app.md
+# the GitHub App the publish job runs as (its bot user: id 343432246), see docs/conventions/github-app.md
 const BOT = ("control-toolbox-bot[bot]", "343432246+control-toolbox-bot[bot]@users.noreply.github.com")
 
 "Run git in `dir` and return its standard output."
