@@ -72,13 +72,15 @@ function render_report(audit, edits; prs=Dict(), run_url="")
     out = String[MARKER]
 
     run = isempty(run_url) ? "" : " ([run]($run_url))"
+    # A paragraph is ONE line (`\` joins the source lines): GitHub renders the newlines of an
+    # issue or PR body as line breaks, so a paragraph wrapped in the source would be broken.
     push!(out, """
-    Audit of the `[compat]` entries of the control-toolbox packages, by the
+    Audit of the `[compat]` entries of the control-toolbox packages, by the \
     [`compat-prune`]($WORKFLOW_URL) workflow on $(audit["date"])$run, for Julia \
     $(join(audit["julia"], ", ")). This body is rewritten by every run: do not edit it.
 
-    A prune drops `[compat]` specifiers that no environment selects, on no Julia version, and
-    leaves every resolved manifest (joint, tests and docs of every package) unchanged. PRs can
+    A prune drops `[compat]` specifiers that no environment selects, on no Julia version, and \
+    leaves every resolved manifest (joint, tests and docs of every package) unchanged. PRs can \
     therefore be merged in any order, and need no release of their own.""")
 
     haskey(audit, "record") && push!(out, render_record(audit["record"], get(audit, "other", [])))
@@ -138,11 +140,12 @@ function render_pr_body(owner, edits; issue_url="", run_url="")
     links = String[]
     isempty(issue_url) || push!(links, "tracking issue: $issue_url")
     isempty(run_url) || push!(links, "[audit run]($run_url)")
+    # one line per paragraph, see render_report
     return join([MARKER, """
-        Drops the `[compat]` specifiers that no supported Julia version selects, in any
-        environment of the control-toolbox packages (joint, tests and docs of every package).
-        Without them every audited manifest is unchanged: this PR changes no version that
-        these environments resolve, needs no release of its own, and can be merged in any
+        Drops the `[compat]` specifiers that no supported Julia version selects, in any \
+        environment of the control-toolbox packages (joint, tests and docs of every package). \
+        Without them every audited manifest is unchanged: this PR changes no version that \
+        these environments resolve, needs no release of its own, and can be merged in any \
         order with the PRs of the other packages.""",
         table(["file", "dependency", "before", "after", "selected"], rows),
         "Opened by the [`compat-prune`]($WORKFLOW_URL) workflow" * (isempty(links) ? "" : " ($(join(links, ", ")))") *

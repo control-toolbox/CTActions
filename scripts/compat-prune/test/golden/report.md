@@ -1,11 +1,8 @@
 <!-- ct-compat-prune -->
 
-Audit of the `[compat]` entries of the control-toolbox packages, by the
-[`compat-prune`](https://github.com/control-toolbox/CTActions/blob/main/.github/workflows/compat-prune.yml) workflow on 2026-10-15 19:48 UTC ([run](https://github.com/example-org/Root.jl/actions/runs/1)), for Julia 1.10, 1.12, 1.13. This body is rewritten by every run: do not edit it.
+Audit of the `[compat]` entries of the control-toolbox packages, by the [`compat-prune`](https://github.com/control-toolbox/CTActions/blob/main/.github/workflows/compat-prune.yml) workflow on 2026-10-15 19:48 UTC ([run](https://github.com/example-org/Root.jl/actions/runs/1)), for Julia 1.10, 1.12, 1.13. This body is rewritten by every run: do not edit it.
 
-A prune drops `[compat]` specifiers that no environment selects, on no Julia version, and
-leaves every resolved manifest (joint, tests and docs of every package) unchanged. PRs can
-therefore be merged in any order, and need no release of their own.
+A prune drops `[compat]` specifiers that no environment selects, on no Julia version, and leaves every resolved manifest (joint, tests and docs of every package) unchanged. PRs can therefore be merged in any order, and need no release of their own.
 
 ## Audit
 
