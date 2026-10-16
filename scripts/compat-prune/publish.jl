@@ -10,7 +10,9 @@
 #   - each repository has one bot-owned branch, BRANCH, rebuilt from its default branch: it
 #     is pushed only when its content would change; its open PR is updated, or created;
 #     when the repository has nothing left to prune, the PR is closed and the branch deleted.
-# Every GitHub call goes through `gh` (GH runner, faked in tests); git runs for real.
+# Every GitHub call goes through `gh api` (GH runner, faked in tests), never through the
+# `gh issue`/`gh pr` porcelain: with a GitHub App token, `gh issue edit` is refused
+# ("Resource not accessible by integration") where the REST endpoint is not. git runs for real.
 
 include("common.jl")
 include("report.jl")
@@ -18,7 +20,8 @@ include("report.jl")
 const BRANCH = "ct/compat-prune"
 const ISSUE_TITLE = "[compat] prune report"
 const PR_TITLE = "chore(compat): drop [compat] specifiers no supported Julia version selects"
-const BOT = ("github-actions[bot]", "41898282+github-actions[bot]@users.noreply.github.com")
+# the GitHub App the publish job runs as (its bot user: id 343432246), see docs/github-app.md
+const BOT = ("control-toolbox-bot[bot]", "343432246+control-toolbox-bot[bot]@users.noreply.github.com")
 
 "Run git in `dir` and return its standard output."
 git(dir, args...) = read(`git -C $dir $args`, String)
@@ -54,10 +57,25 @@ end
 commit_message(owner, edits) = join(vcat("chore(compat): drop [compat] specifiers no supported Julia version selects", "",
     sort(["$(e["file"]): $(e["dep"]) = \"$(e["before"])\" → \"$(e["after"])\"" for e in edits if e["owner"] == owner && e["status"] == "edited"])), "\n")
 
+"""
+    api(method, path, fields...; jq=nothing) -> String
+
+Call the REST API: `method` on `path`, with the string fields `key => value`, the output
+filtered by `jq` when given.
+"""
+function api(method, path, fields::Pair...; jq=nothing)
+    args = ["api", "--method", method, path]
+    for (k, v) in fields
+        push!(args, "-f", "$k=$v")
+    end
+    jq === nothing || push!(args, "--jq", jq)
+    return gh(args...)
+end
+
 "Number and URL of the open PR from BRANCH in `repo`, or `nothing`."
 function find_pr(repo)
-    out = strip(gh("pr", "list", "--repo", repo, "--head", BRANCH, "--state", "open", "--json", "number,url",
-                   "--jq", ".[] | \"\\(.number) \\(.url)\""))
+    owner = first(split(repo, "/"))
+    out = gh_jq("repos/$repo/pulls?head=$owner:$BRANCH&state=open", ".[] | \"\\(.number) \\(.html_url)\"")
     isempty(out) && return nothing
     number, url = split(first(split(out, '\n')))
     return (number, url)
@@ -88,9 +106,9 @@ function publish(root, checkouts, tracking; run_url="")
     # The issue first: the PRs link to it.
     issue = find_issue(tracking)
     if issue === nothing && !isempty(with_edits)
-        url = strip(gh("issue", "create", "--repo", tracking, "--title", ISSUE_TITLE,
-                       "--body", render_report(audit, edits; run_url)))
-        issue = (last(split(url, "/")), "open")
+        number = strip(api("POST", "repos/$tracking/issues", "title" => ISSUE_TITLE,
+                           "body" => render_report(audit, edits; run_url); jq=".number"))
+        issue = (number, "open")
     end
     issue_url = issue === nothing ? "" : "https://github.com/$tracking/issues/$(issue[1])"
 
@@ -99,8 +117,10 @@ function publish(root, checkouts, tracking; run_url="")
         pr = find_pr(repo)
         if !(owner in with_edits)
             if pr !== nothing
-                gh("pr", "close", pr[1], "--repo", repo, "--delete-branch",
-                   "--comment", "Nothing left to prune in this repository$(isempty(issue_url) ? "" : " (see $issue_url)").")
+                api("POST", "repos/$repo/issues/$(pr[1])/comments",
+                    "body" => "Nothing left to prune in this repository$(isempty(issue_url) ? "" : " (see $issue_url)").")
+                api("PATCH", "repos/$repo/pulls/$(pr[1])", "state" => "closed")
+                api("DELETE", "repos/$repo/git/refs/heads/$BRANCH")
                 push!(done["closed"], owner)
             end
             continue
@@ -112,20 +132,25 @@ function publish(root, checkouts, tracking; run_url="")
         end
         body = render_pr_body(owner, edits; issue_url, run_url)
         if pr === nothing
-            url = strip(gh("pr", "create", "--repo", repo, "--base", base, "--head", BRANCH, "--title", PR_TITLE, "--body", body))
+            url = strip(api("POST", "repos/$repo/pulls", "title" => PR_TITLE, "head" => BRANCH, "base" => base,
+                            "body" => body; jq=".html_url"))
         else
-            gh("pr", "edit", pr[1], "--repo", repo, "--body", body)
+            api("PATCH", "repos/$repo/pulls/$(pr[1])", "body" => body)
             url = pr[2]
         end
         done["prs"][owner] = url
     end
 
     if issue !== nothing
-        gh("issue", "edit", issue[1], "--repo", tracking, "--body", render_report(audit, edits; prs=done["prs"], run_url))
+        path = "repos/$tracking/issues/$(issue[1])"
+        body = "body" => render_report(audit, edits; prs=done["prs"], run_url)
         if isempty(with_edits) && issue[2] == "open"
-            gh("issue", "close", issue[1], "--repo", tracking, "--comment", "Nothing left to prune.")
+            api("POST", "$path/comments", "body" => "Nothing left to prune.")
+            api("PATCH", path, body, "state" => "closed")
         elseif !isempty(with_edits) && issue[2] == "closed"
-            gh("issue", "reopen", issue[1], "--repo", tracking)
+            api("PATCH", path, body, "state" => "open")
+        else
+            api("PATCH", path, body)
         end
     end
     done["issue"] = issue_url

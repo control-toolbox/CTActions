@@ -4,8 +4,9 @@
 include(joinpath(SCRIPTS, "publish.jl"))
 
 """
-A fake GitHub keeping issues and PRs. `origins` maps a repo ("owner/name") to its bare
-repository, where `pr close --delete-branch` deletes the branch.
+A fake GitHub REST API keeping issues and PRs. `origins` maps a repo ("owner/name") to its
+bare repository, where deleting the ref of a branch deletes the branch. Any other call,
+the `gh issue`/`gh pr` porcelain included, is an error.
 """
 mutable struct FakeGitHub
     origins::Dict{String,String}
@@ -15,45 +16,57 @@ mutable struct FakeGitHub
 end
 FakeGitHub(origins) = FakeGitHub(origins, Dict{String,Any}[], Dict{String,Any}[], Vector{String}[])
 
-opt(args, name) = args[findfirst(==(name), args) + 1]
+"The `-f key=value` fields of a `gh api` call."
+fields(args) = Dict(String(k) => String(v) for (k, v) in
+                    (split(args[i+1], "="; limit=2) for i in eachindex(args) if args[i] == "-f"))
 
 function (f::FakeGitHub)(args)
     push!(f.calls, args)
-    cmd = args[1:2]
-    if cmd == ["api", "--paginate"]
+    args[1] == "api" || error("unexpected gh call: $args")
+    if args[2] == "--paginate"
         repo = match(r"^repos/([^/]+/[^/]+)/issues", args[3])[1]
         hits = [i for i in f.issues if i["repo"] == repo && occursin(MARKER, i["body"])]
         return join(["$(i["number"]) $(i["state"])" for i in hits], "\n") * (isempty(hits) ? "" : "\n")
-    elseif cmd == ["issue", "create"]
-        repo = opt(args, "--repo")
-        n = length(f.issues) + 100
-        push!(f.issues, Dict("repo" => repo, "number" => n, "state" => "open", "title" => opt(args, "--title"),
-                             "body" => opt(args, "--body"), "comments" => String[]))
-        return "https://github.com/$repo/issues/$n\n"
-    elseif cmd[1] == "issue"
-        i = only(filter(i -> string(i["number"]) == args[3] && i["repo"] == opt(args, "--repo"), f.issues))
-        cmd[2] == "edit" && (i["body"] = opt(args, "--body"))
-        cmd[2] == "close" && (i["state"] = "closed"; push!(i["comments"], opt(args, "--comment")))
-        cmd[2] == "reopen" && (i["state"] = "open")
-        return ""
-    elseif cmd == ["pr", "list"]
-        repo, head = opt(args, "--repo"), opt(args, "--head")
+    elseif (m = match(r"^repos/([^/]+/[^/]+)/pulls\?head=([^:]+):(.+)&state=open$", args[2])) !== nothing
+        repo, owner, head = m.captures
+        @assert owner == first(split(repo, "/"))
         hits = [p for p in f.prs if p["repo"] == repo && p["head"] == head && p["state"] == "open"]
         return join(["$(p["number"]) $(p["url"])" for p in hits], "\n")
-    elseif cmd == ["pr", "create"]
-        repo = opt(args, "--repo")
+    end
+    args[2] == "--method" || error("unexpected gh call: $args")
+    method, path, fs = args[3], args[4], fields(args)
+    if method == "POST" && (m = match(r"^repos/([^/]+/[^/]+)/issues$", path)) !== nothing
+        repo = m[1]
+        n = length(f.issues) + 100
+        push!(f.issues, Dict("repo" => repo, "number" => n, "state" => "open", "title" => fs["title"],
+                             "body" => fs["body"], "comments" => String[]))
+        return "$n\n"
+    elseif method == "POST" && (m = match(r"^repos/([^/]+/[^/]+)/pulls$", path)) !== nothing
+        repo = m[1]
         n = length(f.prs) + 1
         url = "https://github.com/$repo/pull/$n"
-        push!(f.prs, Dict("repo" => repo, "number" => n, "url" => url, "state" => "open", "head" => opt(args, "--head"),
-                          "base" => opt(args, "--base"), "title" => opt(args, "--title"), "body" => opt(args, "--body")))
+        push!(f.prs, Dict("repo" => repo, "number" => n, "url" => url, "state" => "open", "head" => fs["head"],
+                          "base" => fs["base"], "title" => fs["title"], "body" => fs["body"], "comments" => String[]))
         return url * "\n"
-    elseif cmd[1] == "pr"
-        p = only(filter(p -> string(p["number"]) == args[3] && p["repo"] == opt(args, "--repo"), f.prs))
-        cmd[2] == "edit" && (p["body"] = opt(args, "--body"))
-        if cmd[2] == "close"
-            p["state"] = "closed"
-            "--delete-branch" in args && run(`git -C $(f.origins[p["repo"]]) branch --quiet -D $(p["head"])`)
+    elseif (m = match(r"^repos/([^/]+/[^/]+)/(issues|pulls)/(\d+)(/comments)?$", path)) !== nothing
+        repo, kind, n, comments = m.captures
+        # a PR is an issue too: comments on a PR go through issues/<n>/comments
+        pool = kind == "pulls" || any(p -> p["repo"] == repo && string(p["number"]) == n, f.prs) &&
+               !any(i -> i["repo"] == repo && string(i["number"]) == n, f.issues) ? f.prs : f.issues
+        x = only(filter(x -> x["repo"] == repo && string(x["number"]) == n, pool))
+        if comments !== nothing
+            method == "POST" || error("unexpected gh call: $args")
+            push!(x["comments"], fs["body"])
+        else
+            method == "PATCH" || error("unexpected gh call: $args")
+            for (k, v) in fs
+                k in ("body", "state") || error("unexpected field $k: $args")
+                x[k] = v
+            end
         end
+        return ""
+    elseif method == "DELETE" && (m = match(r"^repos/([^/]+/[^/]+)/git/refs/heads/(.+)$", path)) !== nothing
+        run(`git -C $(f.origins[m[1]]) branch --quiet -D $(m[2])`)
         return ""
     end
     error("unexpected gh call: $args")
@@ -170,8 +183,8 @@ branch_exists(origin) = success(`git -C $origin rev-parse --verify --quiet refs/
             @test isempty(done["pushed"])
             @test read(`git -C $alpha rev-parse $BRANCH`, String) == before
             calls = fake.calls[n_calls+1:end]
-            @test !any(c -> c[1:2] in (["issue", "create"], ["pr", "create"]), calls)
-            @test any(c -> c[1:2] == ["pr", "edit"], calls)
+            @test !any(c -> c[2] == "--method" && c[3] == "POST", calls)
+            @test any(c -> c[2] == "--method" && c[3] == "PATCH" && occursin("/pulls/", c[4]), calls)
             # bodies refreshed with the new run
             @test occursin("https://run/2", only(fake.issues)["body"])
         end
@@ -186,7 +199,8 @@ branch_exists(origin) = success(`git -C $origin rev-parse --verify --quiet refs/
             @test all(e -> e["status"] == "already", TOML.parsefile(joinpath(root, "edits.toml"))["edit"])
             done = with_gh(() -> publish(root, checkouts, "example-org/Root.jl"), fake)
             @test done["closed"] == ["Alpha"]
-            @test only(fake.prs)["state"] == "closed"
+            pr = only(fake.prs)
+            @test pr["state"] == "closed" && pr["comments"] == ["Nothing left to prune in this repository (see $(done["issue"]))."]
             @test !branch_exists(alpha)
             issue = only(fake.issues)
             @test issue["state"] == "closed" && issue["comments"] == ["Nothing left to prune."]
@@ -212,6 +226,12 @@ branch_exists(origin) = success(`git -C $origin rev-parse --verify --quiet refs/
             @test pr["repo"] == "example-org/Beta.jl" && pr["base"] == "dev" && pr["state"] == "open"
             @test done["prs"] == Dict("Beta" => pr["url"])
             @test branch_exists(beta)
+        end
+
+        @testset "only the REST API, never the gh porcelain" begin
+            # `gh issue edit` is refused to a GitHub App token (first live run, CTActions#97)
+            @test all(c -> c[1] == "api", fake.calls)
+            @test any(c -> c[2] == "--method" && c[3] == "PATCH" && occursin("/issues/", c[4]), fake.calls)
         end
 
         @testset "find_issue ignores PRs and issues without the marker" begin
