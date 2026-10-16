@@ -22,7 +22,6 @@ repository and for org-wide updates — is described in
 | `documentation.yml` | Build and deploy documentation with Documenter.jl | `use_ct_registry` |
 | `formatter.yml` | Run JuliaFormatter (BlueStyle) and open a PR if needed | — |
 | `compat-helper.yml` | Keep `[compat]` entries in `Project.toml` up to date | `subdirs` |
-| `compat-prune.yml` | Drop the `[compat]` specifiers no supported Julia version selects, across all CT\* packages (one PR per repository, one tracking issue); scripts and tests in `scripts/compat-prune/` | `packages`, `julia_versions`, `dry_run` |
 | `spell-check.yml` | Spell check with `typos` | `locale`, `extend-identifiers`, `config-path` |
 | `breakage.yml` | Test downstream packages against a new version; comment results on PR | `pkgname`, `pkgpath`, `pkgversion`, `pkgbreak` |
 | `add-to-project.yml` | Auto-add issues/PRs to the org GitHub project | `project-url`, `status` |
@@ -35,6 +34,7 @@ repository and for org-wide updates — is described in
 |---|---|---|
 | `occidata-runner-maintenance.yml` | Weekly (Mon 02:30 UTC) | Purge Julia cache, update TeXLive, rotate logs on self-hosted runner |
 | `occidata-runner-watchdog.yml` | Daily (03:15 UTC) | Restart, through SSH, the Occidata runner jobs (one per organization) that are neither pending nor running |
+| `compat-prune-monthly.yml` | Monthly (1st, 04:00 UTC) | Drop the `[compat]` specifiers no supported Julia version selects, across all CT\* packages: one PR per repository, one tracking issue here (logic: reusable `compat-prune.yml`, scripts and tests in `scripts/compat-prune/`) |
 
 The Occidata watchdog requires these CTActions repository or organization secrets:
 
