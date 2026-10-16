@@ -34,7 +34,17 @@ function report_fixture()
         ],
         "other" => [Dict("owner" => "Alpha", "file" => "Project.toml", "dep" => "Dep2", "before" => "1, 2",
                          "removed" => ["1"], "status" => "withheld",
-                         "reason" => "baseline failed in joint@1.10: lanes used there are unknown")],
+                         "reason" => "baseline failed in joint@1.10: lanes used there are unknown"),
+                    Dict("owner" => "Beta", "file" => "Project.toml", "dep" => "Dep3", "before" => "0.9, 1", "status" => "keep",
+                         "evidence" => ev("0.9" => ["joint@1.10=0.9.4"], "1" => ["joint@1.12=1.2.0"])),
+                    Dict("owner" => "Alpha", "file" => "test/Project.toml", "dep" => "Gpu", "before" => "5, 6", "status" => "idle",
+                         "evidence" => ev())],
+        "record" => Dict(
+            "registries" => [Dict("name" => "General", "state" => "tree aff17d8a1e3ecb7cf9a37f2f40543c57577276fd"),
+                             Dict("name" => "ct-registry", "state" => "commit 0123456789abcdef0123456789abcdef01234567")],
+            "coverage" => [Dict("julia" => "1.10", "resolved" => 3, "total" => 4, "failed" => ["joint"]),
+                           Dict("julia" => "1.12", "resolved" => 4, "total" => 4, "failed" => String[])],
+            "entries" => Dict("examined" => 9, "prune" => 4, "rejected" => 1, "keep" => 1, "blocked" => 2, "idle" => 1, "withheld" => 1)),
     )
     return audit, vcat(edited, already, drift)
 end
@@ -50,7 +60,7 @@ end
 
     @testset "marker and sections" begin
         @test startswith(body, MARKER * "\n")
-        for h in ("## Summary", "## To prune", "### Alpha — https://github.com/example-org/Alpha.jl/pull/12",
+        for h in ("## Audit", "## Summary", "## To prune", "### Alpha — https://github.com/example-org/Alpha.jl/pull/12",
                   "### Beta", "## Merged, awaiting release", "## Drift", "## Rejected", "## Withheld",
                   "## Blocked", "## Audited versions")
             @test occursin("\n" * h * "\n", body)
@@ -64,6 +74,21 @@ end
         @test occursin("| blocked (information) | 2 |", body)
     end
 
+    @testset "audit record" begin
+        @test occursin("| 1.10 | 3 / 4 (failed: joint) |", body)
+        @test occursin("| 1.12 | 4 / 4 |", body)
+        @test occursin("9 multi-specifier `[compat]` entries examined: 4 with lanes to prune, 1 rejected, 2 blocked, " *
+                       "1 kept (every lane in use), 1 idle (resolved nowhere they apply), 1 withheld.", body)
+        @test occursin("Registries: General (tree aff17d8a1e3e), ct-registry (commit 0123456789ab).", body)
+        @test occursin("<summary>Entries left as they are (2)</summary>", body)
+        @test occursin("| Beta `Project.toml` `Dep3` | `0.9, 1` | keep | every lane in use: 1.2.0 on 1.12; 0.9.4 on 1.10 |", body)
+        @test occursin("| Alpha `test/Project.toml` `Gpu` | `5, 6` | idle | not resolved where the entry applies |", body)
+        # the section comes before the summary
+        @test findfirst("## Audit\n", body).start < findfirst("## Summary", body).start
+        @test short_state("tree aff17d8a1e3ecb7cf9a37f2f40543c57577276fd") == "tree aff17d8a1e3e"
+        @test short_state("unknown") == "unknown"
+    end
+
     @testset "deterministic" begin
         shuffled = deepcopy(audit)
         reverse!(shuffled["blocked"])
@@ -73,7 +98,12 @@ end
     @testset "empty sections are left out" begin
         quiet = Dict{String,Any}("date" => "2026-11-01 03:00 UTC", "julia" => ["1.10"], "packages" => audit["packages"],
                                  "prune" => [], "rejected" => [], "blocked" => [], "other" => [])
+        # without a record (older audit.toml): no Audit section
+        @test !occursin("## Audit\n", render_report(quiet, []))
+        quiet["record"] = Dict("registries" => [], "coverage" => [], "entries" => Dict(
+            "examined" => 0, "prune" => 0, "rejected" => 0, "keep" => 0, "blocked" => 0, "idle" => 0, "withheld" => 0))
         b = render_report(quiet, [])
+        @test occursin("## Audit\n", b) && !occursin("<details>", b)
         @test occursin("| to prune (open PRs) | 0 |", b)
         for h in ("## To prune", "## Merged", "## Drift", "## Rejected", "## Withheld", "## Blocked")
             @test !occursin(h, b)

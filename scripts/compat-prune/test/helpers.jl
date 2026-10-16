@@ -2,7 +2,7 @@
 # fixture paths, and small builders.
 
 const SCRIPTS = joinpath(@__DIR__, "..")
-for f in ("collect.jl", "envs.jl", "resolve.jl", "classify.jl", "validate.jl", "edit.jl", "report.jl")
+for f in ("collect.jl", "envs.jl", "resolve.jl", "classify.jl", "validate.jl", "edit.jl", "report.jl", "audit.jl")
     include(joinpath(SCRIPTS, f))
 end
 

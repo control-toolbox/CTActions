@@ -29,6 +29,34 @@ end
 code(s) = "`$s`"
 entry(r) = "$(r["owner"]) $(code(r["file"])) $(code(r["dep"]))"
 
+"Short form of a registry state: `tree 0123456789ab`."
+short_state(s) = (m = match(r"^(\w+) ([0-9a-f]{12})[0-9a-f]*$", s); m === nothing ? s : "$(m[1]) $(m[2])")
+
+"""
+    render_record(record, others) -> String
+
+The `## Audit` section: environments resolved per Julia version, entries examined and their
+status, registry snapshot, and (folded) the entries left as they are, with why.
+"""
+function render_record(record, others)
+    cov = [[c["julia"], "$(c["resolved"]) / $(c["total"])" * (isempty(c["failed"]) ? "" : " (failed: $(join(c["failed"], ", ")))")]
+           for c in record["coverage"]]
+    e = record["entries"]
+    entries = "$(e["examined"]) multi-specifier `[compat]` entries examined: $(e["prune"]) with lanes to prune, " *
+              "$(e["rejected"]) rejected, $(e["blocked"]) blocked, $(e["keep"]) kept (every lane in use), " *
+              "$(e["idle"]) idle (resolved nowhere they apply), $(e["withheld"]) withheld."
+    regs = "Registries: " * join(["$(r["name"]) ($(short_state(r["state"])))" for r in record["registries"]], ", ") * "."
+    left = sort([r for r in others if r["status"] in ("keep", "idle")]; by=entry_key)
+    parts = ["## Audit", table(["Julia", "environments resolved"], cov), entries, regs]
+    if !isempty(left)
+        why(r) = r["status"] == "keep" ? "every lane in use: " * selected(r["evidence"]) : "not resolved where the entry applies"
+        push!(parts, "<details><summary>Entries left as they are ($(length(left)))</summary>\n\n" *
+                     table(["entry", "compat", "status", "why"], [[entry(r), code(r["before"]), r["status"], why(r)] for r in left]) *
+                     "\n\n</details>")
+    end
+    return join(parts, "\n\n")
+end
+
 """
     render_report(audit, edits; prs=Dict(), run_url="") -> String
 
@@ -52,6 +80,8 @@ function render_report(audit, edits; prs=Dict(), run_url="")
     A prune drops `[compat]` specifiers that no environment selects, on no Julia version, and
     leaves every resolved manifest (joint, tests and docs of every package) unchanged. PRs can
     therefore be merged in any order, and need no release of their own.""")
+
+    haskey(audit, "record") && push!(out, render_record(audit["record"], get(audit, "other", [])))
 
     push!(out, "## Summary\n\n" * table(["", "entries"], [
         ["to prune (open PRs)", string(length(edited))],

@@ -1,0 +1,32 @@
+name: Compat prune (monthly)
+
+# The organization's monthly [compat] prune: every CT* package audited together, one PR per
+# repository with something to drop, one tracking issue here in CTActions. The logic is the
+# reusable compat-prune.yml; see docs/WORKFLOWS.md §3.2.
+
+on:
+  schedule:
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Only audit and report: no PR, no issue'
+        type: boolean
+        default: true
+
+concurrency:
+  group: compat-prune-monthly
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    uses: ./.github/workflows/compat-prune.yml
+    with:
+      # Dry run on every trigger until the GitHub App is set up; then the schedule
+      # publishes: `github.event_name == 'workflow_dispatch' && inputs.dry_run`.
+      dry_run: ${{ github.event_name != 'workflow_dispatch' || inputs.dry_run }}
+      # the scripts of the same commit as this workflow
+      ctactions_ref: ${{ github.sha }}
+    secrets:
+      CT_APP_CLIENT_ID: ${{ secrets.CT_APP_CLIENT_ID }}
+      CT_APP_PRIVATE_KEY: ${{ secrets.CT_APP_PRIVATE_KEY }}

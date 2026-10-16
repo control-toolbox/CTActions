@@ -62,6 +62,13 @@ run_script(script, args...) = read(`$JULIA --startup-file=no $(joinpath(SCRIPTS,
         @test_throws Exception resolve_env(Dict("Example" => EXAMPLE), Dict("Example" => "not a version"))
     end
 
+    @testset "registry_snapshot" begin
+        snap = registry_snapshot()
+        @test any(r -> r["name"] == "General", snap)
+        @test issorted([r["name"] for r in snap])
+        @test all(r -> occursin(r"^(tree|commit) [0-9a-f]{40}$|^unknown$", r["state"]), snap)
+    end
+
     @testset "registry_lookup" begin
         @test registry_lookup("Example") == (EXAMPLE, "JuliaLang/Example.jl")
         @test_throws ErrorException registry_lookup("NoSuchPackageForCompatPrune")

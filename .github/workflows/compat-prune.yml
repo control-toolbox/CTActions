@@ -3,8 +3,9 @@ name: Compat prune
 # Finds the [compat] specifiers that no supported Julia version ever selects across the
 # control-toolbox packages, proves that dropping them leaves every resolved manifest
 # unchanged, and (unless dry_run) opens one PR per affected repository plus one tracking
-# issue in the calling repository, both updated in place by later runs.
-# Called monthly by OptimalControl (`CompatPrune.yml`); see docs/WORKFLOWS.md §3.1.
+# issue (in CTActions by default), both updated in place by later runs. The prune is the
+# organization's: it is called monthly by `compat-prune-monthly.yml`, here in CTActions, and
+# by the self-test `compat-prune-tests.yml`; see docs/WORKFLOWS.md §3.2.
 #
 # The `audit` job is read-only: it resolves the joint, test and docs environments of every
 # package on every Julia version (Pkg's resolver only: nothing is downloaded or installed),
@@ -15,8 +16,8 @@ name: Compat prune
 # The `publish` job (skipped on dry runs) is the only one that writes, with a token of the
 # organization's GitHub App (secrets CT_APP_CLIENT_ID, CT_APP_PRIVATE_KEY; permissions:
 # contents, pull requests, issues). It re-applies the prunes to fresh checkouts, then keeps
-# one branch `ct/compat-prune` and one PR per repository, and one tracking issue in the
-# calling repository: a rerun updates them in place, and closes what has nothing left.
+# one branch `ct/compat-prune` and one PR per repository, and one tracking issue in
+# `tracking_repo`: a rerun updates them in place, and closes what has nothing left.
 
 on:
   workflow_call:
@@ -41,6 +42,11 @@ on:
         required: false
         type: string
         default: main
+      tracking_repo:
+        description: 'Repository of the tracking issue'
+        required: false
+        type: string
+        default: control-toolbox/CTActions
     secrets:
       CT_APP_CLIENT_ID:
         description: 'Client ID of the GitHub App that publishes (not needed for a dry run)'
@@ -170,9 +176,10 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
+          TRACKING_REPO: ${{ inputs.tracking_repo }}
         run: |
           gh auth setup-git
           "$SCRIPTS/checkout.sh" "$OUT" checkouts
           julia --startup-file=no "$SCRIPTS/edit.jl" "$OUT" checkouts
           RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-            julia --startup-file=no "$SCRIPTS/publish.jl" "$OUT" checkouts "$GITHUB_REPOSITORY" | tee -a "$GITHUB_STEP_SUMMARY"
+            julia --startup-file=no "$SCRIPTS/publish.jl" "$OUT" checkouts "$TRACKING_REPO" | tee -a "$GITHUB_STEP_SUMMARY"

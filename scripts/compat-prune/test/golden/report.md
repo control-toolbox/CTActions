@@ -7,6 +7,26 @@ A prune drops `[compat]` specifiers that no environment selects, on no Julia ver
 leaves every resolved manifest (joint, tests and docs of every package) unchanged. PRs can
 therefore be merged in any order, and need no release of their own.
 
+## Audit
+
+| Julia | environments resolved |
+| --- | --- |
+| 1.10 | 3 / 4 (failed: joint) |
+| 1.12 | 4 / 4 |
+
+9 multi-specifier `[compat]` entries examined: 4 with lanes to prune, 1 rejected, 2 blocked, 1 kept (every lane in use), 1 idle (resolved nowhere they apply), 1 withheld.
+
+Registries: General (tree aff17d8a1e3e), ct-registry (commit 0123456789ab).
+
+<details><summary>Entries left as they are (2)</summary>
+
+| entry | compat | status | why |
+| --- | --- | --- | --- |
+| Alpha `test/Project.toml` `Gpu` | `5, 6` | idle | not resolved where the entry applies |
+| Beta `Project.toml` `Dep3` | `0.9, 1` | keep | every lane in use: 1.2.0 on 1.12; 0.9.4 on 1.10 |
+
+</details>
+
 ## Summary
 
 |  | entries |
