@@ -28,7 +28,7 @@ other PR.
 | --- | --- |
 | Public page | <https://github.com/apps/control-toolbox-bot> |
 | Settings (organization owners) | <https://github.com/organizations/control-toolbox/settings/apps/control-toolbox-bot> |
-| Installation | control-toolbox, **selected repositories**: the CT\* packages audited by the prune, and CTActions (its tracking issue) |
+| Installation | control-toolbox, **selected repositories** (9): CTBase.jl, CTParser.jl, CTModels.jl, CTLie.jl, CTFlows.jl, CTDirect.jl, CTSolvers.jl, OptimalControl.jl (the packages the prune writes to) **and CTActions** (its tracking issue) |
 | Repository permissions | Contents: read and write · Pull requests: read and write · Issues: read and write · Metadata: read |
 | Webhook | none |
 | Bot user | `control-toolbox-bot[bot]`, id `343432246` (commit e-mail `343432246+control-toolbox-bot[bot]@users.noreply.github.com`) |
@@ -89,7 +89,12 @@ organization's.
 
 **A new repository.** Organization settings → *GitHub Apps* → `control-toolbox-bot` →
 *Configure* → *Repository access* → add it. Nothing else changes: tokens minted without
-`repositories:` now include it.
+`repositories:` now include it. Every repository a workflow writes to must be there,
+**the repository of its issues included**: an App token can open an issue on any public
+repository, but not edit it afterwards (HTTP 403). This is how CTActions, missing from the
+first installation, made the prune fail after it had created its tracking issue. The
+prune now passes its exact list to `repositories:`, so a missing repository fails the
+token step before anything is published (CTActions#101).
 
 **A new permission** (say *Workflows*, or *Actions*). App settings → *Permissions and
 events* → change it → save. The installation keeps the old permissions until an
