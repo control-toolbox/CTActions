@@ -73,12 +73,12 @@ changelog(entries...) = "# Changelog\n\n## [Unreleased]\n\n" *
 
 """
 A throwaway package repository: `Pkg` 0.4.2 tagged, then `after` (a shell command: the
-changes since the release), merged on `main`; then a release branch that sets `version`
+changes since the release), merged on `main` and tagged `tag_after` if given; then a release branch that sets `version`
 with `entries` in the changelog and a BREAKING note. Returns the directory and the base.
 """
 function package_repo(; version="0.4.3", after="mkdir -p src && echo '# fix' >> src/Pkg.jl",
                       entries=(version => "### 🐛 Bug Fixes\n\n- a fix.",), breaking_md="## Non-breaking note ($version)\n\n- none.\n",
-                      extra="", workflows=true)
+                      extra="", workflows=true, tag_after="")
     dir = mktempdir()
     project(v) = "name = \"Pkg\"\nuuid = \"$PKG_UUID\"\nversion = \"$v\"\n\n[deps]\nExample = \"$EXAMPLE\"\n\n[compat]\nExample = \"0.5\"\n"
     write(joinpath(dir, "Project.toml"), project("0.4.2"))
@@ -92,6 +92,7 @@ function package_repo(; version="0.4.3", after="mkdir -p src && echo '# fix' >> 
     end
     sh(dir, "git init -q -b main && git -c user.name=t -c user.email=t@t add -A && git -c user.name=t -c user.email=t@t commit -qm init && git tag v0.4.2")
     isempty(after) || sh(dir, "$after && git add -A && git -c user.name=t -c user.email=t@t commit -qm change")
+    isempty(tag_after) || sh(dir, "git tag $tag_after")
     base = strip(read(Cmd(`git rev-parse HEAD`; dir), String))
     sh(dir, "git checkout -q -b release/v$version")
     write(joinpath(dir, "Project.toml"), project(version))
@@ -228,6 +229,23 @@ failures(results) = [r.message for r in results if r.status === :fail]
             r = gate(dir, base; labels, resolution=false)
             @test isempty(failures(r))
             @test any(x -> x.status === :info && contains(x.message, "[merge approved]"), r)
+        end
+        # a stable after a beta, with nothing new since the beta: a release (REL7 compares
+        # with the last stable), numbered above the beta, the jump explained by it
+        with_registries(Dict("General" => Dict("Pkg" => ["0.4.2"]), "ct-registry" => Dict("Pkg" => ["0.4.3-beta"]))) do
+            beta = "mkdir -p src && echo '# fix' >> src/Pkg.jl && sed -i.bak 's/^version = .*/version = \"0.4.3-beta\"/' Project.toml && rm Project.toml.bak"
+            dir, base = package_repo(version="0.4.4", after=beta, tag_after="v0.4.3-beta",
+                                     entries=("0.4.4" => "- the stable release of `0.4.3-beta`.",
+                                              "0.4.3-beta" => "### 🐛 Bug Fixes\n\n- a fix."))
+            @test strip(read(Cmd(`git diff --name-only v0.4.3-beta $base`; dir=dir), String)) == ""   # nothing since the beta
+            r = gate(dir, base; labels, resolution=false)
+            @test isempty(failures(r))
+            @test any(x -> x.rule == "REL7" && x.status === :pass && contains(x.message, "since `v0.4.2`"), r)
+            @test any(x -> x.rule == "REL3" && x.status === :info, r)
+            # numbered 0.4.3, the beta's triple: refused
+            dir, base = package_repo(version="0.4.3", after=beta, tag_after="v0.4.3-beta",
+                                     entries=("0.4.3" => "- x.", "0.4.3-beta" => "### 🐛 Bug Fixes\n\n- a fix."))
+            @test any(contains("not above every version released"), failures(gate(dir, base; labels, resolution=false)))
         end
         # an unexplained jump
         with_registries(regs) do
