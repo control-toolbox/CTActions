@@ -1,0 +1,49 @@
+name: Registrable tests
+
+# Self-test of registrable, in CTActions itself: the test suite of scripts/registrable on
+# every supported Julia version (unit and integration tests), then the reusable workflow
+# run on a fixture that resolves. Runs when the script or the workflows change.
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/registrable/**'
+      - '.github/workflows/registrable*.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/registrable/**'
+      - '.github/workflows/registrable*.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: registrable-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['1.10', '1.12', '1.13']
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+      - name: Add the General registry
+        run: julia --startup-file=no -e 'using Pkg; Pkg.Registry.add("General")'
+      - name: Tests
+        run: julia --startup-file=no scripts/registrable/test/runtests.jl
+
+  workflow:
+    needs: tests
+    uses: ./.github/workflows/registrable.yml
+    with:
+      project: scripts/registrable/test/fixtures/stable.toml
+      always: true
+      ctactions_ref: ${{ github.event.pull_request.head.sha || github.sha }}

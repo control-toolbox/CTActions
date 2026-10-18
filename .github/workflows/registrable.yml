@@ -1,0 +1,78 @@
+name: Registrable
+
+# REL4 of ct-conventions: a stable release resolves from the General registry alone. The CI
+# of the packages uses ct-registry (`use_ct_registry: true`), so it passes with a bound that
+# only a beta satisfies, and General's AutoMerge rejects the release after it is tagged.
+# This job resolves the package with General only, the weak dependencies included.
+#
+# On a pull request, the package is checked only when the PR sets a stable version (no
+# pre-release suffix) other than the base's; any other PR succeeds at once, saying why.
+# Without a pull request (workflow_dispatch), or with `always`, it is always checked.
+# Report in the job summary. Script and tests: scripts/registrable/; see
+# docs/workflows/registrable.md.
+
+on:
+  workflow_call:
+    inputs:
+      project:
+        description: 'Path of the Project.toml to check'
+        required: false
+        type: string
+        default: Project.toml
+      julia_versions:
+        description: 'JSON list of the Julia versions the resolution runs on'
+        required: false
+        type: string
+        default: '["1.10", "1"]'
+      always:
+        description: 'Check even a pull request that does not set a new stable version'
+        required: false
+        type: boolean
+        default: false
+      ctactions_ref:
+        description: 'Ref of CTActions the script is checked out from'
+        required: false
+        type: string
+        default: main
+
+jobs:
+  registrable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(inputs.julia_versions) }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/checkout@v6
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+
+      # General only: no ct-registry, no SSH key.
+      - name: Add the General registry
+        run: julia --startup-file=no -e 'using Pkg; Pkg.Registry.add("General")'
+
+      - name: Resolve from General alone
+        env:
+          PROJECT: ${{ inputs.project }}
+          BASE_SHA: ${{ !inputs.always && github.event.pull_request.base.sha || '' }}
+        run: |
+          args=()
+          if [ -n "$BASE_SHA" ]; then
+            git fetch --quiet --depth=1 origin "$BASE_SHA"
+            # a Project.toml absent from the base: no base, the package is checked
+            if git show "$BASE_SHA:$PROJECT" > "$RUNNER_TEMP/base.toml" 2> /dev/null; then
+              args=(--base "$RUNNER_TEMP/base.toml")
+            fi
+          fi
+          julia --startup-file=no .ctactions/scripts/registrable/registrable.jl "${args[@]}" "$PROJECT"
