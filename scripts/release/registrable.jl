@@ -1,6 +1,6 @@
 # REL4 of ct-conventions: a stable release resolves from the General registry alone.
 #
-# usage: julia registrable.jl [--base BASE_PROJECT] PROJECT
+# usage: julia release.jl registrable [--base BASE_PROJECT] PROJECT  (or julia registrable.jl …)
 #
 # PROJECT is the Project.toml of the package. With `--base`, the Project.toml of the base of
 # a pull request: the check runs only when PROJECT sets a stable version (no pre-release

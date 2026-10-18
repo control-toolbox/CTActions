@@ -78,7 +78,8 @@ token.
 | [`breakage.yml`](workflows/breakage.md) | `Breakage.yml` | Test downstream packages against the PR; comment a result table | label `run breakage` |
 | [`formatter.yml`](workflows/formatter.md) | `Formatter.yml` | JuliaFormatter (BlueStyle), as an automatic PR | no (nightly) |
 | [`spell-check.yml`](workflows/spell-check.md) | `SpellCheck.yml` | Spell check with `typos` | every PR |
-| [`registrable.yml`](workflows/registrable.md) | `Registrable.yml` | A stable release resolves from General alone (`REL4`), weak dependencies included | a PR touching `Project.toml` (checks a new stable version only) |
+| [`release-gate.yml`](workflows/release-gate.md) | `ReleaseGate.yml` | The gate of a release PR: `REL1`–`REL7` (number, changelog, diff, something to release, run labels, General alone); a required check | every PR (passes at once when the version does not change) |
+| [`release-tag.yml`](workflows/release-tag.md) | `ReleaseTag.yml` | Tag the merge commit of a release PR and create its GitHub release, as the organization's App | push to `main` touching `Project.toml` |
 | [`compat-helper.yml`](workflows/compat-helper.md) | `CompatHelper.yml` | PRs widening `[compat]` to new releases | no (daily) |
 | [`update-readme.yml`](workflows/update-readme.md) | `UpdateReadme.yml` | Regenerate `README.md` from a template and the organization's shared texts | no (weekly) |
 | [`auto-assign.yml`](workflows/auto-assign.md) | `AutoAssign.yml` | Assign new issues and PRs to a maintainer | on open |
@@ -90,7 +91,7 @@ token.
 | --- | --- | --- |
 | [`compat-prune-monthly.yml`](workflows/compat-prune.md) | The organization's `[compat]` prune (logic: reusable `compat-prune.yml`): one PR per repository, one tracking issue in CTActions | monthly (1st, 04:00 UTC), by hand |
 | [`compat-prune-tests.yml`](workflows/compat-prune.md#tests) | Self-test of the prune: its test suite, then a real dry-run audit | PR or push touching it, by hand |
-| [`registrable-tests.yml`](workflows/registrable.md#tests) | Self-test of `registrable`: its test suite, then the reusable workflow on a fixture | PR or push touching it, by hand |
+| [`release-tests.yml`](workflows/release-gate.md#tests) | Self-test of the release tool (`scripts/release`) on Julia 1.10, 1.12, 1.13 | PR or push touching it, by hand |
 | [`occidata-runner-maintenance.yml`](workflows/occidata-runner-maintenance.md) | Clean the `occidata` self-hosted runner (git config, caches, logs, TeXLive) | weekly (Mon 02:30 UTC), by hand |
 | [`occidata-runner-watchdog.yml`](workflows/occidata-runner-watchdog.md) | Restart, over SSH, the `occidata` runner jobs that stopped | daily (03:15 UTC), by hand |
 

@@ -1,0 +1,92 @@
+name: Release tag
+
+# Tags a release once its PR is merged (REL5): on `main`, when `version` in Project.toml has
+# no tag yet, the commit that set it (its first parent has another version: the merge
+# commit of the release PR) is tagged `vX.Y.Z` and gets its GitHub release, notes generated
+# since the previous stable (since the previous release for a beta), a beta marked
+# pre-release. Nothing to do otherwise; a rerun after a failure does what is left, never
+# twice. Plan: scripts/release/release.jl tag-plan.
+#
+# The tag is created as the organization's GitHub App, so that the workflows reacting to
+# tags (the documentation of the stable version) run: a tag made with GITHUB_TOKEN would
+# trigger nothing. See docs/workflows/release-tag.md.
+
+on:
+  workflow_call:
+    inputs:
+      ctactions_ref:
+        description: 'Ref of CTActions the script is checked out from'
+        required: false
+        type: string
+        default: main
+    secrets:
+      CT_APP_CLIENT_ID:
+        required: true
+      CT_APP_PRIVATE_KEY:
+        required: true
+
+jobs:
+  tag:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read          # the App token does the writing
+    concurrency:
+      group: release-tag-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/checkout@v6
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+
+      - name: Plan
+        id: plan
+        run: |
+          julia --startup-file=no .ctactions/scripts/release/release.jl tag-plan . | tee -a "$GITHUB_OUTPUT"
+
+      - uses: actions/create-github-app-token@v3
+        if: steps.plan.outputs.tag != ''
+        id: app
+        with:
+          client-id: ${{ secrets.CT_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CT_APP_PRIVATE_KEY }}
+          owner: control-toolbox
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      - name: Tag and release
+        if: steps.plan.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TAG: ${{ steps.plan.outputs.tag }}
+          TARGET: ${{ steps.plan.outputs.target }}
+          PREVIOUS: ${{ steps.plan.outputs.previous }}
+          PRERELEASE: ${{ steps.plan.outputs.prerelease }}
+        run: |
+          args=(--repo "$GITHUB_REPOSITORY" --target "$TARGET" --title "$TAG" --generate-notes)
+          [ -n "$PREVIOUS" ] && args+=(--notes-start-tag "$PREVIOUS")
+          if [ "$PRERELEASE" = true ]; then args+=(--prerelease); else args+=(--latest); fi
+          gh release create "$TAG" "${args[@]}"
+          {
+            echo "## Release tag — $TAG"
+            echo
+            echo "Tagged $TARGET; notes since ${PREVIOUS:-the beginning}; $( [ "$PRERELEASE" = true ] && echo pre-release || echo latest )."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Nothing to tag
+        if: steps.plan.outputs.tag == ''
+        env:
+          REASON: ${{ steps.plan.outputs.reason }}
+        run: |
+          echo "## Release tag — nothing to do: $REASON" >> "$GITHUB_STEP_SUMMARY"
