@@ -100,6 +100,8 @@ jobs:
             *)      TAG="$VERSION"; git fetch --quiet --tags; git checkout --quiet "$TAG" || TAG="" ;;
           esac
           status=pass
+          # the single-quoted program is Julia: $(…) in it is Julia's interpolation
+          # shellcheck disable=SC2016
           if [ -z "$TAG" ]; then
             status=no_tag
           elif ! SRC_NAME="$SRC_NAME" julia --startup-file=no -e '
