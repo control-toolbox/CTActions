@@ -33,14 +33,17 @@ function tagged_versions(dir)
 end
 
 """
-    gate(dir, base; labels, text="", resolution=true) -> Vector{Result}
+    gate(dir, base; labels, text="", resolution=true, labels_info=false) -> Vector{Result}
 
 Check the release PR whose head is checked out in `dir` against its base commit `base`.
 `labels` are the labels of the PR, `text` its title and description. `resolution=false`
-skips REL4 (the unit tests do). REL6 is checked on every PR, a release or not: the bot's
+skips REL4 (the unit tests do). `labels_info=true` reports missing run labels without
+failing (the workflow: it runs once per label added, so the first runs see some labels
+only; `release.jl ready` then requires every gated job to have run). REL6 is checked on every PR, a release or not: the bot's
 mention in the PR's text or in a commit message.
 """
-function gate(dir::AbstractString, base::AbstractString; labels, text::AbstractString="", resolution::Bool=true)
+function gate(dir::AbstractString, base::AbstractString; labels, text::AbstractString="", resolution::Bool=true,
+              labels_info::Bool=false)
     head = TOML.parsefile(joinpath(dir, "Project.toml"))
     base_toml = show_file(dir, base, "Project.toml")
     base_toml === nothing && return [fail("—", "no `Project.toml` at the base `$base`")]
@@ -139,8 +142,13 @@ function gate(dir::AbstractString, base::AbstractString; labels, text::AbstractS
 
     # labels: every run label of the workflows, one GPU label
     lack = missing_labels(run_labels(joinpath(dir, ".github", "workflows")), labels)
-    isempty(lack) ? push!(results, pass("—", "the PR has the run labels of the workflows")) :
+    if isempty(lack)
+        push!(results, pass("—", "the PR has the run labels of the workflows"))
+    elseif labels_info
+        push!(results, info("—", "labels not on the PR at this event: $(join(lack, ", ")); `release.jl ready` requires every job they gate to have run and passed"))
+    else
         push!(results, fail("—", "missing labels: $(join(lack, ", ")) (a label-gated job without its label is skipped, and a skipped job passes)"))
+    end
 
     # REL4: a stable resolves from General alone
     if kind === :stable && resolution

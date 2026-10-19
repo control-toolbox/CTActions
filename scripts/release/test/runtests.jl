@@ -197,6 +197,11 @@ failures(results) = [r.message for r in results if r.status === :fail]
             @test only(gate(dir, "HEAD"; labels, resolution=false)).status === :info
             # missing label
             @test any(contains("missing labels"), failures(gate(dir, base; labels=String[], resolution=false)))
+            # in the workflow, missing labels are reported, not failed: it runs once per label added
+            r = gate(dir, base; labels=String[], resolution=false, labels_info=true)
+            @test isempty(failures(r))
+            @test any(x -> x.status === :info && contains(x.message, "labels not on the PR at this event: run ci github-runner"), r)
+            @test any(x -> x.status === :pass && contains(x.message, "run labels"), gate(dir, base; labels, resolution=false, labels_info=true))
             # a breaking number without a breaking entry, and not the expected one
             dir, base = package_repo(version="0.5.0")
             f = failures(gate(dir, base; labels, resolution=false))
@@ -686,6 +691,9 @@ failures(results) = [r.message for r in results if r.status === :fail]
         sh(dir, "git checkout -q main")                    # the release PR is not merged
         code, out = command("tag-plan", dir)
         @test code == 0 && contains(out, "tag=\nreason=`v0.4.2` is already tagged")
+        # `--labels-info` is a flag: the clone stays the only positional argument
+        code, out = command("gate", "--base", "HEAD", "--labels", "", "--labels-info", dir)
+        @test code == 0 && contains(out, "not a release")
     end
 
     if any(r -> r.name == GENERAL, Pkg.Registry.reachable_registries())
