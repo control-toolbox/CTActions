@@ -24,7 +24,7 @@ at once, saying so. Cheap and GitHub-hosted: no label.
 | `CHG3`, `CHG4` | `BREAKING.md` has a `##` entry naming the version |
 | — | the PR changes `Project.toml`, `CHANGELOG.md`, `BREAKING.md` only, and only the version in `Project.toml` |
 | `REL7` | since the tag of the reference, something reaches a user: `src/`, `ext/`, `docs/`, or `Project.toml` beyond the version |
-| — | the PR has every run label of the package's workflows (one GPU label is enough: `kkt` or `occidata`; `run probe` is not needed): a label-gated job without its label is *skipped*, and a skipped job reports success |
+| — | the PR has every run label of the package's workflows (one GPU label is enough: `kkt` or `occidata`; `run probe` is not needed): a label-gated job without its label is *skipped*, and a skipped job reports success. In the workflow this line is ℹ️, never ❌: the gate runs once per label added, so its first runs see some labels only; `release.jl ready` requires every gated job to have run. Locally (`--labels` without `--labels-info`) a missing label fails |
 | `REL4` | a stable resolves from General alone, weak dependencies included, on the lowest Julia (`julia_lowest`) and the newest |
 
 The packages' CI uses ct-registry (`use_ct_registry: true`), so it passes with a bound
@@ -45,7 +45,7 @@ jobs:
     uses: control-toolbox/CTActions/.github/workflows/release-gate.yml@main
 ```
 
-`labeled` and `unlabeled` are in the `types`: adding the missing label reruns the gate.
+`labeled` and `unlabeled` are in the `types`: adding a label reruns the gate, which reads the labels of that event.
 
 ## Inputs
 
@@ -80,7 +80,7 @@ workflows call the same way:
 
 ```bash
 julia scripts/release/release.jl status --repo control-toolbox/CTBase.jl [--version 0.30.12]
-julia scripts/release/release.jl gate --base <base sha> --labels "run breakage,run ci github-runner" <clone>
+julia scripts/release/release.jl gate --base <base sha> --labels "run breakage,run ci github-runner" [--labels-info] <clone>
 julia scripts/release/release.jl registrable [--base base/Project.toml] Project.toml
 julia scripts/release/release.jl tag-plan <clone>
 julia scripts/release/release.jl ready --repo control-toolbox/CTBase.jl --pr 640

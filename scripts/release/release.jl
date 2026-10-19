@@ -4,7 +4,7 @@
 # usage:
 #   julia release.jl status --repo OWNER/REPO [--version V]
 #       where the release stands, from the facts (GitHub, the registries); read only
-#   julia release.jl gate --base SHA [--labels "a,b"] [--text-file FILE] [DIR]
+#   julia release.jl gate --base SHA [--labels "a,b" [--labels-info]] [--text-file FILE] [DIR]
 #       the gate of a release PR (REL1-REL7) on the clone DIR (default: .); FILE holds the
 #       PR's title and description (REL6 on every PR)
 #   julia release.jl registrable [--base BASE_PROJECT] PROJECT
@@ -48,7 +48,7 @@ end
 
 const USAGE = """
     usage: julia release.jl status --repo OWNER/REPO [--version V]
-           julia release.jl gate --base SHA [--labels "a,b"] [--text-file FILE] [DIR]
+           julia release.jl gate --base SHA [--labels "a,b" [--labels-info]] [--text-file FILE] [DIR]
            julia release.jl registrable [--base BASE_PROJECT] PROJECT
            julia release.jl tag-plan [DIR]
            julia release.jl ready --repo OWNER/REPO --pr N
@@ -72,8 +72,10 @@ function release_main(args)
             labels = filter(!isempty, strip.(split(option!(args, "labels", ""), ',')))
             text_file = option!(args, "text-file")
             text = text_file === nothing ? "" : read(text_file, String)
+            labels_info = "--labels-info" in args
+            filter!(!=("--labels-info"), args)
             dir = isempty(args) ? "." : only(args)
-            results = gate(dir, base; labels, text)
+            results = gate(dir, base; labels, text, labels_info)
             name = get(TOML.parsefile(joinpath(dir, "Project.toml")), "name", basename(abspath(dir)))
             emit(gate_report(name, results))
             return any(r -> r.status === :fail, results) ? 1 : 0

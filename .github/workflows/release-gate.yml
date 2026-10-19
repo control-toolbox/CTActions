@@ -9,8 +9,9 @@ name: Release gate
 # release PR: the number (a new triple, the suffix, breaking or not as the changelog says, the
 # expected one, a jump in General explained by betas), the changelog and BREAKING entries,
 # a diff limited to Project.toml, CHANGELOG.md and BREAKING.md, something to release since
-# the previous release (REL7), the run labels of the package's workflows (a label-gated
-# job without its label is skipped, and a skipped job passes), and for a stable, REL4: the
+# the previous release (REL7), the run labels of the package's workflows (reported only:
+# this workflow runs once per label added, so its first runs see some of them; `release.jl
+# ready` requires every gated job to have run), and for a stable, REL4: the
 # package resolves from General alone, on the lowest and the newest Julia (the CI uses
 # ct-registry, so it cannot see a bound only a beta satisfies). Report in the job summary.
 # See docs/workflows/release-gate.md.
@@ -73,4 +74,4 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" > "$RUNNER_TEMP/pr.md"
-          julia --startup-file=no .ctactions/scripts/release/release.jl gate --base "$BASE_SHA" --labels "$LABELS" --text-file "$RUNNER_TEMP/pr.md" .
+          julia --startup-file=no .ctactions/scripts/release/release.jl gate --base "$BASE_SHA" --labels "$LABELS" --labels-info --text-file "$RUNNER_TEMP/pr.md" .
