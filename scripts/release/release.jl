@@ -4,15 +4,17 @@
 # usage:
 #   julia release.jl status --repo OWNER/REPO [--version V]
 #       where the release stands, from the facts (GitHub, the registries); read only
-#   julia release.jl gate --base SHA [--labels "a,b"] [DIR]
-#       the gate of a release PR (REL1-REL7) on the clone DIR (default: .)
+#   julia release.jl gate --base SHA [--labels "a,b"] [--text-file FILE] [DIR]
+#       the gate of a release PR (REL1-REL7) on the clone DIR (default: .); FILE holds the
+#       PR's title and description (REL6 on every PR)
 #   julia release.jl registrable [--base BASE_PROJECT] PROJECT
 #       REL4 alone: the package resolves from General alone
 #   julia release.jl tag-plan [DIR]
 #       what the release-tag workflow tags, as key=value lines
-#   julia release.jl register --repo OWNER/REPO --version V [--post]
+#   julia release.jl register --repo OWNER/REPO --version V [--post] [--on-commit]
 #       the registration comment of a stable (REL6): a dry run, the mention masked, unless
-#       --post; refused unless `status` says phase 7, todo
+#       --post; refused unless `status` says phase 7, todo; on the merge commit instead of
+#       the issue (--on-commit) only when `main` has moved past it
 #
 # The Markdown report goes to standard output, and to $GITHUB_STEP_SUMMARY when set. Exit
 # code: 0 ready (or nothing to do), 1 blocked, 2 usage error; `status` exits 1 when the
@@ -41,10 +43,10 @@ end
 
 const USAGE = """
     usage: julia release.jl status --repo OWNER/REPO [--version V]
-           julia release.jl gate --base SHA [--labels "a,b"] [DIR]
+           julia release.jl gate --base SHA [--labels "a,b"] [--text-file FILE] [DIR]
            julia release.jl registrable [--base BASE_PROJECT] PROJECT
            julia release.jl tag-plan [DIR]
-           julia release.jl register --repo OWNER/REPO --version V [--post]"""
+           julia release.jl register --repo OWNER/REPO --version V [--post] [--on-commit]"""
 
 function release_main(args)
     isempty(args) && (println(stderr, USAGE); return 2)
@@ -61,8 +63,10 @@ function release_main(args)
             base = option!(args, "base")
             base === nothing && throw(ArgumentError("--base is required"))
             labels = filter(!isempty, strip.(split(option!(args, "labels", ""), ',')))
+            text_file = option!(args, "text-file")
+            text = text_file === nothing ? "" : read(text_file, String)
             dir = isempty(args) ? "." : only(args)
-            results = gate(dir, base; labels)
+            results = gate(dir, base; labels, text)
             name = get(TOML.parsefile(joinpath(dir, "Project.toml")), "name", basename(abspath(dir)))
             emit(gate_report(name, results))
             return any(r -> r.status === :fail, results) ? 1 : 0
@@ -73,7 +77,8 @@ function release_main(args)
             version = option!(args, "version")
             (repo === nothing || version === nothing) && throw(ArgumentError("--repo and --version are required"))
             post = "--post" in args
-            ok, message = register(repo, VersionNumber(version); post)
+            on_commit = "--on-commit" in args
+            ok, message = register(repo, VersionNumber(version); post, on_commit)
             println(message)
             return ok ? 0 : 1
         elseif command == "tag-plan"

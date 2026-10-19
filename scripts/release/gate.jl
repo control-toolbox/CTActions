@@ -33,20 +33,31 @@ function tagged_versions(dir)
 end
 
 """
-    gate(dir, base; labels, resolution=true) -> Vector{Result}
+    gate(dir, base; labels, text="", resolution=true) -> Vector{Result}
 
 Check the release PR whose head is checked out in `dir` against its base commit `base`.
-`labels` are the labels of the PR. `resolution=false` skips REL4 (the unit tests do).
+`labels` are the labels of the PR, `text` its title and description. `resolution=false`
+skips REL4 (the unit tests do). REL6 is checked on every PR, a release or not: the bot's
+mention in the PR's text or in a commit message.
 """
-function gate(dir::AbstractString, base::AbstractString; labels, resolution::Bool=true)
+function gate(dir::AbstractString, base::AbstractString; labels, text::AbstractString="", resolution::Bool=true)
     head = TOML.parsefile(joinpath(dir, "Project.toml"))
     base_toml = show_file(dir, base, "Project.toml")
     base_toml === nothing && return [fail("—", "no `Project.toml` at the base `$base`")]
     old = TOML.parse(base_toml)
-    get(head, "version", nothing) == get(old, "version", nothing) &&
-        return [info("—", "the version does not change: not a release PR")]
 
-    results = Result[]
+    # REL6, on every PR: the bot reacts to its mention in a PR too
+    mention = Regex(MENTION, "i")
+    where_ = String[]
+    occursin(mention, text) && push!(where_, "the PR's title or description")
+    occursin(mention, something(git(dir, "log", "--format=%B", "$base..HEAD"), "")) && push!(where_, "a commit message")
+    rel6 = isempty(where_) ? Result[] :
+        [fail("REL6", "the registration bot is mentioned in $(join(where_, " and ")): only the registration comment may mention it")]
+
+    get(head, "version", nothing) == get(old, "version", nothing) &&
+        return vcat([info("—", "the version does not change: not a release PR")], rel6)
+
+    results = copy(rel6)
     v = VersionNumber(head["version"])
     name = head["name"]
     kind = isbeta(v) ? :beta : :stable
@@ -156,8 +167,8 @@ end
 function gate_report(name, results)
     io = IOBuffer()
     failed = any(r -> r.status === :fail, results)
-    release = !(length(results) == 1 && results[1].status === :info)
-    println(io, "## Release gate — $name: ", !release ? "not a release" : failed ? "❌ blocked" : "✅ ready", "\n")
+    release = !any(r -> r.status === :info && contains(r.message, "not a release PR"), results)
+    println(io, "## Release gate — $name: ", failed ? "❌ blocked" : !release ? "not a release" : "✅ ready", "\n")
     println(io, "| | Rule | Check |\n| --- | --- | --- |")
     for r in results
         println(io, "| ", r.status === :pass ? "✅" : r.status === :fail ? "❌" : "ℹ️", " | ", r.rule, " | ", r.message, " |")

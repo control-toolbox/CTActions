@@ -3,6 +3,9 @@
 
 using Downloads, Pkg, TOML
 
+"The registration bot's mention, built so that it appears in no file (REL6)."
+const MENTION = "@" * "JuliaRegistrator"
+
 "The `X.Y.Z` of `v`, without suffix."
 triple(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch)
 
