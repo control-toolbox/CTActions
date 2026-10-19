@@ -2,6 +2,9 @@
 
 [← Workflows of control-toolbox](../README.md)
 
+> **Replaced by [`breakage-suite.yml`](breakage-suite.md)**, which reports once and checks
+> the version of a release PR. This workflow stays until every caller has moved.
+
 Answers *"if I merge this PR, do the packages that depend on this one still pass?"*:
 clones a downstream package at its `latest` (default branch) or `stable` (newest tag)
 version, `dev`s the PR's package into it, runs its tests (or builds its docs), and

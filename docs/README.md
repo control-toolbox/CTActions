@@ -75,9 +75,12 @@ token.
 | [`coverage.yml`](workflows/coverage.md) | `Coverage.yml` | Test suite with coverage, uploaded to Codecov | no (push and tags) |
 | [`documentation.yml`](workflows/documentation.md) | `Documentation.yml` | Build and deploy the documentation; optional GPU upgrade pass; opt-in PR previews | label `run documentation` |
 | [`documentation-preview-cleanup.yml`](workflows/documentation-preview-cleanup.md) | `DocPreviewCleanup.yml` | Remove the previews of closed PRs from `gh-pages` | on close |
-| [`breakage.yml`](workflows/breakage.md) | `Breakage.yml` | Test downstream packages against the PR; comment a result table | label `run breakage` |
+| [`breakage-suite.yml`](workflows/breakage-suite.md) | `Breakage.yml` | Test downstream packages against the PR, report once (one comment per group, an artifact); on a release PR, check REL1 against the run on the base | label `run breakage`; push to `main` |
+| [`breakage.yml`](workflows/breakage.md) | `Breakage.yml` | Former version of `breakage-suite.yml`, kept until every caller has moved | label `run breakage` |
 | [`formatter.yml`](workflows/formatter.md) | `Formatter.yml` | JuliaFormatter (BlueStyle), as an automatic PR | no (nightly) |
 | [`spell-check.yml`](workflows/spell-check.md) | `SpellCheck.yml` | Spell check with `typos` | every PR |
+| [`release-gate.yml`](workflows/release-gate.md) | `ReleaseGate.yml` | The gate of a release PR: `REL1`–`REL7` (number, changelog, diff, something to release, run labels, General alone); a required check | every PR (passes at once when the version does not change) |
+| [`release-tag.yml`](workflows/release-tag.md) | `ReleaseTag.yml` | Tag the merge commit of a release PR, create its GitHub release, run the documentation on the tag | push to `main` touching `Project.toml` |
 | [`compat-helper.yml`](workflows/compat-helper.md) | `CompatHelper.yml` | PRs widening `[compat]` to new releases | no (daily) |
 | [`update-readme.yml`](workflows/update-readme.md) | `UpdateReadme.yml` | Regenerate `README.md` from a template and the organization's shared texts | no (weekly) |
 | [`auto-assign.yml`](workflows/auto-assign.md) | `AutoAssign.yml` | Assign new issues and PRs to a maintainer | on open |
@@ -89,6 +92,8 @@ token.
 | --- | --- | --- |
 | [`compat-prune-monthly.yml`](workflows/compat-prune.md) | The organization's `[compat]` prune (logic: reusable `compat-prune.yml`): one PR per repository, one tracking issue in CTActions | monthly (1st, 04:00 UTC), by hand |
 | [`compat-prune-tests.yml`](workflows/compat-prune.md#tests) | Self-test of the prune: its test suite, then a real dry-run audit | PR or push touching it, by hand |
+| [`release-tests.yml`](workflows/release-gate.md#tests) | Self-test of the release tool (`scripts/release`) on Julia 1.10, 1.12, 1.13 | PR or push touching it, by hand |
+| [`breakage-tests.yml`](workflows/breakage-suite.md#tests) | Self-test of the breakage report (`scripts/breakage`) | PR or push touching it, by hand |
 | `lint-workflows.yml` | actionlint on every workflow (expressions, inputs and secrets of reusable workflows, runner labels from `.github/actionlint.yaml`, shellcheck on `run:` scripts) | PR or push touching `.github/`, by hand |
 | [`occidata-runner-maintenance.yml`](workflows/occidata-runner-maintenance.md) | Clean the `occidata` self-hosted runner (git config, caches, logs, TeXLive) | weekly (Mon 02:30 UTC), by hand |
 | [`occidata-runner-watchdog.yml`](workflows/occidata-runner-watchdog.md) | Restart, over SSH, the `occidata` runner jobs that stopped | daily (03:15 UTC), by hand |
@@ -103,6 +108,7 @@ benchmarks: see [Workflows defined in a package](workflows/per-repo.md).
 | Page | Content |
 | --- | --- |
 | [Labels](conventions/labels.md) | Label-gated triggers: the `if:` guard, the `types:` list (no `opened`), the label vocabulary |
+| [Required checks](conventions/required-checks.md) | The checks of `main` a PR must pass, one aggregator per theme (`ci-ok`, `docs-ok`), the settings for auto-merge |
 | [Runners](conventions/runners.md) | GitHub-hosted and self-hosted runners: `occidata` (GPU on demand), `kkt`, `pinwheel`; the split CI |
 | [Secrets and registries](conventions/secrets.md) | Every secret, who uses it; `ct-registry` and `SSH_KEY` |
 | [GitHub App](conventions/github-app.md) | `control-toolbox-bot`: what it is, how to use it in a new workflow, how to extend it |
