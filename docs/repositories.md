@@ -15,7 +15,7 @@ UpdateReadme and TagBot, in every repository below; the columns are what varies.
 | CTFlows.jl | ✅ | ✅ | ✅ | ✅ | ✅ | split CI (three ways), `CPUProbe`/`GPUProbe`, `CITargeted`, `CronIntegration` |
 | CTDirect.jl | ✅ | ✅ | ✅ | ✅ | ✅ | split CI; `Formatter.yml.disabled` |
 | CTSolvers.jl | ✅ | ✅ | ✅ | ✅ | ✅ | split CI (three ways), `CPUProbe`/`GPUProbe`; documentation GPU pass on `kkt` |
-| CTLie.jl | ✅ | ✅ | — | ✅ (vs. OptimalControl) | ✅ | split CI |
+| CTLie.jl | ✅ | ✅ | — | ✅ | ✅ | split CI |
 | OptimalControl.jl | ✅ | ✅ | ✅ | ✅ (packages and applications) | ✅ | split CI, `JOSS`; documentation GPU pass on `occidata` |
 | OptimalControlProblems.jl | — | ✅ | ✅ | — | — | — |
 | CTDiffFlow.jl | — | ✅ | — | — | — | — |
