@@ -78,7 +78,11 @@ function facts(repo::AbstractString; version=nothing)
     tag_tree = tag === nothing ? nothing : gh_strip("api", "repos/$repo/commits/v$v", "--jq", ".commit.tree.sha")
     release = gh_strip("release", "view", "v$v", "-R", repo, "--json", "isPrerelease", "--jq", ".isPrerelease")
     registry = kind === :stable ? "General" : "ct-registry"
-    registered = get(registry_versions(registry, name), v, nothing)
+    general, ct = registry_versions("General", name), registry_versions("ct-registry", name)
+    registered = get(registry === "General" ? general : ct, v, nothing)
+    # REL3: whether this stable jumps over versions that only betas explain
+    below = [x for x in keys(general) if x < v]
+    jump_kind = kind === :beta ? :none : jump(isempty(below) ? nothing : maximum(below), v, collect(keys(ct)))
     general_pr = kind === :beta ? nothing :
         bot_pr !== nothing ?
         let n = bot_pr[1], st = gh_strip("pr", "view", n, "-R", "JuliaRegistries/General", "--json", "state", "--jq", ".state")
@@ -91,7 +95,14 @@ function facts(repo::AbstractString; version=nothing)
                 (x = split(first(split(out, '\n'))); (; number=parse(Int, x[1]), state=x[2]))
         end
     return (; repo, name, version=v, kind, main_version, main_sha, issue, issues=length(issues), mentions, bot_error, pr, tag, tag_tree,
-            release=release === nothing ? nothing : release == "true", registry, registered, general_pr)
+            release=release === nothing ? nothing : release == "true", registry, registered, general_pr, jump=jump_kind)
+end
+
+"What to do on General's PR about a jump of version (REL3): nothing when there is none."
+function jump_note(f)
+    j = get(f, :jump, :none)
+    j === :betas ? "; the version jumps over betas (REL3): `[merge approved]` is needed on it" :
+    j === :unexplained ? "; the version jumps over versions no beta explains (REL3): a human decides" : ""
 end
 
 """
@@ -143,7 +154,7 @@ function phase(f)
     # stable: the single registration comment (REL6)
     if f.general_pr !== nothing
         f.general_pr.state == "OPEN" &&
-            return (; phase=7, state=:waiting, next="wait for General's PR #$(f.general_pr.number) to be merged (check the jump: `[merge approved]`)", blockers=String[])
+            return (; phase=7, state=:waiting, next="wait for General's PR #$(f.general_pr.number) to be merged" * jump_note(f), blockers=String[])
         f.general_pr.state == "CLOSED" &&
             return blocked(7, "General's PR #$(f.general_pr.number) was closed without merge")
         return (; phase=7, state=:waiting, next="General merged #$(f.general_pr.number); wait for the registry to show v$v", blockers=String[])

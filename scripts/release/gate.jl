@@ -126,6 +126,12 @@ function gate(dir::AbstractString, base::AbstractString; labels, text::AbstractS
     without_version(head) == without_version(old) ? push!(results, pass("—", "`Project.toml`: the version only")) :
         push!(results, fail("—", "`Project.toml` changes more than the version"))
 
+    # a replacement character (or invalid UTF-8) is what a broken encoding leaves in a file
+    broken = [f for f in RELEASE_FILES if isfile(joinpath(dir, f)) &&
+              (s = read(joinpath(dir, f), String); !isvalid(s) || '\ufffd' in s)]
+    isempty(broken) ? push!(results, pass("—", "no broken encoding (U+FFFD) in the release files")) :
+        push!(results, fail("—", "a replacement character (U+FFFD: a broken encoding) in $(join(("`$f`" for f in broken), ", ")); fix the text"))
+
     # REL7: something to release since the previous release of the same kind
     if reference === nothing
         push!(results, info("REL7", "first release: nothing to compare with"))
@@ -149,6 +155,10 @@ function gate(dir::AbstractString, base::AbstractString; labels, text::AbstractS
     else
         push!(results, fail("—", "missing labels: $(join(lack, ", ")) (a label-gated job without its label is skipped, and a skipped job passes)"))
     end
+
+    # the preview of the documentation: asked for by a label, which the workflows do not require
+    isfile(joinpath(dir, ".github", "workflows", "Documentation.yml")) && !(PREVIEW_LABEL in labels) &&
+        push!(results, info("—", "the PR has no `$PREVIEW_LABEL` label: no preview of the documentation is deployed (add it if the repository has the label)"))
 
     # REL4: a stable resolves from General alone
     if kind === :stable && resolution
