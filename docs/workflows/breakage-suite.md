@@ -11,6 +11,13 @@ every caller has moved.
 
 ## What it does
 
+- **`plan`**, once: the targets of the suite. They are **derived** by
+  [`scripts/breakage/consumers.jl`](../../scripts/breakage/consumers.jl), not listed in the
+  caller: every package of the organization that loads the package under test, read from
+  the `Project.toml` files (see [Which packages are tested](#which-packages-are-tested)),
+  plus the `targets` the caller declares. The table of targets, with where each comes from,
+  is in the job summary. The job fails, and nothing else runs, when the organization cannot
+  be read or when there is nothing to test.
 - **`break`**, one job per cell: a downstream package × `latest` (its default branch) or
   `stable` (its newest tag, a beta included). The cell runs the package's tests (`test`)
   or builds its docs (`doc`) with the package under test `dev`ed, and writes its result
@@ -57,23 +64,52 @@ jobs:
       (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'run breakage'))
     uses: control-toolbox/CTActions/.github/workflows/breakage-suite.yml@main
     with:
-      targets: >-
-        [{"name": "CTDirect"}, {"name": "CTFlows"}, {"name": "CTModels"},
-         {"name": "CTParser"}, {"name": "CTSolvers"}, {"name": "OptimalControl"}]
       use_ct_registry: true
     secrets:
       SSH_KEY: ${{ secrets.SSH_KEY }}
 ```
 
-A package with two suites (OptimalControl: `run breakage` for its packages, `run breakage
-applications` for the applications) calls it twice, with two `group`s; a heavy suite may
-leave out the `push` trigger and be run by hand on `main` before a release.
+No list of packages: the consumers are derived. A package with two suites (OptimalControl:
+`run breakage` for its packages, `run breakage applications` for the applications) calls it
+twice, with two `group`s; the second one declares its `targets` and sets `consumers: false`
+(its applications are not packages that load OptimalControl). A heavy suite may leave out
+the `push` trigger and be run by hand on `main` before a release.
+
+## Which packages are tested
+
+A package of the organization (a non-archived, non-fork repository `X.jl` whose
+`Project.toml` has a `name` and a `uuid`) is a **consumer** of P, by uuid, when P is in:
+
+| Where | Why it counts |
+| --- | --- |
+| `[deps]` of `Project.toml` | the package loads P |
+| `[weakdeps]` of `Project.toml` | an extension loads P |
+| `[extras]` of `Project.toml` | its tests (or a test target) load P |
+| `[deps]` of `test/Project.toml` | its tests load P |
+
+Left out: P itself, archived repositories, forks, and the repositories listed in `EXCLUDED`
+in `consumers.jl`, each with its reason (the template of a new package; a package whose
+compat is out of date until it is updated). What the `Project.toml` files do not show is
+declared by the caller in `targets`: an application owned outside the organization, a
+documentation build (`"break": "doc"`). A declared target replaces the derived one of the
+same package, owner and check.
+
+```bash
+# what a package would get, from its checkout (needs `gh`, authenticated)
+julia scripts/breakage/consumers.jl list --project Project.toml
+julia scripts/breakage/consumers.jl plan --project Project.toml --declared '[{"name": "Tutorials", "break": "doc"}]'
+```
+
+The `Project.toml` files read are those of the default branch of each package, at the time
+of the run: a package that starts to load P is tested from then on, and the report says
+`has no result on the base (a new target)` for it on the first release PR.
 
 ## Inputs and secrets
 
 | Input | Default | Meaning |
 | --- | --- | --- |
-| `targets` | required | JSON list of `{"name", "owner", "break"}`: the package without `.jl`, its GitHub owner (default `control-toolbox`), `test` (default) or `doc` |
+| `targets` | `'[]'` | JSON list of declared targets, added to the derived ones: `{"name", "owner", "break"}`, the package without `.jl`, its GitHub owner (default `control-toolbox`), `test` (default) or `doc` |
+| `consumers` | `true` | Derive the consumers from the `Project.toml` files; `false` for the declared `targets` only |
 | `versions` | `'["latest", "stable"]'` | The versions of each package |
 | `group` | `'packages'` | Name of the suite: its comment and its artifact |
 | `use_ct_registry` | `false` | Add `ct-registry` (needs `SSH_KEY`) |
@@ -83,6 +119,10 @@ leave out the `push` trigger and be run by hand on `main` before a release.
 
 `scripts/breakage/test/runtests.jl`: the verdict (not a release; a release breaking
 nothing, breaking something with or without a breaking number, only the stable column
-counting, no baseline, missing cells, `test` and `doc` cells apart) and the files written.
-`breakage-tests.yml` runs them when the script or the workflow change. The `break` job
-itself is exercised by the callers.
+counting, no baseline, missing cells, a new target, `test` and `doc` cells apart) and the
+files written; the consumers (each place a package may be loaded from, the uuid and not the
+name, archived repositories, forks, exclusions, a repository that cannot be read being an
+error and not an empty list, the declared targets and their validation, the command line,
+the ecosystem as it was read on 2026-10-19). The reading of GitHub is replaced by a fake,
+as in the release tests. `breakage-tests.yml` runs them when the script or the workflow
+change. The `plan` and `break` jobs themselves are exercised by the callers.

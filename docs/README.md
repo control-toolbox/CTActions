@@ -75,7 +75,7 @@ token.
 | [`coverage.yml`](workflows/coverage.md) | `Coverage.yml` | Test suite with coverage, uploaded to Codecov | no (push and tags) |
 | [`documentation.yml`](workflows/documentation.md) | `Documentation.yml` | Build and deploy the documentation; optional GPU upgrade pass; opt-in PR previews | label `run documentation` |
 | [`documentation-preview-cleanup.yml`](workflows/documentation-preview-cleanup.md) | `DocPreviewCleanup.yml` | Remove the previews of closed PRs from `gh-pages` | on close |
-| [`breakage-suite.yml`](workflows/breakage-suite.md) | `Breakage.yml` | Test downstream packages against the PR, report once (one comment per group, an artifact); on a release PR, check REL1 against the run on the base | label `run breakage`; push to `main` |
+| [`breakage-suite.yml`](workflows/breakage-suite.md) | `Breakage.yml` | Test the downstream packages (derived from the `Project.toml` files) against the PR, report once (one comment per group, an artifact); on a release PR, check REL1 against the run on the base | label `run breakage`; push to `main` |
 | [`breakage.yml`](workflows/breakage.md) | `Breakage.yml` | Former version of `breakage-suite.yml`, kept until every caller has moved | label `run breakage` |
 | [`formatter.yml`](workflows/formatter.md) | `Formatter.yml` | JuliaFormatter (BlueStyle), as an automatic PR | no (nightly) |
 | [`spell-check.yml`](workflows/spell-check.md) | `SpellCheck.yml` | Spell check with `typos` | every PR |

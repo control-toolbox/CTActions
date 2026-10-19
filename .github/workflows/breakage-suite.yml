@@ -1,6 +1,10 @@
 name: Breakage suite
 
-# Tests the downstream packages against the package under test, then reports once. Each
+# Tests the downstream packages against the package under test, then reports once. The
+# downstream packages are derived, not listed: every package of the organization that loads
+# the package under test (its `deps`, `weakdeps`, `extras` or test environment, read from the
+# Project.toml files by scripts/breakage/consumers.jl), plus the `targets` the caller declares
+# for what cannot be derived (an application owned elsewhere, a documentation build). Each
 # cell of the matrix (a downstream package × its default branch `latest` or its newest tag
 # `stable`) runs its tests or builds its docs, and writes its result as a file; one `report`
 # job gathers them in one table (job summary, one PR comment per group, kept up to date
@@ -19,9 +23,15 @@ on:
   workflow_call:
     inputs:
       targets:
-        description: 'JSON list of the downstream packages: {"name", "owner" (default control-toolbox), "break" ("test", default, or "doc")}'
-        required: true
+        description: 'JSON list of declared targets, added to the derived ones: {"name", "owner" (default control-toolbox), "break" ("test", default, or "doc")}'
+        required: false
         type: string
+        default: '[]'
+      consumers:
+        description: 'Derive the downstream packages from the Project.toml files of the organization'
+        required: false
+        type: boolean
+        default: true
       versions:
         description: 'JSON list of the versions of each downstream package'
         required: false
@@ -46,7 +56,43 @@ on:
         required: false
 
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      targets: ${{ steps.plan.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/checkout@v6
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+
+      # fails, rather than testing fewer packages, when the organization cannot be read or
+      # when there is nothing to test; the table of targets goes to the job summary
+      - name: Targets
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DECLARED: ${{ inputs.targets }}
+          DERIVE: ${{ inputs.consumers }}
+        run: |
+          set -euo pipefail
+          args=(plan --project Project.toml --declared "$DECLARED" --summary "$GITHUB_STEP_SUMMARY")
+          [ "$DERIVE" = true ] || args+=(--no-derive)
+          targets=$(julia --startup-file=no .ctactions/scripts/breakage/consumers.jl "${args[@]}")
+          echo "targets=$targets" >> "$GITHUB_OUTPUT"
+
   break:
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -54,7 +100,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: ${{ fromJSON(inputs.targets) }}
+        target: ${{ fromJSON(needs.plan.outputs.targets) }}
         version: ${{ fromJSON(inputs.versions) }}
     env:
       NAME: ${{ matrix.target.name }}
@@ -138,8 +184,8 @@ jobs:
           path: cells/
 
   report:
-    needs: break
-    if: always()
+    needs: [plan, break]
+    if: ${{ always() && needs.plan.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -189,7 +235,7 @@ jobs:
       - name: Report
         id: report
         env:
-          TARGETS: ${{ inputs.targets }}
+          TARGETS: ${{ needs.plan.outputs.targets }}
           VERSIONS: ${{ inputs.versions }}
           GROUP: ${{ inputs.group }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
