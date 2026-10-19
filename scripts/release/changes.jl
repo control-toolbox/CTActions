@@ -13,15 +13,29 @@ const SHIPPED = (r"^src/", r"^ext/", r"^docs/")
 without_version(project::AbstractDict) = Dict(k => v for (k, v) in project if k != "version")
 
 """
+    user_facing(project) -> Dict
+
+The part of a parsed `Project.toml` that reaches a user (REL7): the dependencies, weak
+dependencies and extensions, and the `[compat]` of those and of `julia`. Test-only
+entries (`[extras]`, `[targets]`, their `[compat]`) and the version are left out.
+"""
+function user_facing(project::AbstractDict)
+    deps = merge(Dict(get(project, "deps", Dict())), Dict(get(project, "weakdeps", Dict())))
+    compat = Dict(k => v for (k, v) in get(project, "compat", Dict()) if k == "julia" || haskey(deps, k))
+    return Dict("deps" => get(project, "deps", Dict()), "weakdeps" => get(project, "weakdeps", Dict()),
+                "extensions" => get(project, "extensions", Dict()), "compat" => compat)
+end
+
+"""
     shipped(files, old_project, new_project) -> Vector{String}
 
 The changes, among `files` and between the two parsed `Project.toml`, that reach a user
-(REL7): the files under `src/`, `ext/` or `docs/`, and `Project.toml` when anything but its
-version changed. Empty: nothing to release.
+(REL7): the files under `src/`, `ext/` or `docs/`, and `Project.toml` when its
+[`user_facing`](@ref) part changed. Empty: nothing to release.
 """
 function shipped(files, old_project::AbstractDict, new_project::AbstractDict)
     out = [f for f in files if any(r -> occursin(r, f), SHIPPED)]
-    without_version(old_project) == without_version(new_project) || push!(out, "Project.toml")
+    user_facing(old_project) == user_facing(new_project) || push!(out, "Project.toml")
     return out
 end
 
@@ -31,8 +45,11 @@ function run_labels(workflows::AbstractString)
     isdir(workflows) || return labels
     for f in readdir(workflows; join=true)
         endswith(f, ".yml") || endswith(f, ".yaml") || continue
-        for m in eachmatch(r"labels\.\*\.name, '([^']+)'", read(f, String))
-            push!(labels, m[1])
+        for line in eachline(f)
+            startswith(lstrip(line), "#") && continue   # a commented-out guard requires nothing
+            for m in eachmatch(r"labels\.\*\.name, '([^']+)'", line)
+                push!(labels, m[1])
+            end
         end
     end
     return labels
