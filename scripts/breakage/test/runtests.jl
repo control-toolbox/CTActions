@@ -42,6 +42,16 @@ cell(name, version, status; brk="test") =
         @test !v.ok && any(contains("no breakage run on the base"), v.lines)
         v = verdict(base[1:3], base; expected=4, base_version=V0, head_version=V1)
         @test !v.ok && any(contains("1 of 4 cells have no result"), v.lines)
+        # a package without tag, or absent from the base run (a target added since), is not
+        # "broken by the release": nothing to compare with
+        notag = [cell("A", "latest", "pass"), cell("A", "stable", "no_tag"), cell("C", "latest", "pass"), cell("C", "stable", "fail")]
+        v = verdict(notag, base; expected=4, base_version=V0, head_version=V1)
+        @test v.ok && any(contains("no downstream release broken"), v.lines)
+        # more cells than expected (a rerun) is not "missing"
+        @test verdict(vcat(base, base[1:1]), base; expected=4, base_version=V0, head_version=V1).ok
+        # a beta release is checked the same way
+        @test !verdict(now, base; expected=4, base_version=v"0.30.11", head_version=v"0.30.12-beta").ok
+        @test verdict(now, base; expected=4, base_version=v"0.30.11", head_version=v"0.31.0-beta").ok
         # a doc check is its own cell
         docs = [cell("A", "stable", "pass"; brk="doc"), cell("A", "stable", "fail")]
         v = verdict(docs, [cell("A", "stable", "pass"; brk="doc"), cell("A", "stable", "pass")]; expected=2, base_version=V0, head_version=V1)
