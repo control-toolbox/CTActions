@@ -5,7 +5,8 @@ name: Release gate
 # that breaks a rule, as long as this job is a required check of `main`. A PR that does
 # not change the version is not a release, and passes at once.
 #
-# Checks: the number (a new triple, the suffix, breaking or not as the changelog says, the
+# Checks, on every PR: the registration bot mentioned nowhere in the PR (REL6). On a
+# release PR: the number (a new triple, the suffix, breaking or not as the changelog says, the
 # expected one, a jump in General explained by betas), the changelog and BREAKING entries,
 # a diff limited to Project.toml, CHANGELOG.md and BREAKING.md, something to release since
 # the previous release (REL7), the run labels of the package's workflows (a label-gated
@@ -68,4 +69,8 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
-        run: julia --startup-file=no .ctactions/scripts/release/release.jl gate --base "$BASE_SHA" --labels "$LABELS" .
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" > "$RUNNER_TEMP/pr.md"
+          julia --startup-file=no .ctactions/scripts/release/release.jl gate --base "$BASE_SHA" --labels "$LABELS" --text-file "$RUNNER_TEMP/pr.md" .

@@ -17,9 +17,6 @@ end)
 gh(args...) = GH[](collect(String, args))
 gh_strip(args...) = (out = gh(args...); out === nothing ? nothing : strip(out))
 
-"The registration bot's mention, built so that it appears in no file (REL6)."
-const MENTION = "@" * "JuliaRegistrator"
-
 """
     facts(repo; version=nothing) -> NamedTuple
 
@@ -62,14 +59,21 @@ function facts(repo::AbstractString; version=nothing)
     answers = issue === nothing ? "" :
         something(gh("issue", "view", string(issue.number), "-R", repo, "--json", "comments",
                      "--jq", ".comments[] | select(.author.login == \"JuliaRegistrator\") | .body"), "")
-    bot_pr = match(r"JuliaRegistries/General/(?:pull/)?(\d+)", answers)
-    bot_error = !isempty(strip(answers)) && bot_pr === nothing ? first(split(strip(answers), '\n')) : nothing
     pr = let out = gh_strip("pr", "list", "-R", repo, "--head", "release/v$v", "--state", "all",
                             "--json", "number,state,mergeCommit,autoMergeRequest",
                             "--jq", ".[0] | select(. != null) | \"\\(.number) \\(.state) \\(.mergeCommit.oid // \"-\") \\(.autoMergeRequest != null)\"")
         out === nothing || isempty(out) ? nothing :
             (x = split(out); (; number=parse(Int, x[1]), state=x[2], merge=x[3] == "-" ? nothing : x[3], auto=x[4] == "true"))
     end
+    # the comments on the merge commit: the registration may be posted there when `main` moved
+    if pr !== nothing && pr.merge !== nothing
+        mentions += parse(Int, something(gh_strip("api", "repos/$repo/commits/$(pr.merge)/comments", "--jq",
+                                                  "[.[].body | select(test(\"$MENTION\"; \"i\"))] | length"), "0"))
+        answers *= something(gh("api", "repos/$repo/commits/$(pr.merge)/comments", "--jq",
+                                ".[] | select(.user.login == \"JuliaRegistrator\") | .body"), "")
+    end
+    bot_pr = match(r"JuliaRegistries/General/(?:pull/)?(\d+)", answers)
+    bot_error = !isempty(strip(answers)) && bot_pr === nothing ? first(split(strip(answers), '\n')) : nothing
     tag = gh_strip("api", "repos/$repo/commits/v$v", "--jq", ".sha")
     tag_tree = tag === nothing ? nothing : gh_strip("api", "repos/$repo/commits/v$v", "--jq", ".commit.tree.sha")
     release = gh_strip("release", "view", "v$v", "-R", repo, "--json", "isPrerelease", "--jq", ".isPrerelease")
@@ -152,9 +156,13 @@ function phase(f)
     f.mentions > 0 &&
         return (; phase=7, state=:waiting, next="the registration comment is posted: wait for the bot's answer (a minute), then rerun; never post it again",
                 blockers=String[])
+    # the bot registers the head of `main` when asked on the issue, the commit itself when
+    # asked on the commit: once `main` moved, only the commit is right (a human decides)
     f.main_sha != f.pr.merge &&
-        return blocked(7, "`main` ($(f.main_sha)) moved past the merge commit $(f.pr.merge): the bot would register another commit")
-    return (; phase=7, state=:todo, next="post the registration comment, once, on #$(f.issue.number)", blockers=String[])
+        return (; phase=7, state=:todo, on_commit=true,
+                next="`main` ($(f.main_sha)) moved past the merge commit $(f.pr.merge): with the human's go, post the registration comment on the merge commit (`register --on-commit`), once",
+                blockers=String[])
+    return (; phase=7, state=:todo, on_commit=false, next="post the registration comment, once, on #$(f.issue.number)", blockers=String[])
 end
 
 "The Markdown report of `facts` and `phase`."
@@ -170,7 +178,7 @@ function status_report(f, p)
     row(k, v) = println(io, "| $k | $(something(v, "—")) |")
     row("`main`", "$(f.main_sha) (version $(f.main_version))")
     row("tracking issue", f.issue === nothing ? nothing : "#$(f.issue.number) $(f.issue.state)")
-    row("registration mentions on it", f.mentions)
+    row("registration mentions (issue and merge commit)", f.mentions)
     row("release PR", f.pr === nothing ? nothing : "#$(f.pr.number) $(f.pr.state)$(f.pr.auto ? ", auto-merge" : "")$(f.pr.merge === nothing ? "" : ", merged as $(f.pr.merge)")")
     row("tag `v$(f.version)`", f.tag)
     row("GitHub release", f.release === nothing ? nothing : f.release ? "pre-release" : "release")

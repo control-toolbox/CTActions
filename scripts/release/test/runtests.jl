@@ -247,6 +247,21 @@ failures(results) = [r.message for r in results if r.status === :fail]
                                      entries=("0.4.3" => "- x.", "0.4.3-beta" => "### 🐛 Bug Fixes\n\n- a fix."))
             @test any(contains("not above every version released"), failures(gate(dir, base; labels, resolution=false)))
         end
+        # REL6, on every PR: the bot's mention in the PR's text or a commit message
+        with_registries(regs) do
+            dir, base = package_repo()
+            m = MENTION * " register"
+            f = failures(gate(dir, base; labels, text="Release.\n\nAfter merge: $m", resolution=false))
+            @test any(contains("mentioned in the PR's title or description"), f)
+            @test isempty(failures(gate(dir, base; labels, text="Release. The bot is called after merge.", resolution=false)))
+            # in a commit message
+            sh(dir, "git -c user.name=t -c user.email=t@t commit -q --allow-empty -m 'note: $m later'")
+            @test any(contains("a commit message"), failures(gate(dir, base; labels, resolution=false)))
+            # on a PR that is not a release
+            r = gate(dir, "HEAD~1"; labels, text=m, resolution=false)
+            @test any(x -> x.status === :info, r) && any(x -> x.rule == "REL6" && x.status === :fail, r)
+            @test occursin("❌ blocked", gate_report("Pkg", r))
+        end
         # an unexplained jump
         with_registries(regs) do
             dir, base = package_repo(version="0.4.5")
@@ -296,7 +311,10 @@ failures(results) = [r.message for r in results if r.status === :fail]
         @test p.state === :blocked && contains(only(p.blockers), "the tag exists")
         @test phase(at(mentions=2)).state === :blocked
         @test phase(at(issues=2)).state === :blocked                        # duplicate tracking issues
-        @test phase(at(main_sha="N")).state === :blocked                    # main moved past the merge
+        # main moved past the merge: still todo, but on the merge commit only
+        p = phase(at(main_sha="N"))
+        @test p.state === :todo && p.on_commit && contains(p.next, "--on-commit")
+        @test !phase(at()).on_commit
         @test phase(at(mentions=1, general_pr=(; number=9, state="OPEN"))).state === :waiting
         @test phase(at(mentions=1, general_pr=(; number=9, state="CLOSED"))).state === :blocked
         @test phase(at(registered="T")).phase == 8
@@ -329,7 +347,7 @@ failures(results) = [r.message for r in results if r.status === :fail]
         changelog_text = changelog("0.4.3" => "### 🐛 Bug Fixes\n\n- a fix. See [BREAKING.md](BREAKING.md) and [#1](https://x/1).")
         "A GitHub at phase 7 of `P` v0.4.3, whose state the fake updates when a comment is posted."
         function github(; mentions=0, answers="", main="M", kind_version="0.4.3", issues=["7 OPEN"])
-            st = Dict(:mentions => mentions, :posted => String[])
+            st = Dict(:mentions => mentions, :posted => String[], :on_commit => String[])
             fake = function (args)
                 a = join(args, " ")
                 contains(a, "contents/Project.toml") && return "name = \"P\"\nversion = \"$kind_version\"\n"
@@ -345,6 +363,14 @@ failures(results) = [r.message for r in results if r.status === :fail]
                 contains(a, "release view") && return "## What's Changed\n* fix by @a in #1\n"
                 contains(a, "pr list -R JuliaRegistries/General") && return ""
                 contains(a, "pr view") && return "MERGED\n"
+                if contains(a, "commits/M/comments")
+                    if "-F" in args
+                        push!(st[:on_commit], read(replace(args[findfirst(==("-F"), args) + 1], "body=@" => ""), String))
+                        st[:mentions] += 1
+                        return "https://github.com/o/P/commit/M#commitcomment-1\n"
+                    end
+                    return contains(a, "length") ? "0\n" : ""
+                end
                 if contains(a, "issue comment")
                     push!(st[:posted], read(args[findfirst(==("--body-file"), args) + 1], String))
                     st[:mentions] += 1
@@ -376,11 +402,24 @@ failures(results) = [r.message for r in results if r.status === :fail]
                 ok, msg = register("o/P", v"0.4.3"; post=true)
                 @test !ok && length(st[:posted]) == 1 && occursin("not ready", msg)
             end
-            # main moved past the merge: refused
+            # main moved past the merge: refused on the issue; on the merge commit only when asked
             fake, st = github(main="N")
             with_gh(fake) do
                 ok, msg = register("o/P", v"0.4.3"; post=true)
-                @test !ok && isempty(st[:posted]) && occursin("moved past the merge", msg)
+                @test !ok && isempty(st[:posted]) && isempty(st[:on_commit]) && occursin("--on-commit", msg)
+                ok, msg = register("o/P", v"0.4.3"; on_commit=true)          # dry run
+                @test ok && isempty(st[:on_commit]) && occursin("the merge commit M", msg) && !occursin(MENTION, msg)
+                ok, msg = register("o/P", v"0.4.3"; post=true, on_commit=true)
+                @test ok && isempty(st[:posted]) && length(st[:on_commit]) == 1
+                @test startswith(only(st[:on_commit]), MENTION * " register")
+                ok, msg = register("o/P", v"0.4.3"; post=true, on_commit=true)  # never twice
+                @test !ok && length(st[:on_commit]) == 1
+            end
+            # --on-commit while main is at the merge: refused
+            fake, st = github()
+            with_gh(fake) do
+                ok, msg = register("o/P", v"0.4.3"; post=true, on_commit=true)
+                @test !ok && isempty(st[:posted]) && isempty(st[:on_commit]) && occursin("tracking issue", msg)
             end
             # the bot answered: the General PR is read from its answer, not from the search
             fake, st = github(mentions=1, answers="Registration pull request created: [JuliaRegistries/General/172378](https://github.com/JuliaRegistries/General/pull/172378)\n")

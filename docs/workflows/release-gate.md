@@ -14,6 +14,7 @@ at once, saying so. Cheap and GitHub-hosted: no label.
 
 | Rule | Check |
 | --- | --- |
+| `REL6` | on **every** PR, a release or not: the registration bot is mentioned neither in the PR's title or description nor in a commit message |
 | — | name and uuid unchanged |
 | `REL2` | the suffix is none or `-beta`; the triple is above every version in General, ct-registry and the tags |
 | `REL5` | the tag `vX.Y.Z` does not exist yet |
@@ -65,7 +66,7 @@ julia scripts/release/release.jl status --repo control-toolbox/CTBase.jl [--vers
 julia scripts/release/release.jl gate --base <base sha> --labels "run breakage,run ci github-runner" <clone>
 julia scripts/release/release.jl registrable [--base base/Project.toml] Project.toml
 julia scripts/release/release.jl tag-plan <clone>
-julia scripts/release/release.jl register --repo control-toolbox/CTBase.jl --version 0.30.12 [--post]
+julia scripts/release/release.jl register --repo control-toolbox/CTBase.jl --version 0.30.12 [--post] [--on-commit]
 ```
 
 - **`status`** says where a release stands, from the facts only — the tracking issue and
@@ -89,7 +90,11 @@ julia scripts/release/release.jl register --repo control-toolbox/CTBase.jl --ver
   notes. It refuses unless `status` says phase 7, todo — so never twice, never for a beta,
   never once `main` has moved — and checks afterwards that the issue holds one mention.
   Without `--post` it is a dry run, which shows the comment with the mention masked, so
-  that it can be pasted anywhere.
+  that it can be pasted anywhere. The bot registers the head of `main` when asked on an
+  issue, and a commit when asked on that commit: once `main` has moved past the merge
+  commit, `status` says so, and `--on-commit` (asked explicitly, after a human's go) posts
+  the comment on the merge commit instead; `status` counts the mentions and reads the bot's
+  answers there too.
 
 Exit codes: 0 ready or nothing to do, 1 blocked, 2 usage error. Reports in Markdown, on
 standard output and in the job summary.
