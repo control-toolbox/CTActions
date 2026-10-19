@@ -126,8 +126,7 @@ function phase(f)
     f.pr.state == "CLOSED" && return blocked(3, "the release PR #$(f.pr.number) was closed without merge")
     if f.pr.state == "OPEN"
         return (; phase=4, state=:waiting,
-                next=f.pr.auto ? "wait for the checks; GitHub merges #$(f.pr.number) when they pass" :
-                     "wait for the checks of #$(f.pr.number), then merge it (or enable auto-merge)",
+                next="wait for the checks of #$(f.pr.number); then `release.jl ready`, and merge with `release.jl merge` (or a human merges)",
                 blockers=String[])
     end
     # merged

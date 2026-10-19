@@ -4,8 +4,8 @@
 
 Checks a release PR against the release rules of ct-conventions,
 [`REL1`–`REL7`](https://github.com/control-toolbox/ct-conventions/blob/main/rules/release.md).
-Caller: `ReleaseGate.yml`, in every package. With the job a **required check** of `main`
-and auto-merge on, no release PR is merged — by an agent or a human — while a rule fails.
+Caller: `ReleaseGate.yml`, in every package. Its result is one of the conditions that
+`release.jl ready` checks before a release PR is merged (see [The merge](#the-merge)).
 
 A PR that does not change the `version` of `Project.toml` is not a release: the job passes
 at once, saying so. Cheap and GitHub-hosted: no label.
@@ -24,7 +24,7 @@ at once, saying so. Cheap and GitHub-hosted: no label.
 | `CHG3`, `CHG4` | `BREAKING.md` has a `##` entry naming the version |
 | — | the PR changes `Project.toml`, `CHANGELOG.md`, `BREAKING.md` only, and only the version in `Project.toml` |
 | `REL7` | since the tag of the reference, something reaches a user: `src/`, `ext/`, `docs/`, or `Project.toml` beyond the version |
-| — | the PR has every run label of the package's workflows (one GPU label is enough: `kkt` or `occidata`; `run probe` is not needed): a label-gated job without its label is *skipped*, and a skipped job passes a required check |
+| — | the PR has every run label of the package's workflows (one GPU label is enough: `kkt` or `occidata`; `run probe` is not needed): a label-gated job without its label is *skipped*, and a skipped job reports success |
 | `REL4` | a stable resolves from General alone, weak dependencies included, on the lowest Julia (`julia_lowest`) and the newest |
 
 The packages' CI uses ct-registry (`use_ct_registry: true`), so it passes with a bound
@@ -46,8 +46,6 @@ jobs:
 ```
 
 `labeled` and `unlabeled` are in the `types`: adding the missing label reruns the gate.
-The required check is `call / gate`, with the others of
-[Required checks](../conventions/required-checks.md).
 
 ## Inputs
 
@@ -55,6 +53,25 @@ The required check is `call / gate`, with the others of
 | --- | --- | --- |
 | `julia_lowest` | `'1.10'` | The lowest Julia version REL4 resolves on |
 | `ctactions_ref` | `'main'` | Ref of CTActions the script is checked out from |
+
+## The merge
+
+A release PR is merged by `release.jl merge` (or by a human after `release.jl ready`),
+never by GitHub's auto-merge on the strength of check names. A label-gated workflow runs
+once per label added; a run whose jobs are all skipped — the label added was another one —
+reports *success*, and GitHub shows the latest result of a check name: a check can look
+green while the real tests failed or still run.
+
+`ready` reads what actually ran on the head commit of the PR (the Actions runs and their
+jobs, not the checks): for each workflow, the **latest run that executed jobs** counts; it
+must be complete, every job in it passed or was skipped, and every job gated by a label
+the release needs ran and passed (of the GPU jobs, the one of the GPU label on the PR:
+`kkt`, else `occidata`). The release gate must have run and passed; the PR must be open,
+not a draft, up to date with `main`, without conflict. A run in progress means *wait*.
+
+`merge` runs `ready` again and merges with `--match-head-commit`: GitHub refuses if the head
+of the PR changed between the check and the merge. It merges `release/v…` branches only,
+and only with `--confirm`.
 
 ## The release tool
 
@@ -66,6 +83,8 @@ julia scripts/release/release.jl status --repo control-toolbox/CTBase.jl [--vers
 julia scripts/release/release.jl gate --base <base sha> --labels "run breakage,run ci github-runner" <clone>
 julia scripts/release/release.jl registrable [--base base/Project.toml] Project.toml
 julia scripts/release/release.jl tag-plan <clone>
+julia scripts/release/release.jl ready --repo control-toolbox/CTBase.jl --pr 640
+julia scripts/release/release.jl merge --repo control-toolbox/CTBase.jl --pr 640 [--confirm]
 julia scripts/release/release.jl register --repo control-toolbox/CTBase.jl --version 0.30.12 [--post] [--on-commit]
 ```
 
@@ -85,6 +104,7 @@ julia scripts/release/release.jl register --repo control-toolbox/CTBase.jl --ver
   the depot are ignored, and the report names the betas that satisfy a bound General
   cannot.
 - **`tag-plan`** is what [`release-tag.yml`](release-tag.md) tags.
+- **`ready`** and **`merge`**: see [The merge](#the-merge).
 - **`register`** builds and posts the registration comment of a stable (`REL6`): the bot's
   mention, the CHANGELOG entry (links made absolute at the tag) and the GitHub release's
   notes. It refuses unless `status` says phase 7, todo — so never twice, never for a beta,

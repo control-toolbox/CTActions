@@ -79,7 +79,7 @@ token.
 | [`breakage.yml`](workflows/breakage.md) | `Breakage.yml` | Former version of `breakage-suite.yml`, kept until every caller has moved | label `run breakage` |
 | [`formatter.yml`](workflows/formatter.md) | `Formatter.yml` | JuliaFormatter (BlueStyle), as an automatic PR | no (nightly) |
 | [`spell-check.yml`](workflows/spell-check.md) | `SpellCheck.yml` | Spell check with `typos` | every PR |
-| [`release-gate.yml`](workflows/release-gate.md) | `ReleaseGate.yml` | The gate of a release PR: `REL1`–`REL7` (number, changelog, diff, something to release, run labels, General alone); a required check | every PR (passes at once when the version does not change) |
+| [`release-gate.yml`](workflows/release-gate.md) | `ReleaseGate.yml` | The gate of a release PR: `REL1`–`REL7` (number, changelog, diff, something to release, run labels, General alone, REL6 on every PR); required by `release.jl ready` before a release PR is merged | every PR (passes at once when the version does not change) |
 | [`release-tag.yml`](workflows/release-tag.md) | `ReleaseTag.yml` | Tag the merge commit of a release PR, create its GitHub release, run the documentation on the tag | push to `main` touching `Project.toml` |
 | [`compat-helper.yml`](workflows/compat-helper.md) | `CompatHelper.yml` | PRs widening `[compat]` to new releases | no (daily) |
 | [`update-readme.yml`](workflows/update-readme.md) | `UpdateReadme.yml` | Regenerate `README.md` from a template and the organization's shared texts | no (weekly) |
@@ -108,7 +108,6 @@ benchmarks: see [Workflows defined in a package](workflows/per-repo.md).
 | Page | Content |
 | --- | --- |
 | [Labels](conventions/labels.md) | Label-gated triggers: the `if:` guard, the `types:` list (no `opened`), the label vocabulary |
-| [Required checks](conventions/required-checks.md) | The checks of `main` a PR must pass, one aggregator per theme (`ci-ok`, `docs-ok`), the settings for auto-merge |
 | [Runners](conventions/runners.md) | GitHub-hosted and self-hosted runners: `occidata` (GPU on demand), `kkt`, `pinwheel`; the split CI |
 | [Secrets and registries](conventions/secrets.md) | Every secret, who uses it; `ct-registry` and `SSH_KEY` |
 | [GitHub App](conventions/github-app.md) | `control-toolbox-bot`: what it is, how to use it in a new workflow, how to extend it |

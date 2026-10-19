@@ -11,6 +11,10 @@
 #       REL4 alone: the package resolves from General alone
 #   julia release.jl tag-plan [DIR]
 #       what the release-tag workflow tags, as key=value lines
+#   julia release.jl ready --repo OWNER/REPO --pr N
+#       whether the release PR may be merged, from what actually ran on its head commit
+#   julia release.jl merge --repo OWNER/REPO --pr N [--confirm]
+#       merge it when ready, at the head checked (a dry run without --confirm)
 #   julia release.jl register --repo OWNER/REPO --version V [--post] [--on-commit]
 #       the registration comment of a stable (REL6): a dry run, the mention masked, unless
 #       --post; refused unless `status` says phase 7, todo; on the merge commit instead of
@@ -23,6 +27,7 @@
 include(joinpath(@__DIR__, "tag.jl"))
 include(joinpath(@__DIR__, "status.jl"))
 include(joinpath(@__DIR__, "register.jl"))
+include(joinpath(@__DIR__, "ready.jl"))
 
 "The value of the option `--name` in `args`, removed from it, or `default`."
 function option!(args, name, default=nothing)
@@ -46,6 +51,8 @@ const USAGE = """
            julia release.jl gate --base SHA [--labels "a,b"] [--text-file FILE] [DIR]
            julia release.jl registrable [--base BASE_PROJECT] PROJECT
            julia release.jl tag-plan [DIR]
+           julia release.jl ready --repo OWNER/REPO --pr N
+           julia release.jl merge --repo OWNER/REPO --pr N [--confirm]
            julia release.jl register --repo OWNER/REPO --version V [--post] [--on-commit]"""
 
 function release_main(args)
@@ -72,6 +79,18 @@ function release_main(args)
             return any(r -> r.status === :fail, results) ? 1 : 0
         elseif command == "registrable"
             return main(args)
+        elseif command in ("ready", "merge")
+            repo = option!(args, "repo")
+            pr = option!(args, "pr")
+            (repo === nothing || pr === nothing) && throw(ArgumentError("--repo and --pr are required"))
+            if command == "ready"
+                r = ready(repo, parse(Int, pr))
+                emit(ready_report(repo, parse(Int, pr), r))
+                return r.ready ? 0 : 1
+            end
+            ok, message = merge_release(repo, parse(Int, pr); confirm="--confirm" in args)
+            println(message)
+            return ok ? 0 : 1
         elseif command == "register"
             repo = option!(args, "repo")
             version = option!(args, "version")

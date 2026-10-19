@@ -519,6 +519,132 @@ failures(results) = [r.message for r in results if r.status === :fail]
         @test occursin("[c](https://github.com/o/P/blob/v1.0.0/docs/x.md)", b)
     end
 
+    @testset "ready and merge, on a fake GitHub" begin
+        gate_if(l) = "    if: >\n      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, '$l'))\n"
+        workflows = Dict(
+            "CI.yml" => "name: CI\non:\n  pull_request:\njobs:\n" *
+                        "  test-cpu-github:\n" * gate_if("run ci github-runner") * "    uses: x\n" *
+                        "  test-gpu-kkt:\n" * gate_if("run ci kkt-runner") * "    uses: x\n" *
+                        "  test-gpu-occidata:\n" * gate_if("run ci occidata-runner") * "    uses: x\n" *
+                        "  smoke:\n" * gate_if("run ci github-runner") * "    runs-on: ubuntu-latest\n" *
+                        "  # old:\n  #   if: contains(github.event.pull_request.labels.*.name, 'run old')\n",
+            "Documentation.yml" => "jobs:\n  call:\n" * gate_if("run documentation") * "    uses: x\n",
+            "Breakage.yml" => "jobs:\n  call:\n" * gate_if("run breakage") * "    uses: x\n",
+            "ReleaseGate.yml" => "on:\n  pull_request:\njobs:\n  call:\n    uses: x\n",
+            "SpellCheck.yml" => "jobs:\n  spell:\n    runs-on: ubuntu-latest\n")
+        good_runs() = [(1, "CI.yml", "completed", "skipped"), (2, "CI.yml", "completed", "success"),
+                       (3, "Documentation.yml", "completed", "success"), (4, "Breakage.yml", "completed", "success"),
+                       (5, "ReleaseGate.yml", "completed", "success"), (6, "SpellCheck.yml", "completed", "success")]
+        good_jobs() = Dict(
+            1 => [("test-cpu-github", "skipped"), ("test-gpu-kkt", "skipped"), ("test-gpu-occidata", "skipped"), ("smoke", "skipped")],
+            2 => [("test-cpu-github / test (1.10, ubuntu-latest, x64)", "success"), ("test-gpu-kkt / test (1.12)", "success"),
+                  ("test-gpu-occidata", "skipped"), ("smoke (ubuntu-latest)", "success")],
+            3 => [("call / build", "success"), ("call / build-gpu", "skipped")],
+            4 => [("call (CTModels, stable) / break", "success"), ("call / report", "success")],
+            5 => [("call / gate", "success")], 6 => [("spell", "success")])
+        good_labels = ["run ci github-runner", "run ci kkt-runner", "run documentation", "run breakage"]
+        function fake_github(; state="OPEN", draft=false, branch="release/v0.4.3", mergeable="MERGEABLE", behind=0,
+                             labels=good_labels, runs=good_runs(), jobs=good_jobs(), merge_ok=true)
+            merged = String[]
+            fake = function (args)
+                a = join(args, " ")
+                contains(a, "pr view") && return "$state\t$draft\tH\t$branch\t$mergeable\t$(join(labels, ","))\n"
+                contains(a, "compare/main...H") && return "$behind\n"
+                contains(a, "contents/.github/workflows?ref=H") && return join(sort(collect(keys(workflows))), "\n") * "\n"
+                m = match(r"contents/\.github/workflows/([^?]+)\?ref=H", a)
+                m !== nothing && return workflows[m[1]]
+                contains(a, "actions/runs?head_sha=H") &&
+                    return join(("$id\t.github/workflows/$f\t$st\t$c" for (id, f, st, c) in runs), "\n") * "\n"
+                m = match(r"actions/runs/(\d+)/jobs", a)
+                m !== nothing && return join(("$n\t$c" for (n, c) in get(jobs, parse(Int, m[1]), [])), "\n") * "\n"
+                if contains(a, "pr merge")
+                    push!(merged, a)
+                    return merge_ok ? "" : nothing
+                end
+                return nothing
+            end
+            return fake, merged
+        end
+        notready(r, pattern) = !r.ready && any(l -> l.status !== :pass && contains(l.message, pattern), r.lines)
+
+        # all green: ready; merge only with --confirm, at the head checked
+        fake, merged = fake_github()
+        with_gh(fake) do
+            r = ready("o/P", 2)
+            @test r.ready && r.head == "H" && all(l -> l.status === :pass, r.lines)
+            @test any(l -> contains(l.message, "`CI.yml`, run 2"), r.lines)          # not the skipped run 1
+            @test any(l -> contains(l.message, "`Documentation.yml`, run 3: 1 job(s)"), r.lines)   # build-gpu skipped is fine
+            ok, msg = merge_release("o/P", 2)
+            @test ok && isempty(merged) && contains(msg, "Dry run")
+            ok, msg = merge_release("o/P", 2; confirm=true)
+            @test ok && only(merged) == "pr merge 2 -R o/P --merge --match-head-commit H"
+        end
+        # the trap: a later run with every job skipped does not hide a failed run
+        jobs = good_jobs(); jobs[2] = [("test-cpu-github / test (1.10)", "failure"), ("test-gpu-kkt / test", "success"), ("smoke", "success")]
+        fake, merged = fake_github(runs=vcat(good_runs(), [(7, "CI.yml", "completed", "skipped")]), jobs=merge(jobs, Dict(7 => [("smoke", "skipped")])))
+        with_gh(fake) do
+            r = ready("o/P", 2)
+            @test notready(r, "`CI.yml`, run 2: `test-cpu-github / test (1.10)` did not pass")
+            @test !first(merge_release("o/P", 2; confirm=true)) && isempty(merged)
+        end
+        # a job whose label is on the PR was skipped in the run that counts
+        jobs = good_jobs(); jobs[2] = [("test-cpu-github / test", "success"), ("test-gpu-kkt", "skipped"), ("smoke", "success")]
+        fake, _ = fake_github(jobs=jobs)
+        with_gh(() -> @test(notready(ready("o/P", 2), "`test-gpu-kkt` did not run")), fake)
+        # GPU: occidata as the fallback is enough; no GPU label is not
+        jobs = good_jobs(); jobs[2] = [("test-cpu-github / test", "success"), ("test-gpu-kkt", "skipped"),
+                                       ("test-gpu-occidata / test", "success"), ("smoke", "success")]
+        fake, _ = fake_github(labels=["run ci github-runner", "run ci occidata-runner", "run documentation", "run breakage"], jobs=jobs)
+        with_gh(() -> @test(ready("o/P", 2).ready), fake)
+        fake, _ = fake_github(labels=["run ci github-runner", "run documentation", "run breakage"])
+        with_gh(() -> @test(notready(ready("o/P", 2), "no GPU label")), fake)
+        # a workflow whose label is missing: no run executed its jobs
+        runs = [r for r in good_runs() if r[2] != "Breakage.yml"]
+        fake, _ = fake_github(labels=["run ci github-runner", "run ci kkt-runner", "run documentation"],
+                              runs=vcat(runs, [(8, "Breakage.yml", "completed", "skipped")]))
+        with_gh(() -> @test(notready(ready("o/P", 2), "`Breakage.yml`: no run executed its jobs")), fake)
+        # a run in progress: wait
+        fake, _ = fake_github(runs=vcat(good_runs(), [(9, "CI.yml", "in_progress", "")]))
+        with_gh(fake) do
+            r = ready("o/P", 2)
+            @test notready(r, "`CI.yml`: a run is in progress")
+            @test contains(ready_report("o/P", 2, r), "⏳ wait")
+        end
+        # the gate failed; a check outside the release failed too
+        jobs = good_jobs(); jobs[5] = [("call / gate", "failure")]; jobs[6] = [("spell", "failure")]
+        fake, _ = fake_github(runs=[(i, f, st, i in (5, 6) ? "failure" : c) for (i, f, st, c) in good_runs()], jobs=jobs)
+        with_gh(fake) do
+            r = ready("o/P", 2)
+            @test notready(r, "`ReleaseGate.yml`") && notready(r, "`SpellCheck.yml`")
+        end
+        # no gate run at all
+        fake, _ = fake_github(runs=[r for r in good_runs() if r[2] != "ReleaseGate.yml"])
+        with_gh(() -> @test(notready(ready("o/P", 2), "`ReleaseGate.yml`: no run")), fake)
+        # the PR itself
+        for (kw, pattern) in ((; behind=2) => "2 commit(s) of `main` are missing", (; mergeable="CONFLICTING") => "conflicts",
+                              (; mergeable="UNKNOWN") => "still computing", (; draft=true) => "draft", (; state="MERGED") => "merged")
+            fake, _ = fake_github(; kw...)
+            with_gh(() -> @test(notready(ready("o/P", 2), pattern)), fake)
+        end
+        # merge: release PRs only; the head changed between the check and the merge
+        fake, merged = fake_github(branch="feature/x")
+        with_gh(fake) do
+            ok, msg = merge_release("o/P", 2; confirm=true)
+            @test !ok && isempty(merged) && contains(msg, "release PRs only")
+        end
+        fake, merged = fake_github(merge_ok=false)
+        with_gh(fake) do
+            ok, msg = merge_release("o/P", 2; confirm=true)
+            @test !ok && length(merged) == 1 && contains(msg, "refused")
+        end
+        # parsing
+        @test gated_jobs(workflows["CI.yml"]) == [("test-cpu-github", ["run ci github-runner"]), ("test-gpu-kkt", ["run ci kkt-runner"]),
+                                                  ("test-gpu-occidata", ["run ci occidata-runner"]), ("smoke", ["run ci github-runner"])]
+        @test gated_jobs("on:\n  push:\njobs:\n  a:\n    runs-on: x\nenv:\n  b:\n    c: 1\n") == [("a", String[])]
+        @test job_of("call / build", "call") && job_of("call (CTModels, stable) / break", "call") && job_of("smoke (ubuntu)", "smoke")
+        @test job_of("smoke", "smoke") && !job_of("call-gpu / build", "call") && !job_of("smoker", "smoke")
+    end
+
     @testset "registrable" begin
         @testset "applies" begin
             stable = Dict("version" => "1.2.0")
