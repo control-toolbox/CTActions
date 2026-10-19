@@ -1,9 +1,9 @@
 name: Release gate
 
 # The gate of a release pull request: REL1-REL7 of ct-conventions, checked on every PR by
-# scripts/release/release.jl, so that neither an agent nor a human can merge a release
-# that breaks a rule, as long as this job is a required check of `main`. A PR that does
-# not change the version is not a release, and passes at once.
+# scripts/release/release.jl. A release PR is merged by `release.jl merge`, which requires
+# this gate, and every job the release needs, to have actually run and passed on the head
+# commit. A PR that does not change the version is not a release, and passes at once.
 #
 # Checks, on every PR: the registration bot mentioned nowhere in the PR (REL6). On a
 # release PR: the number (a new triple, the suffix, breaking or not as the changelog says, the
