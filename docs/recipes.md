@@ -40,7 +40,7 @@
 ### Checklist
 
 - [ ] Created from `CTAppTemplate.jl`; `setup-repo` run and merged; `setup-repo.yml` removed.
-- [ ] Base set present (CI, Coverage, Documentation, Formatter, SpellCheck, CompatHelper, UpdateReadme, TagBot), plus AutoAssign and DocPreviewCleanup.
+- [ ] Base set present (CI, Coverage, Documentation, Formatter, SpellCheck, ReleaseGate, ReleaseTag, CompatHelper, UpdateReadme, TagBot), plus AutoAssign and DocPreviewCleanup.
 - [ ] `docs/make.jl` reads `DOCUMENTER_PUSH_PREVIEW`; the labels `run documentation` and `documentation push preview` exist.
 - [ ] `Breakage.yml` kept **iff** the repository has downstream consumers; matrix filled.
 - [ ] `AddToProject.yml` added **iff** tracked on the board.

@@ -1,0 +1,76 @@
+name: Release gate
+
+# The gate of a release pull request: REL1-REL7 of ct-conventions, checked on every PR by
+# scripts/release/release.jl, so that neither an agent nor a human can merge a release
+# that breaks a rule, as long as this job is a required check of `main`. A PR that does
+# not change the version is not a release, and passes at once.
+#
+# Checks, on every PR: the registration bot mentioned nowhere in the PR (REL6). On a
+# release PR: the number (a new triple, the suffix, breaking or not as the changelog says, the
+# expected one, a jump in General explained by betas), the changelog and BREAKING entries,
+# a diff limited to Project.toml, CHANGELOG.md and BREAKING.md, something to release since
+# the previous release (REL7), the run labels of the package's workflows (a label-gated
+# job without its label is skipped, and a skipped job passes), and for a stable, REL4: the
+# package resolves from General alone, on the lowest and the newest Julia (the CI uses
+# ct-registry, so it cannot see a bound only a beta satisfies). Report in the job summary.
+# See docs/workflows/release-gate.md.
+
+on:
+  workflow_call:
+    inputs:
+      julia_lowest:
+        description: 'The lowest Julia version REL4 resolves on'
+        required: false
+        type: string
+        default: '1.10'
+      ctactions_ref:
+        description: 'Ref of CTActions the script is checked out from'
+        required: false
+        type: string
+        default: main
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      # the merge of the PR into its base, with the whole history and the tags
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v6
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      # General only: no ct-registry, no SSH key
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ inputs.julia_lowest }}
+      - name: Add the General registry
+        run: julia --startup-file=no -e 'using Pkg; Pkg.Registry.add("General")'
+
+      - name: REL4 on the lowest Julia
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git show "$BASE_SHA:Project.toml" > "$RUNNER_TEMP/base.toml"
+          julia --startup-file=no .ctactions/scripts/release/release.jl registrable --base "$RUNNER_TEMP/base.toml" Project.toml
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+
+      - name: The gate, on the newest Julia
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" > "$RUNNER_TEMP/pr.md"
+          julia --startup-file=no .ctactions/scripts/release/release.jl gate --base "$BASE_SHA" --labels "$LABELS" --text-file "$RUNNER_TEMP/pr.md" .
