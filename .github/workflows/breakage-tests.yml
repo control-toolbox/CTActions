@@ -1,0 +1,36 @@
+name: Breakage tests
+
+# Self-test of the breakage report (scripts/breakage). Runs when the script or the suite
+# workflow change.
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/breakage/**'
+      - 'scripts/release/versions.jl'
+      - '.github/workflows/breakage-*.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/breakage/**'
+      - 'scripts/release/versions.jl'
+      - '.github/workflows/breakage-*.yml'
+  workflow_dispatch:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ['1.10', '1']
+    steps:
+      - uses: actions/checkout@v6
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: ${{ matrix.version }}
+      - name: Tests
+        run: julia --startup-file=no scripts/breakage/test/runtests.jl
