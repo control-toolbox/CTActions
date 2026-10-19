@@ -45,7 +45,8 @@ jobs:
 ```
 
 `labeled` and `unlabeled` are in the `types`: adding the missing label reruns the gate.
-The required check is `call / gate`.
+The required check is `call / gate`, with the others of
+[Required checks](../conventions/required-checks.md).
 
 ## Inputs
 

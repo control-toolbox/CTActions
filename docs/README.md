@@ -105,6 +105,7 @@ benchmarks: see [Workflows defined in a package](workflows/per-repo.md).
 | Page | Content |
 | --- | --- |
 | [Labels](conventions/labels.md) | Label-gated triggers: the `if:` guard, the `types:` list (no `opened`), the label vocabulary |
+| [Required checks](conventions/required-checks.md) | The checks of `main` a PR must pass, one aggregator per theme (`ci-ok`, `docs-ok`), the settings for auto-merge |
 | [Runners](conventions/runners.md) | GitHub-hosted and self-hosted runners: `occidata` (GPU on demand), `kkt`, `pinwheel`; the split CI |
 | [Secrets and registries](conventions/secrets.md) | Every secret, who uses it; `ct-registry` and `SSH_KEY` |
 | [GitHub App](conventions/github-app.md) | `control-toolbox-bot`: what it is, how to use it in a new workflow, how to extend it |
