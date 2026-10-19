@@ -2,7 +2,7 @@
 
 [← Workflows of control-toolbox](../README.md)
 
-Builds the package and runs its test suite over a Julia version × runner × architecture
+Builds the package and runs its test suite over a Julia version × runner
 matrix, on GitHub-hosted or self-hosted runners. Caller: `CI.yml`, in every package.
 
 ## Caller
@@ -45,7 +45,6 @@ forward-slash glob.
 | --- | --- | --- |
 | `versions` | `'["1.10","1.12","1.13"]'` | Julia versions (JSON array) |
 | `runs_on` | `'["ubuntu-latest","macos-latest","windows-latest"]'` | One matrix entry per element: a label, or a list of labels for a self-hosted runner (`'[["occidata"]]'`) |
-| `archs` | `'["x64"]'` | Julia architectures (on an Apple Silicon macOS runner the native `aarch64` is always used)  |
 | `runner_type` | `'github'` | `github` or `self-hosted`: selects the caching and test steps |
 | `use_ct_registry` | `false` | Add `ct-registry` (needs `SSH_KEY`) |
 | `test_args` | `''` | Forwarded to `Pkg.test` (e.g. `'GPU'`, `'cron'`, file globs) |
