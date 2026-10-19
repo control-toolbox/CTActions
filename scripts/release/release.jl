@@ -10,6 +10,9 @@
 #       REL4 alone: the package resolves from General alone
 #   julia release.jl tag-plan [DIR]
 #       what the release-tag workflow tags, as key=value lines
+#   julia release.jl register --repo OWNER/REPO --version V [--post]
+#       the registration comment of a stable (REL6): a dry run, the mention masked, unless
+#       --post; refused unless `status` says phase 7, todo
 #
 # The Markdown report goes to standard output, and to $GITHUB_STEP_SUMMARY when set. Exit
 # code: 0 ready (or nothing to do), 1 blocked, 2 usage error; `status` exits 1 when the
@@ -17,6 +20,7 @@
 
 include(joinpath(@__DIR__, "tag.jl"))
 include(joinpath(@__DIR__, "status.jl"))
+include(joinpath(@__DIR__, "register.jl"))
 
 "The value of the option `--name` in `args`, removed from it, or `default`."
 function option!(args, name, default=nothing)
@@ -39,7 +43,8 @@ const USAGE = """
     usage: julia release.jl status --repo OWNER/REPO [--version V]
            julia release.jl gate --base SHA [--labels "a,b"] [DIR]
            julia release.jl registrable [--base BASE_PROJECT] PROJECT
-           julia release.jl tag-plan [DIR]"""
+           julia release.jl tag-plan [DIR]
+           julia release.jl register --repo OWNER/REPO --version V [--post]"""
 
 function release_main(args)
     isempty(args) && (println(stderr, USAGE); return 2)
@@ -63,6 +68,14 @@ function release_main(args)
             return any(r -> r.status === :fail, results) ? 1 : 0
         elseif command == "registrable"
             return main(args)
+        elseif command == "register"
+            repo = option!(args, "repo")
+            version = option!(args, "version")
+            (repo === nothing || version === nothing) && throw(ArgumentError("--repo and --version are required"))
+            post = "--post" in args
+            ok, message = register(repo, VersionNumber(version); post)
+            println(message)
+            return ok ? 0 : 1
         elseif command == "tag-plan"
             p = tag_plan(isempty(args) ? "." : only(args))
             if p.tag === nothing

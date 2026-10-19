@@ -47,15 +47,23 @@ function facts(repo::AbstractString; version=nothing)
     v = VersionNumber(version)
     kind = isbeta(v) ? :beta : :stable
 
-    issue = let out = gh_strip("issue", "list", "-R", repo, "--label", "release", "--state", "all",
-                               "--search", "\"[RELEASE] v$v\" in:title", "--json", "number,state,title",
-                               "--jq", ".[] | select(.title == \"[RELEASE] v$v\") | \"\\(.number) \\(.state)\"")
-        out === nothing || isempty(out) ? nothing :
-            (x = split(first(split(out, '\n'))); (; number=parse(Int, x[1]), state=x[2]))
+    # the list, not the search: the search index lags behind a new issue by seconds or minutes
+    issues = let out = gh_strip("issue", "list", "-R", repo, "--label", "release", "--state", "all", "--limit", "500",
+                                "--json", "number,state,title",
+                                "--jq", ".[] | select(.title == \"[RELEASE] v$v\") | \"\\(.number) \\(.state)\"")
+        out === nothing || isempty(out) ? [] :
+            [(x = split(l); (; number=parse(Int, x[1]), state=x[2])) for l in split(out, '\n')]
     end
+    issue = isempty(issues) ? nothing : issues[1]
     mentions = issue === nothing ? 0 :
         parse(Int, something(gh_strip("issue", "view", string(issue.number), "-R", repo, "--json", "body,comments",
                                       "--jq", "[.body, .comments[].body] | map(select(test(\"$MENTION\"; \"i\"))) | length"), "0"))
+    # the bot's answers on the issue: the General PR it opened, or its error
+    answers = issue === nothing ? "" :
+        something(gh("issue", "view", string(issue.number), "-R", repo, "--json", "comments",
+                     "--jq", ".comments[] | select(.author.login == \"JuliaRegistrator\") | .body"), "")
+    bot_pr = match(r"JuliaRegistries/General/(?:pull/)?(\d+)", answers)
+    bot_error = !isempty(strip(answers)) && bot_pr === nothing ? first(split(strip(answers), '\n')) : nothing
     pr = let out = gh_strip("pr", "list", "-R", repo, "--head", "release/v$v", "--state", "all",
                             "--json", "number,state,mergeCommit,autoMergeRequest",
                             "--jq", ".[0] | select(. != null) | \"\\(.number) \\(.state) \\(.mergeCommit.oid // \"-\") \\(.autoMergeRequest != null)\"")
@@ -68,13 +76,17 @@ function facts(repo::AbstractString; version=nothing)
     registry = kind === :stable ? "General" : "ct-registry"
     registered = get(registry_versions(registry, name), v, nothing)
     general_pr = kind === :beta ? nothing :
+        bot_pr !== nothing ?
+        let n = bot_pr[1], st = gh_strip("pr", "view", n, "-R", "JuliaRegistries/General", "--json", "state", "--jq", ".state")
+            (; number=parse(Int, n), state=something(st, "OPEN"))
+        end :
         let out = gh_strip("pr", "list", "-R", "JuliaRegistries/General", "--state", "all",
                            "--search", "\"New version: $name v$v\" in:title", "--json", "number,state,title",
                            "--jq", ".[] | select(.title == \"New version: $name v$v\") | \"\\(.number) \\(.state)\"")
             out === nothing || isempty(out) ? nothing :
                 (x = split(first(split(out, '\n'))); (; number=parse(Int, x[1]), state=x[2]))
         end
-    return (; repo, name, version=v, kind, main_version, main_sha, issue, mentions, pr, tag, tag_tree,
+    return (; repo, name, version=v, kind, main_version, main_sha, issue, issues=length(issues), mentions, bot_error, pr, tag, tag_tree,
             release=release === nothing ? nothing : release == "true", registry, registered, general_pr)
 end
 
@@ -101,6 +113,7 @@ function phase(f)
             return (; phase=8, state=:todo, next="post the final comment and close #$(f.issue.number)", blockers=String[])
         return (; phase=8, state=:done, next="nothing: v$v is released", blockers=String[])
     end
+    get(f, :issues, 1) > 1 && return blocked(2, "$(f.issues) tracking issues `[RELEASE] v$v`: keep one, close the others")
     f.issue === nothing && f.pr === nothing && f.tag === nothing &&
         return (; phase=0, state=:todo, next="preflight, then the proposal: nothing of v$v exists yet", blockers=String[])
     f.issue === nothing && return blocked(2, "v$v has a PR or a tag but no tracking issue")
@@ -132,8 +145,13 @@ function phase(f)
             return blocked(7, "General's PR #$(f.general_pr.number) was closed without merge")
         return (; phase=7, state=:waiting, next="General merged #$(f.general_pr.number); wait for the registry to show v$v", blockers=String[])
     end
+    f.mentions > 1 &&
+        return blocked(7, "the bot is mentioned $(f.mentions) times on #$(f.issue.number) (REL6): a human checks what was registered")
+    get(f, :bot_error, nothing) !== nothing &&
+        return blocked(7, "the bot answered without a General PR: \"$(f.bot_error)\"; never post again: a human decides")
     f.mentions > 0 &&
-        return blocked(7, "the registration comment is posted ($(f.mentions)) but General has no PR: read the bot's answer; never post it again")
+        return (; phase=7, state=:waiting, next="the registration comment is posted: wait for the bot's answer (a minute), then rerun; never post it again",
+                blockers=String[])
     f.main_sha != f.pr.merge &&
         return blocked(7, "`main` ($(f.main_sha)) moved past the merge commit $(f.pr.merge): the bot would register another commit")
     return (; phase=7, state=:todo, next="post the registration comment, once, on #$(f.issue.number)", blockers=String[])

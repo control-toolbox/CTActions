@@ -65,31 +65,43 @@ julia scripts/release/release.jl status --repo control-toolbox/CTBase.jl [--vers
 julia scripts/release/release.jl gate --base <base sha> --labels "run breakage,run ci github-runner" <clone>
 julia scripts/release/release.jl registrable [--base base/Project.toml] Project.toml
 julia scripts/release/release.jl tag-plan <clone>
+julia scripts/release/release.jl register --repo control-toolbox/CTBase.jl --version 0.30.12 [--post]
 ```
 
 - **`status`** says where a release stands, from the facts only — the tracking issue and
   its registration mentions, the release PR and its merge commit, the tag and its tree,
-  the GitHub release, General's PR, the registries — and gives the phase of the
+  the GitHub release, General's PR, the registries, the bot's answer on the issue — and
+  gives the phase of the
   [release recipe](https://github.com/control-toolbox/ct-agents/blob/main/recipes/release.md),
   the next action and what blocks it. A session that stopped, a remote run or a human all
   resume from the same answer; nothing is remembered. It refuses what would break the
-  release: a tag on another commit than the merge, a registration comment already posted
-  with no General PR (never post it twice, `REL6`), `main` moved past the merge commit
-  before the registration, a registered tree that is not the tag's.
+  release: two tracking issues, a tag on another commit than the merge, an error answer of
+  the bot or two mentions (never post twice, `REL6`), `main` moved past the merge commit
+  before the registration, a registered tree that is not the tag's, a version registered
+  without tag. It reads lists, never GitHub's search, whose index lags behind a new issue.
 - **`gate`** is the table above.
 - **`registrable`** is `REL4` alone, also on a developer's machine: the other registries of
   the depot are ignored, and the report names the betas that satisfy a bound General
   cannot.
 - **`tag-plan`** is what [`release-tag.yml`](release-tag.md) tags.
+- **`register`** builds and posts the registration comment of a stable (`REL6`): the bot's
+  mention, the CHANGELOG entry (links made absolute at the tag) and the GitHub release's
+  notes. It refuses unless `status` says phase 7, todo — so never twice, never for a beta,
+  never once `main` has moved — and checks afterwards that the issue holds one mention.
+  Without `--post` it is a dry run, which shows the comment with the mention masked, so
+  that it can be pasted anywhere.
 
 Exit codes: 0 ready or nothing to do, 1 blocked, 2 usage error. Reports in Markdown, on
 standard output and in the job summary.
 
 ## Tests
 
-`scripts/release/test/runtests.jl`: unit tests on fakes (the registries, `gh`) and on
-throwaway git repositories (a package released, changed, then a release branch: every
-failure of the gate is produced and caught), integration tests against the local General.
+`scripts/release/test/runtests.jl`: unit tests on fakes (the registries, a GitHub whose
+state follows the comments posted) and on throwaway git repositories (a package released,
+changed, then a release branch: every failure of the gate is produced and caught); a
+property test, 2000 random histories of stables and betas, each number checked against
+`REL1`–`REL3`; integration tests against the local General. Mutating a rule (the fresh
+triple of `REL2`, the guard of `register`) makes them fail.
 `release-tests.yml` runs them on Julia 1.10, 1.12 and 1.13 whenever the scripts or the
 release workflows change. The tool calls internals of Pkg
 (`Pkg.Operations.resolve_versions!`, `Pkg.Registry.registry_info`, whose signature changed

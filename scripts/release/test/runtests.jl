@@ -289,8 +289,13 @@ failures(results) = [r.message for r in results if r.status === :fail]
         p = phase(at())
         @test p.phase == 7 && p.state === :todo && contains(p.next, "once")
         # REL6: posted, no General PR: never again
+        # REL6: posted, no answer yet: wait, never post again
         p = phase(at(mentions=1))
-        @test p.state === :blocked && contains(only(p.blockers), "never post it again")
+        @test p.state === :waiting && contains(p.next, "never post it again")
+        p = phase(at(mentions=1, bot_error="Error while trying to register: the tag exists"))
+        @test p.state === :blocked && contains(only(p.blockers), "the tag exists")
+        @test phase(at(mentions=2)).state === :blocked
+        @test phase(at(issues=2)).state === :blocked                        # duplicate tracking issues
         @test phase(at(main_sha="N")).state === :blocked                    # main moved past the merge
         @test phase(at(mentions=1, general_pr=(; number=9, state="OPEN"))).state === :waiting
         @test phase(at(mentions=1, general_pr=(; number=9, state="CLOSED"))).state === :blocked
@@ -318,6 +323,161 @@ failures(results) = [r.message for r in results if r.status === :fail]
                 @test phase(f).phase == 3
             end
         end
+    end
+
+    @testset "facts and register, on a fake GitHub" begin
+        changelog_text = changelog("0.4.3" => "### 🐛 Bug Fixes\n\n- a fix. See [BREAKING.md](BREAKING.md) and [#1](https://x/1).")
+        "A GitHub at phase 7 of `P` v0.4.3, whose state the fake updates when a comment is posted."
+        function github(; mentions=0, answers="", main="M", kind_version="0.4.3", issues=["7 OPEN"])
+            st = Dict(:mentions => mentions, :posted => String[])
+            fake = function (args)
+                a = join(args, " ")
+                contains(a, "contents/Project.toml") && return "name = \"P\"\nversion = \"$kind_version\"\n"
+                contains(a, "contents/CHANGELOG.md") && return changelog_text
+                contains(a, "commits/main") && return "$main\n"
+                contains(a, "issue list") && return join(issues, "\n")
+                contains(a, "issue view") && contains(a, "body,comments") && return "$(st[:mentions])\n"
+                contains(a, "issue view") && return answers
+                contains(a, "pr list -R o/P") && return "2 MERGED M true\n"
+                contains(a, "commits/v") && contains(a, "tree") && return "T\n"
+                contains(a, "commits/v") && return "M\n"
+                contains(a, "release view") && contains(a, "isPrerelease") && return "$(occursin("beta", kind_version))\n"
+                contains(a, "release view") && return "## What's Changed\n* fix by @a in #1\n"
+                contains(a, "pr list -R JuliaRegistries/General") && return ""
+                contains(a, "pr view") && return "MERGED\n"
+                if contains(a, "issue comment")
+                    push!(st[:posted], read(args[findfirst(==("--body-file"), args) + 1], String))
+                    st[:mentions] += 1
+                    return "https://github.com/o/P/issues/7#issuecomment-1\n"
+                end
+                return nothing
+            end
+            return fake, st
+        end
+        with_registries(Dict("General" => Dict("P" => ["0.4.2"]))) do
+            fake, st = github()
+            with_gh(fake) do
+                f = facts("o/P"; version="0.4.3")
+                @test f.issue == (; number=7, state="OPEN") && f.issues == 1 && f.mentions == 0
+                @test phase(f).phase == 7 && phase(f).state === :todo
+                # dry run: nothing posted, the mention masked
+                ok, msg = register("o/P", v"0.4.3")
+                @test ok && isempty(st[:posted])
+                @test !occursin(MENTION, msg) && occursin("<the registration bot's mention> register", msg)
+                # posted once, then refused
+                ok, msg = register("o/P", v"0.4.3"; post=true)
+                @test ok && length(st[:posted]) == 1
+                body = only(st[:posted])
+                @test startswith(body, MENTION * " register\n\nRelease notes:\n")
+                @test count(MENTION, body) == 1
+                @test occursin("](https://github.com/o/P/blob/v0.4.3/BREAKING.md)", body)   # made absolute
+                @test occursin("[#1](https://x/1)", body)                                    # left as is
+                @test occursin("## What's Changed", body)
+                ok, msg = register("o/P", v"0.4.3"; post=true)
+                @test !ok && length(st[:posted]) == 1 && occursin("not ready", msg)
+            end
+            # main moved past the merge: refused
+            fake, st = github(main="N")
+            with_gh(fake) do
+                ok, msg = register("o/P", v"0.4.3"; post=true)
+                @test !ok && isempty(st[:posted]) && occursin("moved past the merge", msg)
+            end
+            # the bot answered: the General PR is read from its answer, not from the search
+            fake, st = github(mentions=1, answers="Registration pull request created: [JuliaRegistries/General/172378](https://github.com/JuliaRegistries/General/pull/172378)\n")
+            with_gh(fake) do
+                f = facts("o/P"; version="0.4.3")
+                @test f.general_pr == (; number=172378, state="MERGED") && f.bot_error === nothing
+            end
+            fake, st = github(mentions=1, answers="Error while trying to register: Version 0.4.3 already exists\n")
+            with_gh(fake) do
+                f = facts("o/P"; version="0.4.3")
+                @test f.general_pr === nothing && contains(f.bot_error, "already exists")
+                @test phase(f).state === :blocked
+                @test !first(register("o/P", v"0.4.3"; post=true)) && isempty(st[:posted])
+            end
+            # two tracking issues for the same version
+            fake, st = github(issues=["7 OPEN", "8 OPEN"])
+            with_gh(fake) do
+                @test phase(facts("o/P"; version="0.4.3")).state === :blocked
+            end
+        end
+        # a beta is never registered with the bot
+        with_registries(Dict("ct-registry" => Dict("P" => ["0.4.2"]))) do
+            fake, st = github(kind_version="0.4.3-beta")
+            with_gh(fake) do
+                ok, msg = register("o/P", v"0.4.3-beta"; post=true)
+                @test !ok && isempty(st[:posted]) && occursin("ct-registry", msg)
+            end
+        end
+        @test_throws ArgumentError registration_body(changelog_text, v"9.9.9", "o/P", "")
+    end
+
+    @testset "properties of the numbering (random histories)" begin
+        # Random sequences of releases; each new number must satisfy REL1-REL3 whatever
+        # came before. A stable's changes are those since the last stable, betas included.
+        rng_state = Ref(UInt64(20261019))
+        rnd() = (rng_state[] = rng_state[] * 6364136223846793005 + 1442695040888963407; rng_state[] >> 33)
+        chance(p) = rnd() % 1000 < p * 1000
+        checked = 0
+        for history in 1:2000
+            released = [rnd() % 2 == 0 ? v"0.4.2" : v"1.2.0"]
+            general = [released[1]]
+            betas = VersionNumber[]
+            breaking_since_stable = false
+            for step in 1:20
+                kind = chance(0.4) ? :beta : :stable
+                breaking = chance(0.15)
+                feature = chance(0.4)
+                stable_ref = maximum(filter(isstable, released))
+                cum = breaking || (kind === :stable && breaking_since_stable)
+                v = expected_version(kind, released; breaking=cum, feature)
+                @test v !== nothing                          # cumulative breaking always fits
+                v === nothing && break
+                @test allowed_suffix(v) && isbeta(v) == (kind === :beta)
+                @test triple(v) > maximum(triple, released)  # REL2: a fresh triple
+                ref = kind === :stable ? stable_ref : maximum(released)
+                @test is_breaking(ref, v) == cum             # REL1: breaking exactly when it is
+                if kind === :stable
+                    @test jump(maximum(general), v, betas) !== :unexplained   # REL3
+                    push!(general, v); breaking_since_stable = false
+                else
+                    push!(betas, v); breaking_since_stable |= breaking
+                end
+                push!(released, v)
+                checked += 1
+            end
+        end
+        @test checked == 40000
+    end
+
+    @testset "edge cases" begin
+        # REL7: test-only entries of Project.toml do not make a release; dependencies do
+        p = Dict("deps" => Dict("A" => "u"), "compat" => Dict("A" => "1", "julia" => "1.10"),
+                 "extras" => Dict("Test" => "t"), "targets" => Dict("test" => ["Test"]))
+        q = merge(p, Dict("extras" => Dict("Test" => "t", "Aqua" => "a"), "compat" => Dict("A" => "1", "julia" => "1.10", "Aqua" => "0.8")))
+        @test isempty(shipped(String[], p, q))
+        @test shipped(String[], p, merge(p, Dict("compat" => Dict("A" => "1, 2", "julia" => "1.10")))) == ["Project.toml"]
+        @test shipped(String[], p, merge(p, Dict("compat" => Dict("A" => "1", "julia" => "1.11")))) == ["Project.toml"]
+        @test shipped(String[], p, merge(p, Dict("weakdeps" => Dict("B" => "b")))) == ["Project.toml"]
+        # a commented-out guard requires no label
+        mktempdir() do d
+            write(joinpath(d, "CI.yml"), "# if: contains(github.event.pull_request.labels.*.name, 'run old')\n" *
+                                         "  if: contains(github.event.pull_request.labels.*.name, 'run ci github-runner')\n")
+            write(joinpath(d, "Old.yml.disabled"), "contains(github.event.pull_request.labels.*.name, 'run gpu')\n")
+            @test run_labels(d) == Set(["run ci github-runner"])
+        end
+        # the reference section missing from the changelog: stop at the first older one
+        c = changelog("0.4.4" => "- x.", "0.4.1" => "### 💥 Breaking Changes\n\n- old.")
+        @test changes_since(c, v"0.4.2") == (; breaking=false, feature=false, versions=["Unreleased", "0.4.4"])
+        # versions going down, or a triple already taken by a stable, are refused
+        with_registries(Dict("General" => Dict("Pkg" => ["0.4.2", "0.4.3"]))) do
+            dir, base = package_repo()
+            @test any(contains("not above every version released"), failures(gate(dir, base; labels=["run ci github-runner"], resolution=false)))
+        end
+        # registration_body keeps a link already absolute, an anchor, a mail
+        b = registration_body(changelog("1.0.0" => "- [a](#x) [b](mailto:m@x) [c](docs/x.md) [d](http://e)"), v"1.0.0", "o/P", "")
+        @test occursin("[a](#x)", b) && occursin("[b](mailto:m@x)", b) && occursin("[d](http://e)", b)
+        @test occursin("[c](https://github.com/o/P/blob/v1.0.0/docs/x.md)", b)
     end
 
     @testset "registrable" begin
