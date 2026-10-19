@@ -79,7 +79,7 @@ token.
 | [`formatter.yml`](workflows/formatter.md) | `Formatter.yml` | JuliaFormatter (BlueStyle), as an automatic PR | no (nightly) |
 | [`spell-check.yml`](workflows/spell-check.md) | `SpellCheck.yml` | Spell check with `typos` | every PR |
 | [`release-gate.yml`](workflows/release-gate.md) | `ReleaseGate.yml` | The gate of a release PR: `REL1`–`REL7` (number, changelog, diff, something to release, run labels, General alone); a required check | every PR (passes at once when the version does not change) |
-| [`release-tag.yml`](workflows/release-tag.md) | `ReleaseTag.yml` | Tag the merge commit of a release PR and create its GitHub release, as the organization's App | push to `main` touching `Project.toml` |
+| [`release-tag.yml`](workflows/release-tag.md) | `ReleaseTag.yml` | Tag the merge commit of a release PR, create its GitHub release, run the documentation on the tag | push to `main` touching `Project.toml` |
 | [`compat-helper.yml`](workflows/compat-helper.md) | `CompatHelper.yml` | PRs widening `[compat]` to new releases | no (daily) |
 | [`update-readme.yml`](workflows/update-readme.md) | `UpdateReadme.yml` | Regenerate `README.md` from a template and the organization's shared texts | no (weekly) |
 | [`auto-assign.yml`](workflows/auto-assign.md) | `AutoAssign.yml` | Assign new issues and PRs to a maintainer | on open |
