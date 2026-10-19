@@ -19,12 +19,14 @@ at once, saying so. Cheap and GitHub-hosted: no label.
 | `REL2` | the suffix is none or `-beta`; the triple is above every version in General, ct-registry and the tags |
 | `REL5` | the tag `vX.Y.Z` does not exist yet |
 | `REL1` | the bump is breaking exactly when the changelog since the reference (the last stable for a stable, the last release for a beta) has a `💥 Breaking Changes` section; the version is the one REL1 and REL2 give |
-| `REL3` | for a stable, a jump in General is explained by betas (then reported: `[merge approved]` will be needed), else fails |
+| `REL3` | for a stable, a jump in General is explained by betas (then reported: `[merge approved]` will be needed), else fails. `status` reads the same jump from the registries and mentions `[merge approved]` on General's PR only then |
 | `CHG2` | the entry `## [X.Y.Z] - YYYY-MM-DD` is the first one, under an empty `[Unreleased]`, with its `✅ Compatibility` subsection |
 | `CHG3`, `CHG4` | `BREAKING.md` has a `##` entry naming the version |
 | — | the PR changes `Project.toml`, `CHANGELOG.md`, `BREAKING.md` only, and only the version in `Project.toml` |
+| — | the release files hold no replacement character (U+FFFD) and are valid UTF-8: a broken encoding, which an editing tool can leave in a heading, fails |
 | `REL7` | since the tag of the reference, something reaches a user: `src/`, `ext/`, `docs/`, or `Project.toml` beyond the version |
 | — | the PR has every run label of the package's workflows (one GPU label is enough: `kkt` or `occidata`; `run probe` is not needed): a label-gated job without its label is *skipped*, and a skipped job reports success. In the workflow this line is ℹ️, never ❌: the gate runs once per label added, so its first runs see some labels only; `release.jl ready` requires every gated job to have run. Locally (`--labels` without `--labels-info`) a missing label fails |
+| — | for a package with a `Documentation.yml`, the label `documentation push preview` is on the PR; ℹ️ when it is not (the workflows do not require it, but without it no preview is deployed) |
 | `REL4` | a stable resolves from General alone, weak dependencies included, on the lowest Julia (`julia_lowest`) and the newest |
 
 The packages' CI uses ct-registry (`use_ct_registry: true`), so it passes with a bound

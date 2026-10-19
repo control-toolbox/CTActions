@@ -202,6 +202,20 @@ failures(results) = [r.message for r in results if r.status === :fail]
             @test isempty(failures(r))
             @test any(x -> x.status === :info && contains(x.message, "labels not on the PR at this event: run ci github-runner"), r)
             @test any(x -> x.status === :pass && contains(x.message, "run labels"), gate(dir, base; labels, resolution=false, labels_info=true))
+            # a broken encoding in a release file (a replacement character, or invalid UTF-8)
+            for bad in ("\ufffd", "\xff")
+                d2, b2 = package_repo()
+                write(joinpath(d2, "CHANGELOG.md"), read(joinpath(d2, "CHANGELOG.md"), String) * bad)
+                @test any(contains("replacement character"), failures(gate(d2, b2; labels, resolution=false)))
+            end
+            @test any(contains("no broken encoding"), [r.message for r in gate(dir, base; labels, resolution=false)])
+            # the preview label: reported for a package with a Documentation.yml, never a failure
+            d2, b2 = package_repo(after="mkdir -p src && echo '# fix' >> src/Pkg.jl && echo 'name: Documentation' > .github/workflows/Documentation.yml")
+            r = gate(d2, b2; labels, resolution=false)
+            @test isempty(failures(r)) && any(x -> x.status === :info && contains(x.message, "documentation push preview"), r)
+            r = gate(d2, b2; labels=[labels; "documentation push preview"], resolution=false)
+            @test isempty(failures(r)) && !any(x -> contains(x.message, "documentation push preview"), r)
+            @test !any(x -> contains(x.message, "documentation push preview"), gate(dir, base; labels, resolution=false))   # no Documentation.yml
             # a breaking number without a breaking entry, and not the expected one
             dir, base = package_repo(version="0.5.0")
             f = failures(gate(dir, base; labels, resolution=false))
@@ -321,6 +335,11 @@ failures(results) = [r.message for r in results if r.status === :fail]
         @test p.state === :todo && p.on_commit && contains(p.next, "--on-commit")
         @test !phase(at()).on_commit
         @test phase(at(mentions=1, general_pr=(; number=9, state="OPEN"))).state === :waiting
+        # a jump of version is mentioned only when there is one (REL3)
+        wait7(j) = phase(at(mentions=1, general_pr=(; number=9, state="OPEN"), jump=j)).next
+        @test !contains(wait7(:none), "merge approved") && contains(wait7(:betas), "`[merge approved]` is needed")
+        @test contains(wait7(:unexplained), "a human decides") && !contains(wait7(:unexplained), "merge approved")
+        @test !contains(phase(at(mentions=1, general_pr=(; number=9, state="OPEN"))).next, "merge approved")   # facts without a jump
         @test phase(at(mentions=1, general_pr=(; number=9, state="CLOSED"))).state === :blocked
         @test phase(at(registered="T")).phase == 8
         @test phase(at(registered="T", issue=(; number=1, state="CLOSED"))).state === :done
@@ -385,11 +404,29 @@ failures(results) = [r.message for r in results if r.status === :fail]
             end
             return fake, st
         end
+        # a jump in General that betas explain (REL3), as `status` sees it
+        with_registries(Dict("General" => Dict("P" => ["0.4.2"]), "ct-registry" => Dict("P" => ["0.4.4-beta"]))) do
+            fake, _ = github()
+            with_gh(fake) do
+                @test facts("o/P"; version="0.4.5").jump === :betas
+                @test facts("o/P"; version="0.4.3").jump === :none
+                @test facts("o/P"; version="0.4.9").jump === :unexplained
+                @test facts("o/P"; version="0.4.5-beta").jump === :none          # a beta has no jump
+            end
+        end
+        # once registered, the version is in General: the jump is still read against the versions before it
+        with_registries(Dict("General" => Dict("P" => ["0.4.2", "0.4.5"]), "ct-registry" => Dict("P" => ["0.4.4-beta"]))) do
+            fake, _ = github()
+            with_gh(fake) do
+                @test facts("o/P"; version="0.4.5").jump === :betas
+            end
+        end
         with_registries(Dict("General" => Dict("P" => ["0.4.2"]))) do
             fake, st = github()
             with_gh(fake) do
                 f = facts("o/P"; version="0.4.3")
                 @test f.issue == (; number=7, state="OPEN") && f.issues == 1 && f.mentions == 0
+                @test f.jump === :none
                 @test phase(f).phase == 7 && phase(f).state === :todo
                 # dry run: nothing posted, the mention masked
                 ok, msg = register("o/P", v"0.4.3")

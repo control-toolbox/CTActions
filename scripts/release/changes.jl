@@ -61,6 +61,9 @@ const GPU_LABELS = ("run ci kkt-runner", "run ci occidata-runner")
 "The run labels a release does not need: diagnostics that gate nothing."
 const OPTIONAL_LABELS = ("run probe",)
 
+"The label that makes the documentation workflow deploy a preview of the PR."
+const PREVIEW_LABEL = "documentation push preview"
+
 """
     missing_labels(expected, present) -> Vector{String}
 
