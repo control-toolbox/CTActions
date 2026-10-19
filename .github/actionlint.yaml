@@ -1,0 +1,10 @@
+# Configuration of actionlint (lint-workflows.yml). The labels of the organization's
+# self-hosted runners, see docs/conventions/runners.md.
+self-hosted-runner:
+  labels:
+    - gpu
+    - cuda
+    - amdgpu
+    - kkt
+    - occidata
+    - pinwheel

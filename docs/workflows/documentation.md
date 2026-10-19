@@ -50,8 +50,8 @@ jobs:
 | --- | --- |
 | `SSH_KEY` | for `ct-registry` |
 
-The deployment uses `GITHUB_TOKEN`; `DOCUMENTER_KEY` is read but not declared (see the
-note in [Secrets](../conventions/secrets.md)).
+The deployment uses `GITHUB_TOKEN`. `DOCUMENTER_KEY` is declared as an optional secret;
+no caller passes it today (see the note in [Secrets](../conventions/secrets.md)).
 
 ## PR previews
 

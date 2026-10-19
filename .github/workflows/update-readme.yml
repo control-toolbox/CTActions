@@ -86,7 +86,7 @@ jobs:
 
           BADGES_LINE=$(grep '<!-- INCLUDE_BADGES:' README.tmp3.md || echo "")
           if [ -n "$BADGES_LINE" ]; then
-            BADGES_LIST=$(echo $BADGES_LINE | sed 's|.*: \(.*\) -->|\1|' | sed 's|,| |g')
+            BADGES_LIST=$(echo "$BADGES_LINE" | sed 's|.*: \(.*\) -->|\1|' | sed 's|,| |g')
             {
               echo "| **Category** | **Badge** |"
               echo "|-----------------------|-----------|"
@@ -144,28 +144,28 @@ jobs:
           OUTPUT_FILE="${{ inputs.output_file }}"
           echo "🔎 Checking git-tracked changes for $OUTPUT_FILE and CONTRIBUTING.md..."
 
-          # Vérifie si CONTRIBUTING.md existait dans le repo avant le workflow
+          # Was CONTRIBUTING.md in the repository before this workflow?
           if ! git ls-files --error-unmatch CONTRIBUTING.md >/dev/null 2>&1; then
             echo "⚠️ CONTRIBUTING.md did not exist in the repo before. Will create PR."
             git add "$OUTPUT_FILE" CONTRIBUTING.md
-            echo "changed=true" >> $GITHUB_OUTPUT
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           else
-            # Ajoute les fichiers modifiés ou remplacés
+            # Stage the modified or replaced files
             git add "$OUTPUT_FILE" CONTRIBUTING.md
 
             if git diff --cached --quiet; then
               echo "✅ No changes detected in README or CONTRIBUTING.md."
-              echo "changed=false" >> $GITHUB_OUTPUT
+              echo "changed=false" >> "$GITHUB_OUTPUT"
             else
               echo "⚠️ Changes detected in README or CONTRIBUTING.md!"
               git diff --cached --name-only
-              echo "changed=true" >> $GITHUB_OUTPUT
+              echo "changed=true" >> "$GITHUB_OUTPUT"
             fi
           fi
 
       - name: 📅 Get current date
         id: date
-        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+        run: echo "date=$(date +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
 
       - name: 📨 Create Pull Request if changes detected
         if: steps.check.outputs.changed == 'true'

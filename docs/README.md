@@ -89,6 +89,7 @@ token.
 | --- | --- | --- |
 | [`compat-prune-monthly.yml`](workflows/compat-prune.md) | The organization's `[compat]` prune (logic: reusable `compat-prune.yml`): one PR per repository, one tracking issue in CTActions | monthly (1st, 04:00 UTC), by hand |
 | [`compat-prune-tests.yml`](workflows/compat-prune.md#tests) | Self-test of the prune: its test suite, then a real dry-run audit | PR or push touching it, by hand |
+| `lint-workflows.yml` | actionlint on every workflow (expressions, inputs and secrets of reusable workflows, runner labels from `.github/actionlint.yaml`, shellcheck on `run:` scripts) | PR or push touching `.github/`, by hand |
 | [`occidata-runner-maintenance.yml`](workflows/occidata-runner-maintenance.md) | Clean the `occidata` self-hosted runner (git config, caches, logs, TeXLive) | weekly (Mon 02:30 UTC), by hand |
 | [`occidata-runner-watchdog.yml`](workflows/occidata-runner-watchdog.md) | Restart, over SSH, the `occidata` runner jobs that stopped | daily (03:15 UTC), by hand |
 

@@ -70,7 +70,7 @@ jobs:
           PKG_SRC_PATH=$(pwd)
           PKG_SRC_NAME=$(basename "$PKG_SRC_PATH" .jl)
 
-          git clone --depth 1 https://github.com/$URL repo
+          git clone --depth 1 "https://github.com/$URL" repo
           cd repo
 
           # Checkout the version to test
@@ -112,6 +112,8 @@ jobs:
           export joburl="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           export outfile="../breakage/breakage-${{ inputs.pkgname }}-${{ inputs.pkgversion }}"
 
+          # the single-quoted program is Julia: $(…) in it is Julia's interpolation
+          # shellcheck disable=SC2016
           julia -e '
             using Pkg
             TAG, VERSION, PKG_SRC_VERSION, BREAK, joburl =

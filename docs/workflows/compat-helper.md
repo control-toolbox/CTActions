@@ -30,10 +30,9 @@ jobs:
 | --- | --- | --- |
 | `subdirs` | `'["", "docs", "test"]'` | Directories whose `Project.toml` is checked (`""` is the package itself) |
 
-No secrets are declared: it runs with `GITHUB_TOKEN` (the workflow requests
-`contents: write` and `pull-requests: write`). `COMPATHELPER_PRIV` is set from
-`DOCUMENTER_KEY`, which is empty unless the caller passes `secrets: inherit` (see
-[Secrets](../conventions/secrets.md)). As with any PR opened by `GITHUB_TOKEN`, label the
+It runs with `GITHUB_TOKEN` (the workflow requests `contents: write` and
+`pull-requests: write`). `COMPATHELPER_PRIV` is set from the optional secret
+`DOCUMENTER_KEY`, which no caller passes today (see [Secrets](../conventions/secrets.md)). As with any PR opened by `GITHUB_TOKEN`, label the
 PR to run the checks.
 
 ## Widening, then pruning

@@ -7,6 +7,10 @@ on:
         required: false
         type: string
         default: '["", "docs", "test"]'
+    secrets:
+      DOCUMENTER_KEY:
+        description: 'SSH key for CompatHelper (COMPATHELPER_PRIV); optional: callers pass none today'
+        required: false
 
 permissions:
   contents: write
