@@ -61,7 +61,9 @@ jobs:
         uses: julia-actions/setup-julia@latest
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
+          # macOS runners are Apple Silicon: an x64 Julia runs under Rosetta, and some
+          # binary dependencies (e.g. KNITRO_jll) have no macOS x64 build.
+          arch: ${{ (runner.os == 'macOS' && runner.arch == 'ARM64') && 'aarch64' || matrix.arch }}
 
       # ---------------------------
       # Julia caching (conditional based on runner type)
