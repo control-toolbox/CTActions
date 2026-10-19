@@ -59,6 +59,10 @@ function verdict(cells, baseline; expected::Int, base_version=nothing, head_vers
     for c in already
         push!(lines, "ℹ️ $(c["name"]) ($(c["break"])) already fails on the base: says nothing about the release")
     end
+    for c in cells
+        c["version"] == "stable" && !haskey(before, key(c)) &&
+            push!(lines, "ℹ️ $(c["name"]) ($(c["break"])) has no result on the base (a new target): not compared")
+    end
     if isempty(broken)
         push!(lines, "✅ no downstream release broken by `$base_version` → `$head_version`")
     elseif breaking
