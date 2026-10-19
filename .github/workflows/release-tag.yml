@@ -7,30 +7,33 @@ name: Release tag
 # pre-release. Nothing to do otherwise; a rerun after a failure does what is left, never
 # twice. Plan: scripts/release/release.jl tag-plan.
 #
-# The tag is created as the organization's GitHub App, so that the workflows reacting to
-# tags (the documentation of the stable version) run: a tag made with GITHUB_TOKEN would
-# trigger nothing. See docs/workflows/release-tag.md.
+# A tag created with GITHUB_TOKEN triggers no workflow, but GITHUB_TOKEN may dispatch one:
+# the job then runs the documentation workflow on the tag (Documenter deploys a tag on
+# `workflow_dispatch`), so the documentation of the version is published without any
+# other credential. The caller grants `contents: write` and `actions: write`. See
+# docs/workflows/release-tag.md.
 
 on:
   workflow_call:
     inputs:
+      documentation_workflow:
+        description: 'The workflow file that builds the documentation, run on the new tag; empty: none'
+        required: false
+        type: string
+        default: Documentation.yml
       ctactions_ref:
         description: 'Ref of CTActions the script is checked out from'
         required: false
         type: string
         default: main
-    secrets:
-      CT_APP_CLIENT_ID:
-        required: true
-      CT_APP_PRIVATE_KEY:
-        required: true
 
 jobs:
   tag:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
-      contents: read          # the App token does the writing
+      contents: write         # the tag and the GitHub release
+      actions: write          # the documentation workflow, dispatched on the tag
     concurrency:
       group: release-tag-${{ github.repository }}
       cancel-in-progress: false
@@ -55,20 +58,11 @@ jobs:
         run: |
           julia --startup-file=no .ctactions/scripts/release/release.jl tag-plan . | tee -a "$GITHUB_OUTPUT"
 
-      - uses: actions/create-github-app-token@v3
-        if: steps.plan.outputs.tag != ''
-        id: app
-        with:
-          client-id: ${{ secrets.CT_APP_CLIENT_ID }}
-          private-key: ${{ secrets.CT_APP_PRIVATE_KEY }}
-          owner: control-toolbox
-          repositories: ${{ github.event.repository.name }}
-          permission-contents: write
-
       - name: Tag and release
         if: steps.plan.outputs.tag != ''
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
+          DOC: ${{ inputs.documentation_workflow }}
           TAG: ${{ steps.plan.outputs.tag }}
           TARGET: ${{ steps.plan.outputs.target }}
           PREVIOUS: ${{ steps.plan.outputs.previous }}
@@ -78,10 +72,15 @@ jobs:
           [ -n "$PREVIOUS" ] && args+=(--notes-start-tag "$PREVIOUS")
           if [ "$PRERELEASE" = true ]; then args+=(--prerelease); else args+=(--latest); fi
           gh release create "$TAG" "${args[@]}"
+          docs="no documentation workflow"
+          if [ -n "$DOC" ] && [ -f ".github/workflows/$DOC" ]; then
+            gh workflow run "$DOC" --repo "$GITHUB_REPOSITORY" --ref "$TAG"
+            docs="$DOC dispatched on $TAG"
+          fi
           {
             echo "## Release tag — $TAG"
             echo
-            echo "Tagged $TARGET; notes since ${PREVIOUS:-the beginning}; $( [ "$PRERELEASE" = true ] && echo pre-release || echo latest )."
+            echo "Tagged $TARGET; notes since ${PREVIOUS:-the beginning}; $( [ "$PRERELEASE" = true ] && echo pre-release || echo latest ); $docs."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Nothing to tag

@@ -17,15 +17,19 @@ On a push to `main` touching `Project.toml`, or by hand:
 2. `gh release create vX.Y.Z --target <commit> --generate-notes`, with the notes since the
    previous **stable** for a stable (`--notes-start-tag`), since the previous release for a
    beta; a stable is `--latest`, a beta `--prerelease`.
+3. The documentation workflow (`documentation_workflow`, `Documentation.yml` by default)
+   is dispatched on the tag, so the documentation of the version is deployed.
 
 A rerun does what is left and never tags twice. TagBot, later, finds the tag of a stable
 already there.
 
-**As the organization's App.** A tag created with `GITHUB_TOKEN` triggers no workflow, so
-the documentation of the stable version would not deploy. The job mints a token of
-[`control-toolbox-bot`](../conventions/github-app.md) for the repository, with
-`contents: write` only; the App's secrets must be visible to the package (organization
-settings, see [Extending it](../conventions/github-app.md#extending-it)).
+**No credential but `GITHUB_TOKEN`.** A tag created with `GITHUB_TOKEN` triggers no
+workflow, but `GITHUB_TOKEN` may dispatch one: the documentation runs with
+`GITHUB_REF=refs/tags/vX.Y.Z`, and Documenter deploys a tag on `workflow_dispatch`. So the
+caller only grants `contents: write` and `actions: write`, and its `Documentation.yml`
+accepts `workflow_dispatch`. If the dispatch fails, the job fails; the tag is there, so a
+rerun has nothing left to do: dispatch the documentation by hand
+(`gh workflow run Documentation.yml --ref vX.Y.Z`).
 
 ## Caller
 
@@ -39,16 +43,18 @@ on:
     paths: [Project.toml]
   workflow_dispatch:
 
+permissions:
+  contents: write
+  actions: write
+
 jobs:
   call:
     uses: control-toolbox/CTActions/.github/workflows/release-tag.yml@main
-    secrets:
-      CT_APP_CLIENT_ID: ${{ secrets.CT_APP_CLIENT_ID }}
-      CT_APP_PRIVATE_KEY: ${{ secrets.CT_APP_PRIVATE_KEY }}
 ```
 
 ## Inputs
 
 | Input | Default | Meaning |
 | --- | --- | --- |
+| `documentation_workflow` | `'Documentation.yml'` | The workflow run on the new tag; empty: none |
 | `ctactions_ref` | `'main'` | Ref of CTActions the script is checked out from |
