@@ -20,10 +20,11 @@ needs the caller's whole set.
 
 > **Note.** A reusable workflow only sees the secrets it declares under
 > `workflow_call.secrets` and that its caller passes, or every secret with
-> `secrets: inherit`. `documentation.yml` and `compat-helper.yml` read
-> `secrets.DOCUMENTER_KEY` without declaring it, and their callers pass `SSH_KEY` only
-> (or nothing): the key is empty there, and the documentation deploys with
-> `GITHUB_TOKEN`. Declare it before relying on it.
+> `secrets: inherit`. `documentation.yml` and `compat-helper.yml` declare
+> `DOCUMENTER_KEY` as optional, and their callers pass `SSH_KEY` only (or nothing): the
+> key is empty there, and the documentation deploys with `GITHUB_TOKEN`. A caller that
+> needs it passes it. `lint-workflows.yml` (actionlint) refuses a secret read without
+> being declared.
 
 **`GITHUB_TOKEN` is limited to its own repository**, and what it pushes or opens does not
 trigger other workflows (no CI on a PR it opens). A workflow that must write to other

@@ -1,0 +1,29 @@
+name: Lint workflows
+
+# actionlint on every workflow of CTActions: syntax, expressions, the inputs and secrets of
+# reusable workflows, the runner labels (.github/actionlint.yaml), and shellcheck on every
+# `run:` script. The workflows here run in every package: a mistake is caught here, once.
+
+on:
+  pull_request:
+    paths:
+      - '.github/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/**'
+  workflow_dispatch:
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+      # the release binary, pinned; shellcheck is on the runner image
+      - name: Install actionlint
+        run: bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.7/scripts/download-actionlint.bash) 1.7.7
+      - name: actionlint
+        run: ./actionlint -color

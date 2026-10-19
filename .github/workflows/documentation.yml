@@ -29,6 +29,9 @@ on:
         default: 120
         type: number
     secrets:
+      DOCUMENTER_KEY:
+        description: 'Deploy key of gh-pages; optional: without it, Documenter deploys with GITHUB_TOKEN (what every caller does today)'
+        required: false
       SSH_KEY:
         required: false
 
