@@ -26,14 +26,17 @@ on:
     secrets:
       SSH_KEY:
         required: false
-      RUNNERS_STATUS_TOKEN:
+      CT_RUNNERS_CLIENT_ID:
+        required: false
+      CT_RUNNERS_PRIVATE_KEY:
         required: false
 
 jobs:
   select:
     uses: control-toolbox/CTActions/.github/workflows/select-gpu-runner.yml@main
     secrets:
-      RUNNERS_STATUS_TOKEN: ${{ secrets.RUNNERS_STATUS_TOKEN }}
+      CT_RUNNERS_CLIENT_ID: ${{ secrets.CT_RUNNERS_CLIENT_ID }}
+      CT_RUNNERS_PRIVATE_KEY: ${{ secrets.CT_RUNNERS_PRIVATE_KEY }}
 
   test:
     needs: select

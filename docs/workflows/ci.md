@@ -104,7 +104,8 @@ runs on its label. On a push (`main`, tags) a single job picks the runner at run
       use_ct_registry: true
     secrets:
       SSH_KEY: ${{ secrets.SSH_KEY }}
-      RUNNERS_STATUS_TOKEN: ${{ secrets.RUNNERS_STATUS_TOKEN }}
+      CT_RUNNERS_CLIENT_ID: ${{ secrets.CT_RUNNERS_CLIENT_ID }}
+      CT_RUNNERS_PRIVATE_KEY: ${{ secrets.CT_RUNNERS_PRIVATE_KEY }}
 ```
  CTFlows.jl also calls
 `ci.yml` from `CITargeted.yml` (a subset of the tests on a chosen runner, by hand) and

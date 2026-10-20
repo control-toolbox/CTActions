@@ -80,8 +80,8 @@ On a PR, the labels choose (`run ci kkt-runner`, `run ci occidata-runner`): eith
 runner can always be asked for. On a push to `main` or a tag, one GPU job runs:
 [`ci-gpu.yml`](../workflows/ci-gpu.md) takes `kkt` unless it is *offline*, else `occidata`;
 a busy `kkt` is waited for. The documentation's GPU pass does the same with
-`gpu_runner: 'auto'`. Both read the runner state with the organization secret
-`RUNNERS_STATUS_TOKEN` ([details](../workflows/select-gpu-runner.md)).
+`gpu_runner: 'auto'`. Both read the runner state as the App `ct-runners`
+([details](../workflows/select-gpu-runner.md#the-github-app-ct-runners)).
 
 ## Split CI
 

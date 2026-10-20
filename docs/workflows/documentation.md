@@ -104,7 +104,7 @@ move to `gpu_runner: 'auto'`.
 `gpu_runner: 'auto'` adds a job `select-gpu` between `build` and `build-gpu`
 ([`select-gpu-runner.yml`](select-gpu-runner.md)): `kkt` unless it is offline, else
 `occidata`. Only *offline* matters: a busy `kkt` is waited for. The caller passes the
-secret `RUNNERS_STATUS_TOKEN`; without it the fallback is used. Size `gpu_timeout_minutes`
+secrets `CT_RUNNERS_CLIENT_ID` and `CT_RUNNERS_PRIVATE_KEY`; without them the fallback is used. Size `gpu_timeout_minutes`
 for the fallback (a cold `occidata` build takes ~38 min).
 
 ### Ordering the deployments

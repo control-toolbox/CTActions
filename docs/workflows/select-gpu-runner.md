@@ -23,37 +23,27 @@ Called by [`ci-gpu.yml`](ci-gpu.md) and by [`documentation.yml`](documentation.m
   `occidata` run (a GPU node through SLURM, a cold depot).
 - **The state is read once**, when the job runs, from `gh api orgs/<org>/actions/runners`.
   A runner that goes offline afterwards leaves the job queued; the caller's timeout bounds it.
-- **Unknown is offline.** Without `RUNNERS_STATUS_TOKEN`, or if the API call fails, the
+- **Unknown is offline.** Without the `CT_RUNNERS_*` secrets, or if the token or the API call fails, the
   fallback is chosen with a warning: slower, never stuck.
 
-## The secret `RUNNERS_STATUS_TOKEN`
+## The GitHub App `ct-runners`
 
-An **organization secret**, shared with the repositories that call it **and with
-CTActions** (for the expiry check below). The workflow's `GITHUB_TOKEN` cannot list the
-organization's runners. A caller passes it explicitly,
-`RUNNERS_STATUS_TOKEN: ${{ secrets.RUNNERS_STATUS_TOKEN }}`.
+The workflow's `GITHUB_TOKEN` cannot list the organization's runners, so the job mints a
+one-hour token as the App `ct-runners`, whose only permission is the organization's
+**Self-hosted runners: read**. Its secrets `CT_RUNNERS_CLIENT_ID` and
+`CT_RUNNERS_PRIVATE_KEY` are organization secrets, visible to the packages with a GPU CI
+(not CTActions, not the other App [`ct-prune`](../conventions/github-app.md): that one
+writes to the packages, and its key stays in CTActions). A leaked `ct-runners` key
+reveals the state of the runners and nothing else. A caller passes the two secrets
+explicitly:
 
-Creating it (an organization owner):
+```yaml
+    secrets:
+      CT_RUNNERS_CLIENT_ID: ${{ secrets.CT_RUNNERS_CLIENT_ID }}
+      CT_RUNNERS_PRIVATE_KEY: ${{ secrets.CT_RUNNERS_PRIVATE_KEY }}
+```
 
-1. GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained
-   tokens** → Generate new token. Resource owner: `control-toolbox`; expiration: the
-   longest the organization allows; **no repository access needed**.
-2. Organization permissions: **Self-hosted runners: Read-only**. Nothing else.
-3. If the organization requires approval of tokens, approve it
-   (Organization → Settings → Personal access tokens → Pending requests).
-4. Organization → Settings → Secrets and variables → Actions → New organization secret
-   `RUNNERS_STATUS_TOKEN`, repository access to the packages with a GPU CI (CTSolvers,
-   CTFlows, CTLie, CTDirect, CTParser, OptimalControl) **and CTActions**.
-5. Run [`token-expiry.yml`](#token-expiry) by hand to check it.
-
-## Token expiry
-
-When the token expires, the selection does not fail: it falls back to occidata, and
-the only symptom is a slower CI. [`token-expiry.yml`](../../.github/workflows/token-expiry.yml)
-(weekly, Saturday) calls the same endpoint with the token and reads the expiry GitHub
-reports for it (the `github-authentication-token-expiration` header: no date to keep by
-hand). It opens an issue `RUNNERS_STATUS_TOKEN needs attention` in CTActions when the token
-is rejected (401, expired or revoked), lacks the permission (403/404), is not shared with
-CTActions, or expires within 30 days, and closes it when all is well. It reports with
-`github.token` only, so it works the day the PAT does not. A job that selected occidata
-because of a rejected token says so in its warning.
+A key does not expire. If it is deleted or the App uninstalled, the step fails softly and
+the job warns, then falls back to occidata: the symptom is a slower CI, with that
+warning in the `select` job. Rotate the key as for `ct-prune`: generate a new one in the
+App's settings, update `CT_RUNNERS_PRIVATE_KEY`, delete the old one.

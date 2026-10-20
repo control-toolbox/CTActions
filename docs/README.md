@@ -74,7 +74,6 @@ token.
 | [`ci.yml`](workflows/ci.md) | `CI.yml` | Test suite over a Julia × OS × arch matrix, on GitHub-hosted or self-hosted (GPU) runners | label `run ci <runner>` |
 | [`ci-gpu.yml`](workflows/ci-gpu.md) | `CI.yml` | `ci.yml` on `kkt`, or `occidata` if `kkt` is offline; pushes to `main` and tags | push |
 | [`select-gpu-runner.yml`](workflows/select-gpu-runner.md) | `ci-gpu.yml`, `documentation.yml` | Picks `kkt` unless offline, else `occidata` | called by the two above |
-| [`token-expiry.yml`](workflows/select-gpu-runner.md#token-expiry) | — (CTActions) | Weekly check of the PAT behind `RUNNERS_STATUS_TOKEN`; opens an issue before it fails | Saturday 03:47 UTC, by hand |
 | [`coverage.yml`](workflows/coverage.md) | `Coverage.yml` | Test suite with coverage, uploaded to Codecov | no (push and tags) |
 | [`documentation.yml`](workflows/documentation.md) | `Documentation.yml` | Build and deploy the documentation; optional GPU upgrade pass; opt-in PR previews | label `run documentation` |
 | [`documentation-preview-cleanup.yml`](workflows/documentation-preview-cleanup.md) | `DocPreviewCleanup.yml` | Remove the previews of closed PRs from `gh-pages` | on close |

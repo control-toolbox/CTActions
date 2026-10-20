@@ -14,8 +14,8 @@ stays available on demand.
 | `use_ct_registry` | `false` | Add ct-registry |
 | `test_args` | `''` | Forwarded to `ci.yml` (e.g. `GPU`, CTDirect.jl) |
 
-Secrets: `SSH_KEY` (ct-registry), `RUNNERS_STATUS_TOKEN` (see
-[`select-gpu-runner.yml`](select-gpu-runner.md#the-secret-runners_status_token)).
+Secrets: `SSH_KEY` (ct-registry), `CT_RUNNERS_CLIENT_ID` and `CT_RUNNERS_PRIVATE_KEY` (see
+[`select-gpu-runner.yml`](select-gpu-runner.md#the-github-app-ct-runners)).
 
 The caller is the `test-gpu-main` job of [Split CI](ci.md#split-ci). Its jobs appear as
 `test-gpu-main / test / test (1, kkt)`; it has no label guard, so the release gate treats

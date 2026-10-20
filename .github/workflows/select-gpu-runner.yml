@@ -4,11 +4,11 @@ name: Select GPU runner
 # offline, else `fallback` (occidata). Only "offline" matters: a busy `preferred` runner
 # is waited for, since a queued job on kkt still finishes before a cold occidata one.
 #
-# The state of the organization's runners is read with `RUNNERS_STATUS_TOKEN` (an
-# organization secret: "Self-hosted runners: read" on the organization; the workflow's
-# GITHUB_TOKEN cannot list them). Without the token, or if the API call fails, the
-# fallback is chosen, with a warning: slower, but it never leaves a job queued for a
-# runner that is not there.
+# The state of the organization's runners is read with a one-hour token minted by the
+# GitHub App ct-runners (organization permission "Self-hosted runners: read", nothing
+# else; the workflow's GITHUB_TOKEN cannot list them). Without its secrets, or if the
+# token or the API call fails, the fallback is chosen, with a warning: slower, but it
+# never leaves a job queued for a runner that is not there.
 #
 # The choice is made once, when this job runs; a runner that goes offline afterwards
 # leaves the job queued (the caller's timeout bounds it).
@@ -27,7 +27,9 @@ on:
         default: 'occidata'
         type: string
     secrets:
-      RUNNERS_STATUS_TOKEN:
+      CT_RUNNERS_CLIENT_ID:
+        required: false
+      CT_RUNNERS_PRIVATE_KEY:
         required: false
     outputs:
       runner:
@@ -53,11 +55,23 @@ jobs:
       runs_on_matrix: ${{ steps.pick.outputs.runs_on_matrix }}
       runs_on_labels: ${{ steps.pick.outputs.runs_on_labels }}
     steps:
+      # continue-on-error: a missing or revoked key must not fail the job, the fallback
+      # is the answer then (see the warning of the next step).
+      - name: Mint a runners-read token (ct-runners App)
+        id: app
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.CT_RUNNERS_CLIENT_ID }}
+          private-key: ${{ secrets.CT_RUNNERS_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-organization-self-hosted-runners: read
+
       - name: Pick the runner
         id: pick
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.RUNNERS_STATUS_TOKEN }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}
           PREFERRED: ${{ inputs.preferred }}
           FALLBACK: ${{ inputs.fallback }}
           ORG: ${{ github.repository_owner }}
@@ -65,14 +79,10 @@ jobs:
           set -uo pipefail
           chosen="$FALLBACK"
           if [[ -z "$GH_TOKEN" ]]; then
-            echo "::warning::RUNNERS_STATUS_TOKEN is not available: cannot read the state of '$PREFERRED', using '$FALLBACK'"
+            echo "::warning::No ct-runners token (secrets CT_RUNNERS_* missing, or the key was rejected): cannot read the state of '$PREFERRED', using '$FALLBACK'"
           elif ! states=$(gh api "orgs/$ORG/actions/runners" --paginate \
                  --jq ".runners[] | select(any(.labels[]; .name == \"$PREFERRED\")) | .status" 2>"$RUNNER_TEMP/err"); then
-            if grep -q "401\|Bad credentials" "$RUNNER_TEMP/err"; then
-              echo "::warning::RUNNERS_STATUS_TOKEN is rejected (401): it has probably EXPIRED (see the 'token-expiry' issue in CTActions). Using '$FALLBACK'"
-            else
-              echo "::warning::Could not list the runners of $ORG ($(head -c 200 "$RUNNER_TEMP/err")): using '$FALLBACK'"
-            fi
+            echo "::warning::Could not list the runners of $ORG ($(head -c 200 "$RUNNER_TEMP/err")): is the ct-runners App installed on this organization with 'Self-hosted runners: read'? Using '$FALLBACK'"
           elif grep -qx online <<<"$states"; then
             chosen="$PREFERRED"
           else
