@@ -27,5 +27,5 @@ jobs:
       # the scripts of the same commit as this workflow
       ctactions_ref: ${{ github.sha }}
     secrets:
-      CT_APP_CLIENT_ID: ${{ secrets.CT_APP_CLIENT_ID }}
-      CT_APP_PRIVATE_KEY: ${{ secrets.CT_APP_PRIVATE_KEY }}
+      CT_PRUNE_COMPAT_CLIENT_ID: ${{ secrets.CT_PRUNE_COMPAT_CLIENT_ID }}
+      CT_PRUNE_COMPAT_PRIVATE_KEY: ${{ secrets.CT_PRUNE_COMPAT_PRIVATE_KEY }}

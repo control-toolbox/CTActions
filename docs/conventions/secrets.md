@@ -10,7 +10,7 @@
 | `DOCUMENTER_KEY` | organization (all repositories) | TagBot callers (`ssh:`); read by `documentation.yml` and `compat-helper.yml` (see the note) | Documenter deploy key; TagBot's SSH key |
 | `CODECOV_TOKEN` → `codecov-secret` | organization (all repositories) | `coverage.yml` | Upload to Codecov |
 | `PROJECT_TOKEN` → `project_token` | organization (all repositories) | `add-to-project.yml` | Write to the organization's project board |
-| `CT_APP_CLIENT_ID`, `CT_APP_PRIVATE_KEY` | organization, **CTActions only** | `compat-prune-monthly.yml` (`publish` job) | Token of the organization's [GitHub App](github-app.md) |
+| `CT_PRUNE_COMPAT_CLIENT_ID`, `CT_PRUNE_COMPAT_PRIVATE_KEY` | organization, **CTActions only** | `compat-prune-monthly.yml` (`publish` job) | Token of the organization's [GitHub App](github-app.md) |
 | `CT_RUNNERS_CLIENT_ID`, `CT_RUNNERS_PRIVATE_KEY` | organization, the packages with a GPU CI | `select-gpu-runner.yml` | Token of the read-only App `ct-runners` ([details](../workflows/select-gpu-runner.md#the-github-app-ct-runners)) |
 | `OCCIDATA_SSH_KEY`, `OCCIDATA_KNOWN_HOSTS` | CTActions | `occidata-runner-watchdog.yml` | SSH to `occidata-cluster.irit.fr` |
 | `GITHUB_TOKEN` | built in | most workflows | Token of the repository the workflow runs in |

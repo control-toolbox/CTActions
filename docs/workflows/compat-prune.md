@@ -65,7 +65,7 @@ changed.
 ## What it publishes
 
 - **One PR per repository** with edits, from the branch `ct/compat-prune`, by
-  `control-toolbox-bot`: a table `file | dependency | before | after | selected` (the
+  `ct-prune`: a table `file | dependency | before | after | selected` (the
   versions each kept specifier resolves to, per Julia version) and a link to the issue.
   The branch is rewritten by every run: **push nothing to it**; merge it as it is.
 - **One tracking issue** in CTActions, `[compat] prune report` (hidden marker
@@ -119,7 +119,7 @@ everything in the `compat-prune` artifact (30 days). `dry_run: false` publishes.
 
 | Secret | |
 | --- | --- |
-| `CT_APP_CLIENT_ID`, `CT_APP_PRIVATE_KEY` | The [GitHub App](../conventions/github-app.md); needed by `publish` only |
+| `CT_PRUNE_COMPAT_CLIENT_ID`, `CT_PRUNE_COMPAT_PRIVATE_KEY` | The [GitHub App](../conventions/github-app.md); needed by `publish` only |
 
 `ct-registry` is added over HTTPS (it is public): no `SSH_KEY`.
 
