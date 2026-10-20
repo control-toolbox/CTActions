@@ -10,7 +10,7 @@
 # and 2: a bound of 9 or more is satisfied by no version in General, which is what a
 # beta-only bound looks like.
 
-using Test, TOML
+using Test, TOML, Base64
 
 include(joinpath(@__DIR__, "..", "release.jl"))
 
@@ -491,6 +491,204 @@ failures(results) = [r.message for r in results if r.status === :fail]
             end
         end
         @test_throws ArgumentError registration_body(changelog_text, v"9.9.9", "o/P", "")
+    end
+
+    @testset "audit" begin
+        marker(n; v="0.4.3", kind="stable", state="done") =
+            "<!-- ct-release phase=$n kind=$kind version=$v mode=autonomous pr=2 merge=M state=$state -->"
+        comment(n; kw...) = (; author="a", time="2026-10-19T1$(n)", body="**Phase $n.**\n\n$(marker(n; kw...))")
+        register_body = MENTION * " register\n\nRelease notes:\n\n### fix\n"
+        "A stable release that went by the book: its facts and its trail."
+        function done(; kind=:stable)
+            v = kind === :stable ? v"0.4.3" : v"0.4.3-beta"
+            f = (; repo="o/P", name="P", version=v, kind, main_version=v, main_sha="M",
+                 issue=(; number=7, state="CLOSED"), issues=1, mentions=kind === :stable ? 1 : 0, bot_error=nothing,
+                 pr=(; number=2, state="MERGED", merge="M", auto=false), tag="M", tag_tree="T",
+                 release=kind === :beta, registry=kind === :stable ? "General" : "ct-registry", registered="T",
+                 general_pr=kind === :stable ? (; number=9, state="MERGED") : nothing, jump=:none)
+            vs = string(v)
+            cs = Any[comment(2; v=vs, kind=string(kind)), comment(3; v=vs, kind=string(kind)), comment(4; v=vs, kind=string(kind)),
+                     comment(5; v=vs, kind=string(kind)), comment(6; v=vs, kind=string(kind))]
+            kind === :stable && push!(cs, (; author="a", time="x", body=register_body))
+            push!(cs, comment(7; v=vs, kind=string(kind)))
+            push!(cs, (; author="a", time="z", body="**Phase 8.**\n\n- ✅ Issue closed\n$(marker(8; v=vs, kind=string(kind)))"))
+            t = (; issue_body="Release of P.", comments=cs, commit_comments=NamedTuple[],
+                 pr=(; title="chore: prepare P release", body="Refs #7", files=["Project.toml", "CHANGELOG.md", "BREAKING.md"],
+                     project_changes=["-version = \"0.4.2\"", "+version = \"0.4.3\""], auto_merge=false),
+                 runs=Dict("ReleaseGate.yml" => "success", "CI.yml" => "success"),
+                 release_body="## What's Changed", docs="success", branch_exists=false)
+            return f, t
+        end
+        failed(f, t) = [(r.area, r.message) for r in audit_checks(f, t) if r.status === :fail]
+        areas(f, t) = unique(first.(failed(f, t)))
+        withfield(x, k, v) = merge(x, NamedTuple{(k,)}((v,)))
+        # the comment kept, the mention comment removed, etc.
+        without(t, pred) = withfield(t, :comments, [c for c in t.comments if !pred(c)])
+
+        @testset "markers" begin
+            ms = markers([(; author="a", time="t1", body="x\n<!-- ct-release phase=4 kind=stable version=0.4.3 mode=autonomous pr=2 merge=- state=done -->"),
+                          (; author="a", time="t2", body="no marker"),
+                          (; author="a", time="t3", body="<!-- ct-release kind=stable -->"),            # no phase: ignored
+                          (; author="a", time="t4", body="<!-- ct-release phase=x kind=stable -->")])   # not a number: ignored
+            @test length(ms) == 1 && ms[1].phase == 4 && ms[1].kind == "stable" && ms[1].version == "0.4.3" && ms[1].state == "done"
+            @test built_by_the_tool(register_body)
+            @test !built_by_the_tool(MENTION * " register")
+            @test !built_by_the_tool("see " * register_body)
+        end
+
+        @testset "a release by the book" begin
+            for kind in (:stable, :beta)
+                f, t = done(; kind)
+                @test isempty(failed(f, t))
+                @test audit_report(f, audit_checks(f, t)) |> x -> contains(x, "✅ the trail is complete")
+            end
+        end
+
+        @testset "state and issue" begin
+            f, t = done()
+            @test "state" in areas(withfield(f, :registered, nothing), t)               # not registered: not complete
+            @test "state" in areas(withfield(f, :issue, (; number=7, state="OPEN")), t)
+            @test "issue" in areas(withfield(f, :issue, (; number=7, state="OPEN")), t)
+            @test "issue" in areas(withfield(f, :issues, 2), t)
+            @test "issue" in areas(f, withfield(t, :issue_body, " \n"))
+            @test "issue" in areas(f, withfield(t, :issue_body, "ask $MENTION"))
+            @test ("issue", "no tracking issue `[RELEASE] v0.4.3`") in failed(withfield(f, :issue, nothing), t)
+        end
+
+        @testset "the trace" begin
+            f, t = done()
+            for n in 3:8                                                                 # a phase without a comment
+                @test any(x -> x[1] == "trace" && contains(x[2], "no comment for phase $n"), failed(f, without(t, c -> contains(c.body, "phase=$n "))))
+            end
+            @test any(x -> contains(x[2], "no comment for phase 2"), failed(f, without(t, c -> contains(c.body, "phase=2 "))))
+            @test isempty(failed(f, withfield(t, :comments, [comment(1; v="0.4.3"); t.comments[2:end]])))   # the proposal may be phase 1
+            @test any(x -> contains(x[2], "out of order"), failed(f, withfield(t, :comments, t.comments[[2, 1, 3, 4, 5, 6, 7, 8]])))
+            @test any(x -> contains(x[2], "another release"), failed(f, withfield(t, :comments, [comment(2; v="0.4.9"); t.comments[2:end]])))
+            @test any(x -> contains(x[2], "another release"), failed(f, withfield(t, :comments, [comment(2; kind="beta"); t.comments[2:end]])))
+            @test any(x -> contains(x[2], "not the final comment"), failed(f, withfield(t, :comments, [c for c in t.comments if !contains(c.body, "phase=8 ")])))
+            @test any(x -> contains(x[2], "not the final comment"), failed(f, withfield(t, :comments, [t.comments[1:end-1]; comment(8; state="stopped")])))
+            @test any(x -> contains(x[2], "❌"), failed(f, withfield(t, :comments, [t.comments[1:end-1]; (; author="a", time="z", body="- ❌ Checks\n$(marker(8))")])))
+            @test isempty(failed(f, withfield(t, :comments, [t.comments[1:end-1]; comment(8)])))              # no list: only informs
+            @test any(r -> r.status === :info && r.area == "trace", audit_checks(f, withfield(t, :comments, [t.comments[1:end-1]; comment(8)])))
+            @test any(x -> contains(x[2], "no comment of the tracking issue"), failed(f, withfield(t, :comments, NamedTuple[])))
+        end
+
+        @testset "the registration" begin
+            f, t = done()
+            @test "registration" in areas(withfield(f, :mentions, 0), t)
+            @test "registration" in areas(withfield(f, :mentions, 2), t)
+            by_hand = withfield(t, :comments, [c.body == register_body ? (; author="a", time="x", body=MENTION * " register") : c for c in t.comments])
+            @test any(x -> contains(x[2], "posted by hand"), failed(f, by_hand))
+            # on the merge commit instead of the issue (main moved): the same form is required
+            on_commit = withfield(without(t, c -> c.body == register_body), :commit_comments, [(; author="a", time="x", body=register_body)])
+            @test isempty(failed(f, on_commit))
+            @test any(x -> contains(x[2], "posted by hand"), failed(f, withfield(on_commit, :commit_comments, [(; author="a", time="x", body=MENTION * " register")])))
+            # two comments with the mention: the count refuses, the form check does not crash
+            two = withfield(t, :comments, [t.comments; (; author="a", time="y", body=MENTION * " register")])
+            @test "registration" in areas(withfield(f, :mentions, 2), two) && !any(x -> contains(x[2], "posted by hand"), failed(withfield(f, :mentions, 2), two))
+            @test !any(x -> contains(x[2], "posted by hand"), failed(f, two))
+            # a bot's comment is not a mention of it: the one by hand is still seen
+            botsaid = withfield(by_hand, :comments, [by_hand.comments; (; author="JuliaRegistrator", time="y", body="hello $MENTION")])
+            @test any(x -> contains(x[2], "posted by hand"), failed(f, botsaid))
+            # the bot's own answers are not mentions of it
+            @test isempty(failed(f, withfield(t, :comments, [t.comments; (; author="JuliaRegistrator", time="y", body="hello $MENTION")])))
+            @test "registration" in areas(f, withfield(t, :release_body, "register $MENTION"))
+            @test "registration" in areas(f, withfield(t, :pr, withfield(t.pr, :body, "$MENTION")))
+            @test "registration" in areas(f, withfield(t, :pr, withfield(t.pr, :title, "$MENTION")))
+            fb, tb = done(; kind=:beta)                                                  # a beta never goes to the bot
+            @test "registration" in areas(withfield(fb, :mentions, 1), tb)
+            @test "registration" in areas(fb, withfield(tb, :comments, [tb.comments; (; author="a", time="x", body=register_body)]))
+        end
+
+        @testset "the release PR" begin
+            f, t = done()
+            @test "pr" in areas(withfield(f, :pr, withfield(f.pr, :state, "CLOSED")), t)
+            @test "pr" in areas(f, withfield(t, :pr, withfield(t.pr, :auto_merge, true)))
+            @test any(x -> contains(x[2], "src/A.jl"), failed(f, withfield(t, :pr, withfield(t.pr, :files, ["Project.toml", "src/A.jl"]))))
+            @test isempty(failed(f, withfield(t, :pr, withfield(t.pr, :files, ["CHANGELOG.md", "BREAKING.md"]))))      # Project.toml may be absent
+            @test "pr" in areas(f, withfield(t, :pr, withfield(t.pr, :project_changes, ["-version = \"0.4.2\"", "+version = \"0.4.3\"", "+Foo = \"1\""])))
+            @test "pr" in areas(f, withfield(t, :pr, withfield(t.pr, :project_changes, ["-[compat]", "+version = \"0.4.3\""])))
+            @test any(x -> contains(x[2], "cannot read"), failed(f, withfield(t, :pr, withfield(t.pr, :project_changes, String[]))))
+            @test isempty(failed(f, withfield(t, :pr, merge(t.pr, (; files=["CHANGELOG.md"], project_changes=String[])))))
+            @test any(x -> contains(x[2], "did not succeed"), failed(f, withfield(t, :runs, Dict("ReleaseGate.yml" => "success", "CI.yml" => "failure"))))
+            @test any(x -> contains(x[2], "did not succeed"), failed(f, withfield(t, :runs, Dict("ReleaseGate.yml" => "cancelled"))))
+            @test any(x -> contains(x[2], "did not run"), failed(f, withfield(t, :runs, Dict("CI.yml" => "success"))))
+            @test any(x -> contains(x[2], "no workflow ran"), failed(f, withfield(t, :runs, Dict{String,String}())))
+            @test ("pr", "no release PR `release/v0.4.3`") in failed(withfield(f, :pr, nothing), withfield(t, :pr, nothing))
+        end
+
+        @testset "the tag, the release and the registry" begin
+            f, t = done()
+            @test "tag" in areas(withfield(f, :tag, "X"), t)
+            @test "tag" in areas(withfield(f, :release, nothing), t)
+            @test "tag" in areas(withfield(f, :release, true), t)                          # a stable that is a pre-release
+            @test "tag" in areas(f, withfield(t, :release_body, " "))
+            @test isempty(failed(f, withfield(t, :docs, nothing)))                          # documentation: informs only
+            @test isempty(failed(f, withfield(t, :docs, "failure")))
+            @test count(r -> r.status === :info, audit_checks(f, withfield(t, :docs, "failure"))) == 1
+            @test "registry" in areas(withfield(f, :registered, "OTHER"), t)
+            @test "registry" in areas(withfield(f, :general_pr, nothing), t)
+            @test "registry" in areas(withfield(f, :general_pr, (; number=9, state="OPEN")), t)
+            fj = withfield(f, :jump, :betas)
+            @test isempty(failed(fj, t)) && any(r -> r.status === :info && contains(r.message, "[merge approved]"), audit_checks(fj, t))
+            @test any(r -> r.status === :info && contains(r.message, "no beta explains"), audit_checks(withfield(f, :jump, :unexplained), t))
+        end
+
+        @testset "the clean-up" begin
+            f, t = done()
+            @test "cleanup" in areas(f, withfield(t, :branch_exists, true))
+        end
+
+        @testset "trail, on a fake GitHub" begin
+            b64(s) = join(String(c) for c in [base64encode(s)])
+            gate_run = "11\t.github/workflows/ReleaseGate.yml@refs/pull/2/merge\tsuccess\n"
+            fake = function (args)
+                a = join(args, " ")
+                contains(a, "issue view 7") && contains(a, "json body") && return b64("Release of P.") * "\n"
+                contains(a, "issue view 7") && contains(a, "comments") && return "bob\t2026-10-19T11:00:00Z\t$(b64("hello\nworld"))\n"
+                contains(a, "commits/M/comments") && return "bob\t2026-10-19T12:00:00Z\t$(b64("on the commit"))\n"
+                contains(a, "headRefOid") && return "H\n"
+                contains(a, "title,body") && return "$(b64("a title"))\t$(b64("a body\nover lines"))\n"
+                contains(a, "json files") && contains(a, ".files[].path") && return "Project.toml\nCHANGELOG.md\n"
+                contains(a, "pulls/2/files") && return "@@ -1 +1 @@\n-version = \"0.4.2\"\n+version = \"0.4.3\"\n context\n"
+                contains(a, "issues/2/events") && return events[]
+                contains(a, "actions/runs?head_sha=H") && return gate_run * "12\t.github/workflows/CI.yml\tfailure\n13\t.github/workflows/CI.yml\tsuccess\n14\t.github/workflows/CI.yml\tskipped\n"
+                contains(a, "release view") && return "notes\n"
+                contains(a, "actions/runs?branch=v0.4.3") && return "success\n"
+                contains(a, "git/ref/heads/release/v0.4.3") && return nothing
+                return nothing
+            end
+            events = Ref("labeled\nauto_merge_enabled\n")
+            f, _ = done()
+            t = with_gh(() -> trail("o/P", f), fake)
+            @test t.issue_body == "Release of P."
+            @test t.comments == [(; author="bob", time="2026-10-19T11:00:00Z", body="hello\nworld")]
+            @test t.commit_comments == [(; author="bob", time="2026-10-19T12:00:00Z", body="on the commit")]
+            @test t.pr.title == "a title" && t.pr.body == "a body\nover lines"
+            @test t.pr.files == ["Project.toml", "CHANGELOG.md"]
+            @test t.pr.project_changes == ["-version = \"0.4.2\"", "+version = \"0.4.3\""]   # the lines that changed, not the context
+            @test t.pr.auto_merge
+            events[] = "labeled\nunlabeled\n"
+            @test !with_gh(() -> trail("o/P", f), fake).pr.auto_merge
+            @test t.runs == Dict("ReleaseGate.yml" => "success", "CI.yml" => "success")        # the latest real run of each
+            @test t.release_body == "notes\n" && t.docs == "success" && !t.branch_exists
+            # nothing found: empty values, not an error
+            t = with_gh(() -> trail("o/P", f), _ -> nothing)
+            @test t.issue_body == "" && isempty(t.comments) && isempty(t.commit_comments) && isempty(t.runs)
+            @test t.pr.title == "" && isempty(t.pr.files) && !t.pr.auto_merge && t.release_body === nothing && t.docs === nothing
+            # a branch that exists
+            t = with_gh(() -> trail("o/P", f), a -> contains(join(a, " "), "git/ref/heads") ? "refs/heads/release/v0.4.3\n" : nothing)
+            @test t.branch_exists
+            # no issue, no PR
+            fn = withfield(withfield(f, :issue, nothing), :pr, nothing)
+            t = with_gh(() -> trail("o/P", fn), fake)
+            @test t.issue_body == "" && isempty(t.comments) && t.pr === nothing && isempty(t.runs)
+        end
+
+        @testset "command line" begin
+            @test command("audit")[1] == 2
+            @test command("audit", "--repo", "o/P")[1] == 2
+        end
     end
 
     @testset "properties of the numbering (random histories)" begin
