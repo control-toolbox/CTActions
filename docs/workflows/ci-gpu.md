@@ -20,3 +20,25 @@ Secrets: `SSH_KEY` (ct-registry), `CT_RUNNERS_CLIENT_ID` and `CT_RUNNERS_PRIVATE
 The caller is the `test-gpu-main` job of [Split CI](ci.md#split-ci). Its jobs appear as
 `test-gpu-main / test / test (1, kkt)`; it has no label guard, so the release gate treats
 it as an ordinary job (it is skipped on a PR).
+
+## Scheduled and manual runs
+
+Nothing in `ci-gpu.yml` is specific to a push: any workflow can call it, for example a
+weekly integration run (`test_args: 'cron'`), so that it too takes `kkt` unless it is
+offline, else `occidata`. CTFlows.jl's `CronIntegration.yml` does it; a package adding such
+a cron copies the job:
+
+```yaml
+  test-gpu:
+    uses: control-toolbox/CTActions/.github/workflows/ci-gpu.yml@main
+    with:
+      use_ct_registry: true
+      test_args: 'cron'
+    secrets:
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      CT_RUNNERS_CLIENT_ID: ${{ secrets.CT_RUNNERS_CLIENT_ID }}
+      CT_RUNNERS_PRIVATE_KEY: ${{ secrets.CT_RUNNERS_PRIVATE_KEY }}
+```
+
+The package's repository must be allowed to read the organization secrets
+`CT_RUNNERS_*` (organization settings → Secrets → *Repository access*).
