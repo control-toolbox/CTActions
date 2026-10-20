@@ -62,7 +62,7 @@ vocabulary are in [Labels](conventions/labels.md).
 A few workflows are not called by packages: they run in `CTActions` itself, on a
 schedule, for the whole organization (the self-hosted runners, the `[compat]` prune).
 When one of them must write to other repositories, it does so as the organization's
-GitHub App, [`ct-prune`](conventions/github-app.md), never with a personal
+GitHub App, [`ct-prune-compat`](conventions/github-app.md), never with a personal
 token.
 
 ## The workflows
@@ -112,6 +112,6 @@ benchmarks: see [Workflows defined in a package](workflows/per-repo.md).
 | [Labels](conventions/labels.md) | Label-gated triggers: the `if:` guard, the `types:` list (no `opened`), the label vocabulary |
 | [Runners](conventions/runners.md) | GitHub-hosted and self-hosted runners: `occidata` (GPU on demand), `kkt`, `pinwheel`; the split CI |
 | [Secrets and registries](conventions/secrets.md) | Every secret, who uses it; `ct-registry` and `SSH_KEY` |
-| [GitHub App](conventions/github-app.md) | `ct-prune`: what it is, how to use it in a new workflow, how to extend it |
+| [GitHub App](conventions/github-app.md) | `ct-prune-compat`: what it is, how to use it in a new workflow, how to extend it |
 | [Repositories](repositories.md) | Which repository has which workflow, and why |
 | [Recipes](recipes.md) | A new repository, an organization-wide change, the checklist |

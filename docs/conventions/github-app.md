@@ -1,11 +1,11 @@
-# The organization's GitHub App: `ct-prune`
+# The organization's GitHub App: `ct-prune-compat`
 
 [← Workflows of control-toolbox](../README.md)
 
-`ct-prune` is a GitHub App owned by the control-toolbox organization. A
+`ct-prune-compat` is a GitHub App owned by the control-toolbox organization. A
 workflow that must act **beyond its own repository** (push a branch, open a PR, keep an
 issue in another repository) does it as this App: its commits, PRs and comments are
-signed `ct-prune[bot]`. Today one workflow uses it, the
+signed `ct-prune-compat[bot]`. Today one workflow uses it, the
 [`[compat]` prune](../workflows/compat-prune.md); the App is meant to serve others.
 
 ## Why an App
@@ -26,12 +26,12 @@ other PR.
 
 | Item | Value |
 | --- | --- |
-| Public page | <https://github.com/apps/ct-prune> |
-| Settings (organization owners) | <https://github.com/organizations/control-toolbox/settings/apps/ct-prune> |
+| Public page | <https://github.com/apps/ct-prune-compat> |
+| Settings (organization owners) | <https://github.com/organizations/control-toolbox/settings/apps/ct-prune-compat> |
 | Installation | control-toolbox, **selected repositories** (9): CTBase.jl, CTParser.jl, CTModels.jl, CTLie.jl, CTFlows.jl, CTDirect.jl, CTSolvers.jl, OptimalControl.jl (the packages the prune writes to) **and CTActions** (its tracking issue) |
 | Repository permissions | Contents: read and write · Pull requests: read and write · Issues: read and write · Metadata: read |
 | Webhook | none |
-| Bot user | `ct-prune[bot]`, id `343432246` (commit e-mail `343432246+ct-prune[bot]@users.noreply.github.com`) |
+| Bot user | `ct-prune-compat[bot]`, id `343432246` (commit e-mail `343432246+ct-prune-compat[bot]@users.noreply.github.com`) |
 | Secrets | organization secrets `CT_PRUNE_COMPAT_CLIENT_ID` (the App's client ID) and `CT_PRUNE_COMPAT_PRIVATE_KEY` (a private key, PEM), visible to **CTActions only** |
 
 No *Workflows* permission: nothing it does today edits `.github/workflows/`, and GitHub
@@ -65,8 +65,8 @@ jobs:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
           gh auth setup-git      # git over HTTPS with the token
-          git -c user.name='ct-prune[bot]' \
-              -c user.email='343432246+ct-prune[bot]@users.noreply.github.com' \
+          git -c user.name='ct-prune-compat[bot]' \
+              -c user.email='343432246+ct-prune-compat[bot]@users.noreply.github.com' \
               commit -am "…"
           git push origin HEAD:my-branch
           gh api --method POST repos/control-toolbox/CTBase.jl/pulls \
@@ -87,7 +87,7 @@ jobs:
 All of this is done by an organization owner, in the App's settings or the
 organization's.
 
-**A new repository.** Organization settings → *GitHub Apps* → `ct-prune` →
+**A new repository.** Organization settings → *GitHub Apps* → `ct-prune-compat` →
 *Configure* → *Repository access* → add it. Nothing else changes: tokens minted without
 `repositories:` now include it. Every repository a workflow writes to must be there,
 **the repository of its issues included**: an App token can open an issue on any public
@@ -141,7 +141,7 @@ agents. If agents run remotely and open PRs, the App is the right kind of identi
 them: no personal token, one-hour tokens, PRs that run CI, and a clear author. Two
 options:
 
-| | Same App (`ct-prune`) | A dedicated App (e.g. `control-toolbox-agents`) |
+| | Same App (`ct-prune-compat`) | A dedicated App (e.g. `control-toolbox-agents`) |
 | --- | --- | --- |
 | Setup | extend the secrets to `ct-agents` (or to the agents' secret store) | create and install a second App, its own secrets |
 | Permissions | shared: whatever agents need (e.g. *Workflows*) every user of the App can get | its own: the prune keeps exactly its four |
@@ -150,6 +150,6 @@ options:
 
 **Recommendation: a dedicated App for agents** as soon as they need more than the
 current permissions, or their key is to live outside GitHub Actions; both are likely for
-remote agents. Sharing `ct-prune` remains reasonable for agents running in
+remote agents. Sharing `ct-prune-compat` remains reasonable for agents running in
 GitHub Actions with exactly its permissions. Either way the same rules hold: narrowed
 tokens, never on untrusted code, a human merges.

@@ -65,7 +65,7 @@ changed.
 ## What it publishes
 
 - **One PR per repository** with edits, from the branch `ct/compat-prune`, by
-  `ct-prune`: a table `file | dependency | before | after | selected` (the
+  `ct-prune-compat`: a table `file | dependency | before | after | selected` (the
   versions each kept specifier resolves to, per Julia version) and a link to the issue.
   The branch is rewritten by every run: **push nothing to it**; merge it as it is.
 - **One tracking issue** in CTActions, `[compat] prune report` (hidden marker
