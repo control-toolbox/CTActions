@@ -14,7 +14,7 @@ name: Compat prune
 # report in the job summary). Scripts and tests: scripts/compat-prune/.
 #
 # The `publish` job (skipped on dry runs) is the only one that writes, with a token of the
-# organization's GitHub App (secrets CT_APP_CLIENT_ID, CT_APP_PRIVATE_KEY; permissions:
+# organization's GitHub App (secrets CT_PRUNE_COMPAT_CLIENT_ID, CT_PRUNE_COMPAT_PRIVATE_KEY; permissions:
 # contents, pull requests, issues). It re-applies the prunes to fresh checkouts, then keeps
 # one branch `ct/compat-prune` and one PR per repository, and one tracking issue in
 # `tracking_repo`: a rerun updates them in place, and closes what has nothing left.
@@ -48,10 +48,10 @@ on:
         type: string
         default: control-toolbox/CTActions
     secrets:
-      CT_APP_CLIENT_ID:
+      CT_PRUNE_COMPAT_CLIENT_ID:
         description: 'Client ID of the GitHub App that publishes (not needed for a dry run)'
         required: false
-      CT_APP_PRIVATE_KEY:
+      CT_PRUNE_COMPAT_PRIVATE_KEY:
         description: 'Private key of that GitHub App'
         required: false
 
@@ -143,11 +143,11 @@ jobs:
     steps:
       - name: Check the App credentials
         env:
-          CLIENT_ID: ${{ secrets.CT_APP_CLIENT_ID }}
-          PRIVATE_KEY: ${{ secrets.CT_APP_PRIVATE_KEY }}
+          CLIENT_ID: ${{ secrets.CT_PRUNE_COMPAT_CLIENT_ID }}
+          PRIVATE_KEY: ${{ secrets.CT_PRUNE_COMPAT_PRIVATE_KEY }}
         run: |
           if [ -z "$CLIENT_ID" ] || [ -z "$PRIVATE_KEY" ]; then
-            echo "::error::Publishing needs the secrets CT_APP_CLIENT_ID and CT_APP_PRIVATE_KEY (or run with dry_run: true)."
+            echo "::error::Publishing needs the secrets CT_PRUNE_COMPAT_CLIENT_ID and CT_PRUNE_COMPAT_PRIVATE_KEY (or run with dry_run: true)."
             exit 1
           fi
 
@@ -184,11 +184,11 @@ jobs:
           print("names=" + ",".join(sorted(r.split("/")[1] for r in repos)))
           PY
 
-      - uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@v3.3.0
         id: app
         with:
-          client-id: ${{ secrets.CT_APP_CLIENT_ID }}
-          private-key: ${{ secrets.CT_APP_PRIVATE_KEY }}
+          client-id: ${{ secrets.CT_PRUNE_COMPAT_CLIENT_ID }}
+          private-key: ${{ secrets.CT_PRUNE_COMPAT_PRIVATE_KEY }}
           owner: control-toolbox
           repositories: ${{ steps.repos.outputs.names }}
 
