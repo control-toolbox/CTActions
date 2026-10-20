@@ -67,8 +67,12 @@ jobs:
           if [[ -z "$GH_TOKEN" ]]; then
             echo "::warning::RUNNERS_STATUS_TOKEN is not available: cannot read the state of '$PREFERRED', using '$FALLBACK'"
           elif ! states=$(gh api "orgs/$ORG/actions/runners" --paginate \
-                 --jq ".runners[] | select(any(.labels[]; .name == \"$PREFERRED\")) | .status"); then
-            echo "::warning::Could not list the runners of $ORG: using '$FALLBACK'"
+                 --jq ".runners[] | select(any(.labels[]; .name == \"$PREFERRED\")) | .status" 2>"$RUNNER_TEMP/err"); then
+            if grep -q "401\|Bad credentials" "$RUNNER_TEMP/err"; then
+              echo "::warning::RUNNERS_STATUS_TOKEN is rejected (401): it has probably EXPIRED (see the 'token-expiry' issue in CTActions). Using '$FALLBACK'"
+            else
+              echo "::warning::Could not list the runners of $ORG ($(head -c 200 "$RUNNER_TEMP/err")): using '$FALLBACK'"
+            fi
           elif grep -qx online <<<"$states"; then
             chosen="$PREFERRED"
           else
