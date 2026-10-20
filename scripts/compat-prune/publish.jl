@@ -21,7 +21,7 @@ const BRANCH = "ct/compat-prune"
 const ISSUE_TITLE = "[compat] prune report"
 const PR_TITLE = "chore(compat): drop [compat] specifiers no supported Julia version selects"
 # the GitHub App the publish job runs as (its bot user: id 343432246), see docs/conventions/github-app.md
-const BOT = ("ct-prune[bot]", "343432246+ct-prune[bot]@users.noreply.github.com")
+const BOT = ("ct-prune-compat[bot]", "343432246+ct-prune-compat[bot]@users.noreply.github.com")
 
 "Run git in `dir` and return its standard output."
 git(dir, args...) = read(`git -C $dir $args`, String)
