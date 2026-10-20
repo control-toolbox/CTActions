@@ -41,10 +41,9 @@ jobs:
       # Add ct-registry (only if use_registry is true and SSH_KEY is provided)
       - name: Add ct-registry
         if: inputs.use_ct_registry
-        uses: julia-actions/add-julia-registry@v2
+        uses: control-toolbox/CTActions/.github/actions/add-ct-registry@main
         with:
           key: ${{ secrets.SSH_KEY }}
-          registry: control-toolbox/ct-registry
 
       # Cache artifacts (downloads)
       - name: Cache Julia artifacts
@@ -199,7 +198,13 @@ jobs:
             done
           } > summary.md
 
+      # The summary is also in the run's page: a pull request from a fork has a read-only
+      # token and cannot comment (a 403 would fail the job).
+      - name: Show the summary in the run
+        run: cat breakage/summary.md >> "$GITHUB_STEP_SUMMARY"
+
       - name: Comment on PR
+        if: github.event.pull_request.head.repo.fork != true
         uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -11,7 +11,7 @@
 | `CODECOV_TOKEN` → `codecov-secret` | organization (all repositories) | `coverage.yml` | Upload to Codecov |
 | `PROJECT_TOKEN` → `project_token` | organization (all repositories) | `add-to-project.yml` | Write to the organization's project board |
 | `CT_PRUNE_COMPAT_CLIENT_ID`, `CT_PRUNE_COMPAT_PRIVATE_KEY` | organization, **CTActions only** | `compat-prune-monthly.yml` (`publish` job) | Token of the organization's [GitHub App](github-app.md) |
-| `CT_RUNNERS_CLIENT_ID`, `CT_RUNNERS_PRIVATE_KEY` | organization, the packages with a GPU CI | `select-gpu-runner.yml` | Token of the read-only App `ct-runners` ([details](../workflows/select-gpu-runner.md#the-github-app-ct-runners)) |
+| `CT_RUNNERS_CLIENT_ID`, `CT_RUNNERS_PRIVATE_KEY` | organization (all repositories) | `select-gpu-runner.yml` | Token of the read-only App `ct-runners` ([details](../workflows/select-gpu-runner.md#the-github-app-ct-runners)) |
 | `OCCIDATA_SSH_KEY`, `OCCIDATA_KNOWN_HOSTS` | CTActions | `occidata-runner-watchdog.yml` | SSH to `occidata-cluster.irit.fr` |
 | `GITHUB_TOKEN` | built in | most workflows | Token of the repository the workflow runs in |
 
@@ -49,3 +49,19 @@ in General. The registry is **public**.
 On Windows, `add-julia-registry` needs Git's own OpenSSH client and Pkg needs the CLI git
 (`git_cli: true` on `julia-buildpkg`): `ci.yml` does both (see the comments in the
 workflow). `coverage.yml`, `documentation.yml` and `breakage.yml` run on Ubuntu only.
+
+## Pull requests from a fork
+
+A pull request from a fork runs with **no secret and a read-only `GITHUB_TOKEN`**.
+The workflows degrade instead of failing with an obscure message:
+
+| Workflow | On a fork's pull request |
+| --- | --- |
+| `ci.yml`, `documentation.yml`, `breakage.yml`, `breakage-suite.yml` | run; `ct-registry` is added from its public HTTPS URL (composite action `.github/actions/add-ct-registry`, a notice in the log) instead of with `SSH_KEY` |
+| `breakage.yml`, `breakage-suite.yml` | the report is in the run's summary; no PR comment (it would be a 403) |
+| `auto-assign.yml`, `add-to-project.yml` | skipped: the maintainer assigns and adds the PR by hand |
+| `documentation.yml` | the build runs, no preview is deployed |
+
+Never `pull_request_target` for what runs the PR's code (CI, breakage, documentation):
+it would hand the secrets to it. A dependency that only a beta in `ct-registry` satisfies
+resolves the same way, since the registry is the same.

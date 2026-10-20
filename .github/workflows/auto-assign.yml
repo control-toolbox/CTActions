@@ -12,6 +12,9 @@ on:
 
 jobs:
   run:
+    # A pull request from a fork has a read-only token: assigning would fail with a 403.
+    # The maintainer assigns it by hand.
+    if: github.event.pull_request.head.repo.fork != true
     runs-on: ubuntu-latest
     permissions:
       issues: write

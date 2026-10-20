@@ -118,10 +118,9 @@ jobs:
 
       - name: Add ct-registry
         if: inputs.use_ct_registry
-        uses: julia-actions/add-julia-registry@v2
+        uses: control-toolbox/CTActions/.github/actions/add-ct-registry@main
         with:
           key: ${{ secrets.SSH_KEY }}
-          registry: control-toolbox/ct-registry
 
       - name: Cache Julia artifacts
         uses: actions/cache@v5
@@ -260,8 +259,10 @@ jobs:
           name: breakage-${{ inputs.group }}
           path: out/
 
+      # Not on a pull request from a fork: its token is read-only and the comment would
+      # fail the job (and hide the verdict below). The report is in the run's summary.
       - name: Comment on the PR
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork != true
         uses: actions/github-script@v9
         env:
           MARKER: <!-- ct-breakage:${{ inputs.group }} -->
