@@ -1,0 +1,96 @@
+name: Select GPU runner
+
+# Picks the self-hosted GPU runner a job should run on: `preferred` (kkt) unless it is
+# offline, else `fallback` (occidata). Only "offline" matters: a busy `preferred` runner
+# is waited for, since a queued job on kkt still finishes before a cold occidata one.
+#
+# The state of the organization's runners is read with a one-hour token minted by the
+# GitHub App ct-runners (organization permission "Self-hosted runners: read", nothing
+# else; the workflow's GITHUB_TOKEN cannot list them). Without its secrets, or if the
+# token or the API call fails, the fallback is chosen, with a warning: slower, but it
+# never leaves a job queued for a runner that is not there.
+#
+# The choice is made once, when this job runs; a runner that goes offline afterwards
+# leaves the job queued (the caller's timeout bounds it).
+
+on:
+  workflow_call:
+    inputs:
+      preferred:
+        description: "Label of the runner to use when it is not offline"
+        required: false
+        default: 'kkt'
+        type: string
+      fallback:
+        description: "Label of the runner to use when the preferred one is offline"
+        required: false
+        default: 'occidata'
+        type: string
+    secrets:
+      CT_RUNNERS_CLIENT_ID:
+        required: false
+      CT_RUNNERS_PRIVATE_KEY:
+        required: false
+    outputs:
+      runner:
+        description: "The chosen runner label, e.g. 'kkt'"
+        value: ${{ jobs.select.outputs.runner }}
+      runs_on_matrix:
+        description: "For ci.yml's `runs_on`: one self-hosted runner, e.g. '[[\"kkt\"]]'"
+        value: ${{ jobs.select.outputs.runs_on_matrix }}
+      runs_on_labels:
+        description: "For a job's `runs-on` through fromJSON, e.g. '[\"kkt\"]'"
+        value: ${{ jobs.select.outputs.runs_on_labels }}
+
+permissions:
+  contents: read
+
+jobs:
+  select:
+    name: Select GPU runner
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      runner: ${{ steps.pick.outputs.runner }}
+      runs_on_matrix: ${{ steps.pick.outputs.runs_on_matrix }}
+      runs_on_labels: ${{ steps.pick.outputs.runs_on_labels }}
+    steps:
+      # continue-on-error: a missing or revoked key must not fail the job, the fallback
+      # is the answer then (see the warning of the next step).
+      - name: Mint a runners-read token (ct-runners App)
+        id: app
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.CT_RUNNERS_CLIENT_ID }}
+          private-key: ${{ secrets.CT_RUNNERS_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          permission-organization-self-hosted-runners: read
+
+      - name: Pick the runner
+        id: pick
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PREFERRED: ${{ inputs.preferred }}
+          FALLBACK: ${{ inputs.fallback }}
+          ORG: ${{ github.repository_owner }}
+        run: |
+          set -uo pipefail
+          chosen="$FALLBACK"
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::warning::No ct-runners token (secrets CT_RUNNERS_* missing, or the key was rejected): cannot read the state of '$PREFERRED', using '$FALLBACK'"
+          elif ! states=$(gh api "orgs/$ORG/actions/runners" --paginate \
+                 --jq ".runners[] | select(any(.labels[]; .name == \"$PREFERRED\")) | .status" 2>"$RUNNER_TEMP/err"); then
+            echo "::warning::Could not list the runners of $ORG ($(head -c 200 "$RUNNER_TEMP/err")): is the ct-runners App installed on this organization with 'Self-hosted runners: read'? Using '$FALLBACK'"
+          elif grep -qx online <<<"$states"; then
+            chosen="$PREFERRED"
+          else
+            echo "::notice::'$PREFERRED' is offline: using '$FALLBACK'"
+          fi
+          echo "Chosen GPU runner: $chosen"
+          {
+            echo "runner=$chosen"
+            echo "runs_on_matrix=[[\"$chosen\"]]"
+            echo "runs_on_labels=[\"$chosen\"]"
+          } >> "$GITHUB_OUTPUT"

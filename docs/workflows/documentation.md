@@ -43,7 +43,7 @@ jobs:
 | Input | Default | Meaning |
 | --- | --- | --- |
 | `use_ct_registry` | `false` | Add `ct-registry` (needs `SSH_KEY`) |
-| `gpu_runner` | `''` | Labels of a self-hosted GPU runner for the upgrade pass (JSON array, e.g. `'["occidata"]'`); empty disables it |
+| `gpu_runner` | `''` | Labels of a self-hosted GPU runner for the upgrade pass (JSON array, e.g. `'["occidata"]'`), or `auto`: `kkt` unless it is offline, else `occidata` ([details](#choosing-the-gpu-runner)); empty disables it |
 | `gpu_timeout_minutes` | `120` | Timeout of the upgrade pass; budget for a cold build |
 
 | Secret | |
@@ -96,7 +96,16 @@ depot can miss a package's build output, e.g. KNITRO.jl's `deps/deps.jl`), and r
 once after purging `compiled/`.
 
 Used by OptimalControl.jl (`gpu_runner: '["occidata"]'`, `gpu_timeout_minutes: 180`,
-CTActions#71, OptimalControl.jl#885) and CTSolvers.jl (`gpu_runner: '["kkt"]'`).
+CTActions#71, OptimalControl.jl#885) and CTSolvers.jl (`gpu_runner: '["kkt"]'`); both
+move to `gpu_runner: 'auto'`.
+
+### Choosing the GPU runner
+
+`gpu_runner: 'auto'` adds a job `select-gpu` between `build` and `build-gpu`
+([`select-gpu-runner.yml`](select-gpu-runner.md)): `kkt` unless it is offline, else
+`occidata`. Only *offline* matters: a busy `kkt` is waited for. The caller passes the
+secrets `CT_RUNNERS_CLIENT_ID` and `CT_RUNNERS_PRIVATE_KEY`; without them the fallback is used. Size `gpu_timeout_minutes`
+for the fallback (a cold `occidata` build takes ~38 min).
 
 ### Ordering the deployments
 
