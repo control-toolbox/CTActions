@@ -13,10 +13,13 @@ on:
         default: 'Todo'
     secrets:
       project_token:
-        required: true
+        required: false   # a pull request from a fork gets no secret
 
 jobs:
   add-to-project:
+    # No secret on a pull request from a fork: the project token would be empty. The
+    # maintainer adds it by hand.
+    if: github.event.pull_request.head.repo.fork != true
     runs-on: ubuntu-latest
     steps:
       - name: Add issue or PR to project

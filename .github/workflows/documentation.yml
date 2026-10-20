@@ -56,10 +56,9 @@ jobs:
       # Add ct-registry (only if use_registry is true and SSH_KEY is provided)
       - name: Add ct-registry
         if: inputs.use_ct_registry
-        uses: julia-actions/add-julia-registry@v2
+        uses: control-toolbox/CTActions/.github/actions/add-ct-registry@fix/fork-safe
         with:
           key: ${{ secrets.SSH_KEY }}
-          registry: control-toolbox/ct-registry
 
       # 🧰 Cache des artefacts (binaires des paquets)
       - name: Cache Julia artifacts
@@ -154,10 +153,9 @@ jobs:
 
       - name: Add ct-registry
         if: inputs.use_ct_registry
-        uses: julia-actions/add-julia-registry@v2
+        uses: control-toolbox/CTActions/.github/actions/add-ct-registry@fix/fork-safe
         with:
           key: ${{ secrets.SSH_KEY }}
-          registry: control-toolbox/ct-registry
 
       - name: Cache Julia artifacts
         uses: actions/cache@v6

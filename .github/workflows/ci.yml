@@ -124,12 +124,9 @@ jobs:
 
       - name: Add ct-registry
         if: inputs.use_ct_registry
-        uses: julia-actions/add-julia-registry@v2
-        env:
-          SHELL: /bin/bash
+        uses: control-toolbox/CTActions/.github/actions/add-ct-registry@fix/fork-safe
         with:
           key: ${{ secrets.SSH_KEY }}
-          registry: control-toolbox/ct-registry
 
       # add-julia-registry's own ssh-agent (started above) is only ever talked to
       # by system `git`/`ssh`, which is why that step succeeds. Pkg's later git
