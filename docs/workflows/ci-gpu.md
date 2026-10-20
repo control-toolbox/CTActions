@@ -40,5 +40,8 @@ a cron copies the job:
       CT_RUNNERS_PRIVATE_KEY: ${{ secrets.CT_RUNNERS_PRIVATE_KEY }}
 ```
 
-The package's repository must be allowed to read the organization secrets
-`CT_RUNNERS_*` (organization settings → Secrets → *Repository access*).
+`CT_RUNNERS_*` are organization secrets visible to every repository of the organization
+(*Repository access*: all), so a new package needs no setup. If that access is narrowed one
+day to selected repositories, every package calling `ci-gpu.yml` or `documentation.yml` with
+`gpu_runner: 'auto'` must be added to the list: otherwise the secrets arrive empty and the
+selection silently falls back to `occidata` (see the warning of the `select` job).
