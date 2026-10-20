@@ -74,6 +74,15 @@ Occidata also hosts a second runner instance, `occidata-cpu`, for the `ocourses`
 organization, in `cpu` mode (no `$OCCIDATA_GPU_RUN`, never a GPU). Instances, their modes
 and how to add one: control-toolbox/occidata, `docs/gha-runner-config.md` § 9.
 
+## Choosing between `kkt` and `occidata`
+
+On a PR, the labels choose (`run ci kkt-runner`, `run ci occidata-runner`): either
+runner can always be asked for. On a push to `main` or a tag, one GPU job runs:
+[`ci-gpu.yml`](../workflows/ci-gpu.md) takes `kkt` unless it is *offline*, else `occidata`;
+a busy `kkt` is waited for. The documentation's GPU pass does the same with
+`gpu_runner: 'auto'`. Both read the runner state with the organization secret
+`RUNNERS_STATUS_TOKEN` ([details](../workflows/select-gpu-runner.md)).
+
 ## Split CI
 
 A package with GPU-relevant code calls `ci.yml` several times from its `CI.yml`, one job

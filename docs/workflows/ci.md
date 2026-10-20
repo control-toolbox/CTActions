@@ -78,9 +78,9 @@ label (see [Runners](../conventions/runners.md#split-ci)):
 ```yaml
   test-gpu-occidata:
     if: >
-      github.event_name != 'pull_request' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'run ci occidata-runner') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'run ci occidata-runner'))
+      github.event_name == 'pull_request' &&
+      ((github.event.action == 'labeled' && github.event.label.name == 'run ci occidata-runner') ||
+      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'run ci occidata-runner')))
     uses: control-toolbox/CTActions/.github/workflows/ci.yml@main
     with:
       runs_on: '[["occidata"]]'
@@ -90,7 +90,23 @@ label (see [Runners](../conventions/runners.md#split-ci)):
       SSH_KEY: ${{ secrets.SSH_KEY }}
 ```
 
-A `kkt` job is the same with `kkt` and `run ci kkt-runner`. CTFlows.jl also calls
+A `kkt` job is the same with `kkt` and `run ci kkt-runner`.
+
+The two GPU jobs are guarded `github.event_name == 'pull_request' && (…)`: on a PR each
+runs on its label. On a push (`main`, tags) a single job picks the runner at run time,
+`kkt` unless it is offline, else `occidata` ([`ci-gpu.yml`](ci-gpu.md)):
+
+```yaml
+  test-gpu-main:
+    if: github.event_name != 'pull_request'
+    uses: control-toolbox/CTActions/.github/workflows/ci-gpu.yml@main
+    with:
+      use_ct_registry: true
+    secrets:
+      SSH_KEY: ${{ secrets.SSH_KEY }}
+      RUNNERS_STATUS_TOKEN: ${{ secrets.RUNNERS_STATUS_TOKEN }}
+```
+ CTFlows.jl also calls
 `ci.yml` from `CITargeted.yml` (a subset of the tests on a chosen runner, by hand) and
 `CronIntegration.yml` (weekly slow tests, `test_args: 'cron'`): see
 [Workflows defined in a package](per-repo.md).

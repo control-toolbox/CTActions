@@ -19,7 +19,7 @@ on:
       # long SLURM queue (self-hosted GPU boxes are not always immediately
       # available) the already-published site from `build` is simply left in place.
       gpu_runner:
-        description: "Self-hosted GPU runner labels for a docs-build upgrade pass (JSON array, e.g. '[\"occidata\"]'). Empty (default) disables the pass entirely."
+        description: "Self-hosted GPU runner labels for a docs-build upgrade pass (JSON array, e.g. '[\"occidata\"]'), or 'auto': kkt unless it is offline, else occidata (needs the RUNNERS_STATUS_TOKEN secret). Empty (default) disables the pass entirely."
         required: false
         default: ''
         type: string
@@ -33,6 +33,9 @@ on:
         description: 'Deploy key of gh-pages; optional: without it, Documenter deploys with GITHUB_TOKEN (what every caller does today)'
         required: false
       SSH_KEY:
+        required: false
+      RUNNERS_STATUS_TOKEN:
+        description: "Reads the state of the organization's runners, for gpu_runner: 'auto'; without it the fallback (occidata) is used"
         required: false
 
 jobs:
@@ -99,10 +102,25 @@ jobs:
   # rationale. Never on the critical path of publishing: it only starts once
   # `build` has already deployed, and `continue-on-error: true` means its outcome
   # never fails the workflow either way.
-  build-gpu:
+  # With `gpu_runner: 'auto'`, `select-gpu` first picks kkt unless it is offline, else
+  # occidata (select-gpu-runner.yml). Chosen once `build` is done, i.e. as late as
+  # possible, since `build` can take a while.
+  select-gpu:
     needs: build
-    if: inputs.gpu_runner != '' && github.event_name != 'pull_request'
-    runs-on: ${{ fromJSON(inputs.gpu_runner) }}
+    if: inputs.gpu_runner == 'auto' && github.event_name != 'pull_request'
+    uses: control-toolbox/CTActions/.github/workflows/select-gpu-runner.yml@main
+    secrets:
+      RUNNERS_STATUS_TOKEN: ${{ secrets.RUNNERS_STATUS_TOKEN }}
+
+  build-gpu:
+    # `always()`: `select-gpu` is skipped unless `gpu_runner` is 'auto', and a skipped
+    # need would skip this job too.
+    needs: [build, select-gpu]
+    if: >
+      always() && needs.build.result == 'success' &&
+      inputs.gpu_runner != '' && github.event_name != 'pull_request' &&
+      (inputs.gpu_runner != 'auto' || needs.select-gpu.result == 'success')
+    runs-on: ${{ fromJSON(inputs.gpu_runner == 'auto' && needs.select-gpu.outputs.runs_on_labels || inputs.gpu_runner) }}
     timeout-minutes: ${{ inputs.gpu_timeout_minutes }}
     continue-on-error: true
     steps:
