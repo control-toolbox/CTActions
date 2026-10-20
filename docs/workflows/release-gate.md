@@ -88,6 +88,7 @@ julia scripts/release/release.jl tag-plan <clone>
 julia scripts/release/release.jl ready --repo control-toolbox/CTBase.jl --pr 640
 julia scripts/release/release.jl merge --repo control-toolbox/CTBase.jl --pr 640 [--confirm]
 julia scripts/release/release.jl register --repo control-toolbox/CTBase.jl --version 0.30.12 [--post] [--on-commit]
+julia scripts/release/release.jl audit --repo control-toolbox/CTBase.jl --version 0.30.12
 ```
 
 - **`status`** says where a release stands, from the facts only — the tracking issue and
@@ -117,8 +118,25 @@ julia scripts/release/release.jl register --repo control-toolbox/CTBase.jl --ver
   commit, `status` says so, and `--on-commit` (asked explicitly, after a human's go) posts
   the comment on the merge commit instead; `status` counts the mentions and reads the bot's
   answers there too.
+- **`audit`** judges a finished release, from the facts and never from what the agent says
+  it did: whether it left the trail the recipe asks for. `status` says where a release
+  stands; `audit` says whether one that stands at its end went the way the recipe requires.
+  It checks that `status` says *done*; one tracking issue, closed, whose description is
+  written and does not mention the bot; a comment with a state marker for the proposal
+  and for each of the phases 3 to 8, in order, naming this release, the last one the final
+  comment with every step ✅; for a stable, one registration mention, in the form
+  `register` builds (a comment written by hand has another), and none for a beta; the
+  release PR merged, never with GitHub's auto-merge, changing only `Project.toml` (its
+  `version`), `CHANGELOG.md` and `BREAKING.md` (`REL7`), with the latest real run of each
+  workflow on its head commit green, the gate among them; the tag on the merge commit, the
+  GitHub release with notes, the registered tree equal to the tag's (`REL5`), General's
+  PR merged; the release branch deleted. It only informs about the documentation of the
+  tag (it never stops a release) and the jump over betas (`REL3`). Run it at the close of
+  a release, or on one a colleague or another agent did. It cannot see *who* acted: a
+  merge or a comment made by hand with the right content passes.
 
-Exit codes: 0 ready or nothing to do, 1 blocked, 2 usage error. Reports in Markdown, on
+Exit codes: 0 ready or nothing to do (`audit`: the trail is complete), 1 blocked (`audit`: a
+check failed), 2 usage error. Reports in Markdown, on
 standard output and in the job summary.
 
 ## Tests

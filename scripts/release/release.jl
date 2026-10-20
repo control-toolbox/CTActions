@@ -20,6 +20,11 @@
 #       --post; refused unless `status` says phase 7, todo; on the merge commit instead of
 #       the issue (--on-commit) only when `main` has moved past it
 #
+#   julia release.jl audit --repo OWNER/REPO --version V
+#       whether a finished release left the trail the recipe asks for (the comments of the
+#       tracking issue, one registration mention, the PR, the tag, the registry, the clean-up);
+#       read only; exits 1 when a check fails
+#
 # The Markdown report goes to standard output, and to $GITHUB_STEP_SUMMARY when set. Exit
 # code: 0 ready (or nothing to do), 1 blocked, 2 usage error; `status` exits 1 when the
 # release is blocked, 0 otherwise. Stdlib only. See docs/workflows/release-gate.md.
@@ -28,6 +33,7 @@ include(joinpath(@__DIR__, "tag.jl"))
 include(joinpath(@__DIR__, "status.jl"))
 include(joinpath(@__DIR__, "register.jl"))
 include(joinpath(@__DIR__, "ready.jl"))
+include(joinpath(@__DIR__, "audit.jl"))
 
 "The value of the option `--name` in `args`, removed from it, or `default`."
 function option!(args, name, default=nothing)
@@ -53,7 +59,8 @@ const USAGE = """
            julia release.jl tag-plan [DIR]
            julia release.jl ready --repo OWNER/REPO --pr N
            julia release.jl merge --repo OWNER/REPO --pr N [--confirm]
-           julia release.jl register --repo OWNER/REPO --version V [--post] [--on-commit]"""
+           julia release.jl register --repo OWNER/REPO --version V [--post] [--on-commit]
+           julia release.jl audit --repo OWNER/REPO --version V"""
 
 function release_main(args)
     isempty(args) && (println(stderr, USAGE); return 2)
@@ -102,6 +109,13 @@ function release_main(args)
             ok, message = register(repo, VersionNumber(version); post, on_commit)
             println(message)
             return ok ? 0 : 1
+        elseif command == "audit"
+            repo = option!(args, "repo")
+            version = option!(args, "version")
+            (repo === nothing || version === nothing) && throw(ArgumentError("--repo and --version are required"))
+            f, results = audit(repo, VersionNumber(version))
+            emit(audit_report(f, results))
+            return any(r -> r.status === :fail, results) ? 1 : 0
         elseif command == "tag-plan"
             p = tag_plan(isempty(args) ? "." : only(args))
             if p.tag === nothing
