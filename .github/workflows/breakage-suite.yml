@@ -118,7 +118,7 @@ jobs:
 
       - name: Add ct-registry
         if: inputs.use_ct_registry
-        uses: control-toolbox/CTActions/.github/actions/add-ct-registry@fix/fork-safe
+        uses: control-toolbox/CTActions/.github/actions/add-ct-registry@main
         with:
           key: ${{ secrets.SSH_KEY }}
 
