@@ -149,6 +149,10 @@ jobs:
 
   break:
     needs: plan
+    # `!cancelled()`: `changes` (two levels up) is skipped outside a push to `main`, and the
+    # default `success()` of a `needs` is false when a job anywhere upstream was skipped,
+    # even though `plan` ran: without it no cell would run on a pull request.
+    if: ${{ !cancelled() && needs.plan.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
