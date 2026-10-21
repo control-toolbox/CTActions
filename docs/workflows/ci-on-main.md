@@ -18,10 +18,12 @@ unless every condition below holds, and any doubt runs the job.
 
 ## The decision
 
-A first job, `changes`, runs on a push to `main` in each of the four reusable workflows. It
-runs [`scripts/ci-main/changes.jl`](../../scripts/ci-main/changes.jl), which answers `run=true`
-or `run=false` for the job it guards. The rules, **in this order**, stop at the first that
-applies:
+A first job, `changes` (a call of [`guard.yml`](guard.md)), starts each of the four reusable
+workflows. On a push to `main` it runs
+[`scripts/ci-main/changes.jl`](../../scripts/ci-main/changes.jl), which answers `run=true` or
+`run=false` for the job it guards; on any other event the script is not run and the guard
+answers by itself (`true`, except for a pull request that is not open). The rules of the
+script, **in this order**, stop at the first that applies:
 
 | # | Situation | Answer |
 | --- | --- | --- |
@@ -118,34 +120,30 @@ ignored (rule 4). The release recipe (`recipes/release.md` in ct-agents) does no
 
 ## What the guarded workflows look like
 
-Each of `ci.yml`, `coverage.yml`, `breakage-suite.yml` and `documentation.yml` starts with:
-
-```yaml
-changes:
-  if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-  # checks out the repository (whole history) and CTActions, then runs the composite
-  # action .github/actions/changes-only with the scope and the job id
-```
-
-and its first real job gets:
+Each of `ci.yml`, `coverage.yml`, `breakage-suite.yml` and `documentation.yml` starts with
+the job `changes`, a call of [`guard.yml`](guard.md) with the scope and the id of the job it
+guards. The guard also skips a pull request that is not open, which has nothing to do with the
+label; on a push to `main` it checks out the repository (whole history) and CTActions, then
+runs the composite action `.github/actions/changes-only`. Its first real job gets:
 
 ```yaml
 needs: changes
 if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
 ```
 
-Read it as: **run, unless `changes` said `false`.** The job `changes` is skipped on a pull
-request, a tag or a manual run, and its empty output is not `'false'`, so the job runs; if
-`changes` fails, the job runs too (`!cancelled()` instead of the default `success()` of a
-`needs`). The callers in each package do not change.
+Read it as: **run, unless `changes` said `false`.** For a pull request, a tag or a manual run
+the guard answers `true` (except a pull request that is not open, see [guard.md](guard.md));
+if `changes` fails, its output is empty and the job runs too (`!cancelled()` instead of the
+default `success()` of a `needs`). The callers in each package do not change.
 
 **Every job downstream of a guarded job needs the same care.** The default condition of a job
 is `success()`, which is false when a job *anywhere upstream* was skipped, not only a direct
-`needs`. A job that needs `build`, itself guarded and run, is still skipped on a pull request
-because `changes` (two levels up) was skipped. Such a job carries `!cancelled()` and tests the
-result of the job it needs (`needs.build.result == 'success'`) in its own `if`, as `break` and
-`select-gpu` do. Without it, `breakage-suite.yml` ran no cell on a pull request, and the report
-failed with *no result* for every cell.
+`needs`. A job that needs `build`, itself guarded and run, is skipped if a job above it was
+skipped. The guard itself always runs for that reason (it has no `if`). A job that needs a job
+that may be skipped by a rule carries `!cancelled()` and tests the result of the job it needs
+(`needs.build.result == 'success'`) in its own `if`, as `break` and `select-gpu` do. Without
+it, `breakage-suite.yml` ran no cell on a pull request (the former `changes` was skipped
+outside a push to `main`), and the report failed with *no result* for every cell.
 
 The composite action's outputs are `run`, `base_run` (the id of the run the diff started
 from) and `reason`; the reason is also written to the job summary, one line per guarded job,

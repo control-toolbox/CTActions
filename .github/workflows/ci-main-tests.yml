@@ -9,6 +9,7 @@ on:
     paths:
       - 'scripts/ci-main/**'
       - '.github/actions/changes-only/**'
+      - '.github/workflows/guard.yml'
       - '.github/workflows/ci.yml'
       - '.github/workflows/coverage.yml'
       - '.github/workflows/breakage-suite.yml'

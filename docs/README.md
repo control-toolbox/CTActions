@@ -73,6 +73,7 @@ token.
 | --- | --- | --- | --- |
 | [`ci.yml`](workflows/ci.md) | `CI.yml` | Test suite over a Julia × OS × arch matrix, on GitHub-hosted or self-hosted (GPU) runners | label `run ci <runner>` |
 | [`ci-gpu.yml`](workflows/ci-gpu.md) | `CI.yml` | `ci.yml` on `kkt`, or `occidata` if `kkt` is offline; pushes to `main` and tags | push |
+| [`guard.yml`](workflows/guard.md) | `ci.yml`, `coverage.yml`, `breakage-suite.yml`, `documentation.yml` | Whether the jobs below run: no on a pull request that is not open; on `main`, the label `ci on main: changes only` | called by the four above |
 | [`select-gpu-runner.yml`](workflows/select-gpu-runner.md) | `ci-gpu.yml`, `documentation.yml` | Picks `kkt` unless offline, else `occidata` | called by the two above |
 | [`coverage.yml`](workflows/coverage.md) | `Coverage.yml` | Test suite with coverage, uploaded to Codecov | no (push and tags) |
 | [`documentation.yml`](workflows/documentation.md) | `Documentation.yml` | Build and deploy the documentation; optional GPU upgrade pass; opt-in PR previews | label `run documentation` |
@@ -95,6 +96,7 @@ token.
 | [`compat-prune-monthly.yml`](workflows/compat-prune.md) | The organization's `[compat]` prune (logic: reusable `compat-prune.yml`): one PR per repository, one tracking issue in CTActions | monthly (1st, 04:00 UTC), by hand |
 | [`compat-prune-tests.yml`](workflows/compat-prune.md#tests) | Self-test of the prune: its test suite, then a real dry-run audit | PR or push touching it, by hand |
 | [`release-tests.yml`](workflows/release-gate.md#tests) | Self-test of the release tool (`scripts/release`) on Julia 1.10, 1.12, 1.13 | PR or push touching it, by hand |
+| [`guard-tests.yml`](workflows/guard.md#testing-a-change) | Self-test of `guard.yml`: `run` follows the state of the pull request | PR touching it, by hand |
 | [`ci-main-tests.yml`](workflows/ci-on-main.md#testing-a-change-to-this-mechanism) | Self-test of the changes-only decision (`scripts/ci-main`) | PR or push touching it, by hand |
 | [`breakage-tests.yml`](workflows/breakage-suite.md#tests) | Self-test of the breakage report (`scripts/breakage`) | PR or push touching it, by hand |
 | `lint-workflows.yml` | actionlint on every workflow (expressions, inputs and secrets of reusable workflows, runner labels from `.github/actionlint.yaml`, shellcheck on `run:` scripts) | PR or push touching `.github/`, by hand |
