@@ -1,0 +1,46 @@
+name: Guard tests
+
+# Self-test of guard.yml (docs/workflows/guard.md): its output `run` is 'true' on an open
+# pull request and by hand, 'false' when the pull request is not open. To see the second
+# case, add a label to a closed pull request that changes the guard.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - '.github/workflows/guard.yml'
+      - '.github/workflows/guard-tests.yml'
+      - '.github/actions/changes-only/**'
+  workflow_dispatch:
+
+jobs:
+  guard:
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    uses: ./.github/workflows/guard.yml
+    with:
+      scope: tests
+      job: test
+      ctactions_ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+  check:
+    needs: guard
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: The decision matches the state of the pull request
+        env:
+          RUN: ${{ needs.guard.outputs.run }}
+          REASON: ${{ needs.guard.outputs.reason }}
+          STATE: ${{ github.event.pull_request.state || 'open' }}
+        run: |
+          expected=true
+          [ "$STATE" = open ] || expected=false
+          echo "state=$STATE run=$RUN reason=$REASON (expected run=$expected)"
+          if [ "$RUN" != "$expected" ]; then
+            echo "::error::the guard answered run=$RUN for a pull request that is $STATE"
+            exit 1
+          fi
