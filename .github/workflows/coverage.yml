@@ -7,6 +7,11 @@ on:
         required: false
         default: false
         type: boolean
+      ctactions_ref:
+        description: "Ref of CTActions whose scripts the `changes` job runs (main; a branch to test a change)"
+        required: false
+        type: string
+        default: main
     secrets:
       codecov-secret:
         description: 'Codecov token for repository'
@@ -15,7 +20,40 @@ on:
         required: false
 
 jobs:
+  # On a push to main, whether the jobs below must run (docs/workflows/ci-on-main.md): always
+  # yes unless the merged pull request carries the label `ci on main: changes only`.
+  changes:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+      base_run: ${{ steps.decide.outputs.base_run }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v6
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      - id: decide
+        uses: ./.ctactions/.github/actions/changes-only
+        with:
+          scope: coverage
+          job: coverage
+          actors: ${{ vars.CT_CI_CHANGES_ONLY_ACTORS }}
+
   test:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     name: coverage
     runs-on: ubuntu-latest
     steps:

@@ -126,3 +126,11 @@ error and not an empty list, the declared targets and their validation, the comm
 the ecosystem as it was read on 2026-10-19). The reading of GitHub is replaced by a fake,
 as in the release tests. `breakage-tests.yml` runs them when the script or the workflow
 change. The `plan` and `break` jobs themselves are exercised by the callers.
+
+## On a push to `main`: the label `ci on main: changes only`
+
+The first job, `changes`, decides whether the jobs of this workflow run on a push to `main`.
+Without the label `ci on main: changes only` on the merged pull request they always run;
+with it, they run only if a changed file can affect them. The input `ctactions_ref`
+(default `main`) is the ref of CTActions whose scripts `changes` runs, to test a change. See
+[CI on `main`](ci-on-main.md).

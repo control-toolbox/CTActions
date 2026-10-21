@@ -95,6 +95,7 @@ chooses *which* labels it defines, never *how they are spelled*.
 | `run documentation` | `documentation.yml` on the PR | every package with a documentation site |
 | `documentation push preview` | **Modifier, not a trigger**: with `run documentation`, the PR build also deploys its preview (`previews/PR<n>`); alone it does nothing ([details](../workflows/documentation.md#pr-previews)) | every package with a documentation site |
 | `run probe` | the capability probes (`CPUProbe.yml`, `GPUProbe.yml`, [details](../workflows/per-repo.md#probes)) | CTFlows, CTSolvers |
+| `ci on main: changes only` | **Not a trigger on the PR**: set before the merge, it makes the push to `main` rerun only the jobs the merged files can affect (never on a release PR; honoured only when set by an allowed login) — [details](../workflows/ci-on-main.md) | every package whose CI is called from CTActions |
 
 **CI labels are named after the runner, not the workload:** `run ci <runner>-runner`.
 The GitHub-hosted job is not "the CPU job", it is the job on GitHub's runners; the others
