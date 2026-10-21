@@ -124,3 +124,11 @@ While a run is in progress, GitHub keeps only the newest pending run of the grou
 burst of merges builds the first and the last commit. Tags carry their own ref and never
 wait for `main`. Queuing rather than cancelling on `main` avoids killing a Julia process
 on the self-hosted runner (see [Labels](../conventions/labels.md#the-types-list-without-opened)).
+
+## On a push to `main`: the label `ci on main: changes only`
+
+The first job, `changes`, decides whether the jobs of this workflow run on a push to `main`.
+Without the label `ci on main: changes only` on the merged pull request they always run;
+with it, they run only if a changed file can affect them. The input `ctactions_ref`
+(default `main`) is the ref of CTActions whose scripts `changes` runs, to test a change. See
+[CI on `main`](ci-on-main.md).

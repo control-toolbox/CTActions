@@ -95,6 +95,7 @@ token.
 | [`compat-prune-monthly.yml`](workflows/compat-prune.md) | The organization's `[compat]` prune (logic: reusable `compat-prune.yml`): one PR per repository, one tracking issue in CTActions | monthly (1st, 04:00 UTC), by hand |
 | [`compat-prune-tests.yml`](workflows/compat-prune.md#tests) | Self-test of the prune: its test suite, then a real dry-run audit | PR or push touching it, by hand |
 | [`release-tests.yml`](workflows/release-gate.md#tests) | Self-test of the release tool (`scripts/release`) on Julia 1.10, 1.12, 1.13 | PR or push touching it, by hand |
+| [`ci-main-tests.yml`](workflows/ci-on-main.md#testing-a-change-to-this-mechanism) | Self-test of the changes-only decision (`scripts/ci-main`) | PR or push touching it, by hand |
 | [`breakage-tests.yml`](workflows/breakage-suite.md#tests) | Self-test of the breakage report (`scripts/breakage`) | PR or push touching it, by hand |
 | `lint-workflows.yml` | actionlint on every workflow (expressions, inputs and secrets of reusable workflows, runner labels from `.github/actionlint.yaml`, shellcheck on `run:` scripts) | PR or push touching `.github/`, by hand |
 | [`occidata-runner-maintenance.yml`](workflows/occidata-runner-maintenance.md) | Clean the `occidata` self-hosted runner (git config, caches, logs, TeXLive) | weekly (Mon 02:30 UTC), by hand |

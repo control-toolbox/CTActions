@@ -28,6 +28,11 @@ on:
         required: false
         default: 120
         type: number
+      ctactions_ref:
+        description: "Ref of CTActions whose scripts the `changes` job runs (main; a branch to test a change)"
+        required: false
+        type: string
+        default: main
     secrets:
       DOCUMENTER_KEY:
         description: 'Deploy key of gh-pages; optional: without it, Documenter deploys with GITHUB_TOKEN (what every caller does today)'
@@ -41,7 +46,40 @@ on:
         required: false
 
 jobs:
+  # On a push to main, whether the jobs below must run (docs/workflows/ci-on-main.md): always
+  # yes unless the merged pull request carries the label `ci on main: changes only`.
+  changes:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
+    outputs:
+      run: ${{ steps.decide.outputs.run }}
+      base_run: ${{ steps.decide.outputs.base_run }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/checkout@v6
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      - id: decide
+        uses: ./.ctactions/.github/actions/changes-only
+        with:
+          scope: docs
+          job: build
+          actors: ${{ vars.CT_CI_CHANGES_ONLY_ACTORS }}
+
   build:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:

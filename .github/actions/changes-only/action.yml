@@ -1,0 +1,53 @@
+name: Changes only
+description: >
+  On a push to main, whether a job must run. Without the label `ci on main: changes only`
+  on the merged pull request the answer is always yes; with it, the job runs only if a file
+  changed since its last green run on main can affect it. See docs/workflows/ci-on-main.md.
+  The caller checks out the repository with its whole history (fetch-depth: 0) and Julia
+  does not need to be set up before.
+
+inputs:
+  scope:
+    description: "What the job tests: tests, coverage, breakage or docs"
+    required: true
+  job:
+    description: "Id of the job in the reusable workflow, as it appears in the run's job names (test, coverage, break, build)"
+    required: true
+  actors:
+    description: "Logins allowed to set the label, comma-separated (the organization variable CT_CI_CHANGES_ONLY_ACTORS); empty means the default list of the script"
+    required: false
+    default: ''
+
+outputs:
+  run:
+    description: "'true' or 'false'"
+    value: ${{ steps.decide.outputs.run }}
+  base_run:
+    description: "Id of the run the diff starts from, empty when there is none"
+    value: ${{ steps.decide.outputs.base_run }}
+  reason:
+    description: "Why"
+    value: ${{ steps.decide.outputs.reason }}
+
+runs:
+  using: composite
+  steps:
+    - uses: julia-actions/setup-julia@v2
+      with:
+        version: '1'
+
+    - name: Decide
+      id: decide
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        SCOPE: ${{ inputs.scope }}
+        JOB: ${{ inputs.job }}
+        ACTORS: ${{ inputs.actors }}
+        WORKFLOW_REF: ${{ github.workflow_ref }}
+      run: |
+        [ -z "$ACTORS" ] || export CT_CI_CHANGES_ONLY_ACTORS="$ACTORS"
+        julia --startup-file=no "$GITHUB_ACTION_PATH/../../../scripts/ci-main/changes.jl" \
+          --repo "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --scope "$SCOPE" --job "$JOB" \
+          --workflow "${WORKFLOW_REF%%@*}" --event "$GITHUB_EVENT_NAME" --ref "$GITHUB_REF" \
+          --run-id "$GITHUB_RUN_ID"

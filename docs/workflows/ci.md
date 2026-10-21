@@ -111,3 +111,11 @@ runs on its label. On a push (`main`, tags) a single job picks the runner at run
 `ci.yml` from `CITargeted.yml` (a subset of the tests on a chosen runner, by hand) and
 `CronIntegration.yml` (weekly slow tests, `test_args: 'cron'`): see
 [Workflows defined in a package](per-repo.md).
+
+## On a push to `main`: the label `ci on main: changes only`
+
+The first job, `changes`, decides whether the jobs of this workflow run on a push to `main`.
+Without the label `ci on main: changes only` on the merged pull request they always run;
+with it, they run only if a changed file can affect them. The input `ctactions_ref`
+(default `main`) is the ref of CTActions whose scripts `changes` runs, to test a change. See
+[CI on `main`](ci-on-main.md).
