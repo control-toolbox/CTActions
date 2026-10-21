@@ -139,6 +139,14 @@ request, a tag or a manual run, and its empty output is not `'false'`, so the jo
 `changes` fails, the job runs too (`!cancelled()` instead of the default `success()` of a
 `needs`). The callers in each package do not change.
 
+**Every job downstream of a guarded job needs the same care.** The default condition of a job
+is `success()`, which is false when a job *anywhere upstream* was skipped, not only a direct
+`needs`. A job that needs `build`, itself guarded and run, is still skipped on a pull request
+because `changes` (two levels up) was skipped. Such a job carries `!cancelled()` and tests the
+result of the job it needs (`needs.build.result == 'success'`) in its own `if`, as `break` and
+`select-gpu` do. Without it, `breakage-suite.yml` ran no cell on a pull request, and the report
+failed with *no result* for every cell.
+
 The composite action's outputs are `run`, `base_run` (the id of the run the diff started
 from) and `reason`; the reason is also written to the job summary, one line per guarded job,
 for example *since 1a2b3c4, no change can affect `test` (3 files, scope tests)*.
