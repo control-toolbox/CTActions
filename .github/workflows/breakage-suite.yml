@@ -167,7 +167,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
 
       - name: Cache Julia artifacts
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.julia/artifacts
           key: ${{ runner.os }}-breakage-julia-${{ steps.julia.outputs.julia-version }}-${{ hashFiles('**/Project.toml') }}
