@@ -38,7 +38,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         if: steps.pages.outputs.exists == 'true'
         with:
           ref: gh-pages

@@ -38,12 +38,12 @@ jobs:
       group: release-tag-${{ github.repository }}
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: control-toolbox/CTActions
           ref: ${{ inputs.ctactions_ref }}
