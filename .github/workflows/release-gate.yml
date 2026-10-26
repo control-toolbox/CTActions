@@ -38,11 +38,11 @@ jobs:
       contents: read
     steps:
       # the merge of the PR into its base, with the whole history and the tags
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: control-toolbox/CTActions
           ref: ${{ inputs.ctactions_ref }}
