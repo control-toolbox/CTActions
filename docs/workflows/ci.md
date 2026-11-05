@@ -126,6 +126,11 @@ runs on its label. On a push (`main`, tags) a single job picks the runner at run
 `CronIntegration.yml` (weekly slow tests, `test_args: 'cron'`): see
 [Workflows defined in a package](per-repo.md).
 
+## Superseded runs
+
+On a pull request, a new run cancels the previous one of the same workflow and pull request;
+nothing is cancelled on `main` or on a tag. See [Superseded runs](superseded-runs.md).
+
 ## On a push to `main`: the label `ci on main: changes only`
 
 The first job, `changes`, decides whether the jobs of this workflow run on a push to `main`.
