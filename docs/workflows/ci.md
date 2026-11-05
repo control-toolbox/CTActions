@@ -53,6 +53,7 @@ forward-slash glob.
 | `upload_artifact_if_no_files` | `warn` | `warn`, `error`, or `ignore` when the path is absent |
 | `upload_artifact_retention_days` | `''` | Optional retention in days; empty keeps the repository default |
 | `upload_artifact_include_hidden_files` | `false` | Include files whose names begin with `.` |
+| `fail_fast` | `true` | `strategy.fail-fast` of the matrix: `false` keeps the other platforms running after a failure (e.g. to collect one report per platform) |
 
 | Secret | |
 | --- | --- |

@@ -58,6 +58,11 @@ on:
         required: false
         type: boolean
         default: false
+      fail_fast:
+        description: "Cancel the other matrix jobs when one fails (GitHub default). Set false to keep every platform running, e.g. to collect one report per platform."
+        required: false
+        type: boolean
+        default: true
     secrets:
       SSH_KEY:
         required: false
@@ -94,6 +99,7 @@ jobs:
     needs: changes
     if: ${{ !cancelled() && needs.changes.outputs.run != 'false' }}
     strategy:
+      fail-fast: ${{ inputs.fail_fast }}
       matrix:
         version: ${{ fromJSON(inputs.versions) }}
         runs_on: ${{ fromJSON(inputs.runs_on) }}
