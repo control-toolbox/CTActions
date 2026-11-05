@@ -48,6 +48,11 @@ on:
         required: false
         type: boolean
         default: false
+      fail_fast:
+        description: "Cancel the other matrix jobs when one fails (GitHub default). Set false to keep every platform running, e.g. to collect one report per platform."
+        required: false
+        type: boolean
+        default: true
     secrets:
       SSH_KEY:
         required: false
@@ -77,5 +82,6 @@ jobs:
       upload_artifact_if_no_files: ${{ inputs.upload_artifact_if_no_files }}
       upload_artifact_retention_days: ${{ inputs.upload_artifact_retention_days }}
       upload_artifact_include_hidden_files: ${{ inputs.upload_artifact_include_hidden_files }}
+      fail_fast: ${{ inputs.fail_fast }}
     secrets:
       SSH_KEY: ${{ secrets.SSH_KEY }}

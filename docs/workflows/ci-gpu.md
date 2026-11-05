@@ -18,6 +18,7 @@ stays available on demand.
 | `upload_artifact_if_no_files` | `warn` | Forwarded to `ci.yml` |
 | `upload_artifact_retention_days` | `''` | Forwarded to `ci.yml`; empty keeps the repository default |
 | `upload_artifact_include_hidden_files` | `false` | Forwarded to `ci.yml` |
+| `fail_fast` | `true` | Forwarded to `ci.yml` |
 
 Secrets: `SSH_KEY` (ct-registry), `CT_RUNNERS_CLIENT_ID` and `CT_RUNNERS_PRIVATE_KEY` (see
 [`select-gpu-runner.yml`](select-gpu-runner.md#the-github-app-ct-runners)).
