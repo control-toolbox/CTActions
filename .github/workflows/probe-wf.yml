@@ -1,0 +1,11 @@
+name: Probe workflow-level concurrency
+on:
+  workflow_call:
+concurrency:
+  group: probe-wf-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 150

@@ -1,0 +1,14 @@
+name: Probe job-level concurrency with a matrix
+on:
+  workflow_call:
+jobs:
+  work:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        v: ["a", "b"]
+    concurrency:
+      group: probe-matrix-${{ matrix.v }}-${{ github.ref }}
+      cancel-in-progress: true
+    steps:
+      - run: sleep 150

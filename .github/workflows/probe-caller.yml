@@ -1,0 +1,11 @@
+name: Probe caller
+on:
+  push:
+    branches: ['probe/**']
+jobs:
+  wf:
+    uses: ./.github/workflows/probe-wf.yml
+  job:
+    uses: ./.github/workflows/probe-job.yml
+  matrix:
+    uses: ./.github/workflows/probe-matrix.yml
