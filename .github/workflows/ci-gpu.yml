@@ -23,6 +23,31 @@ on:
         required: false
         type: string
         default: ''
+      upload_artifact_path:
+        description: "Optional file or directory to upload after tests, including on failure"
+        required: false
+        type: string
+        default: ''
+      upload_artifact_name:
+        description: "Optional base name for the test artifact; matrix identity is appended"
+        required: false
+        type: string
+        default: ''
+      upload_artifact_if_no_files:
+        description: "Behavior when the artifact path is missing: warn, error, or ignore"
+        required: false
+        type: string
+        default: warn
+      upload_artifact_retention_days:
+        description: "Optional artifact retention in days; empty keeps the repository default"
+        required: false
+        type: string
+        default: ''
+      upload_artifact_include_hidden_files:
+        description: "Whether hidden files are included in the test artifact"
+        required: false
+        type: boolean
+        default: false
     secrets:
       SSH_KEY:
         required: false
@@ -47,5 +72,10 @@ jobs:
       runner_type: 'self-hosted'
       use_ct_registry: ${{ inputs.use_ct_registry }}
       test_args: ${{ inputs.test_args }}
+      upload_artifact_path: ${{ inputs.upload_artifact_path }}
+      upload_artifact_name: ${{ inputs.upload_artifact_name }}
+      upload_artifact_if_no_files: ${{ inputs.upload_artifact_if_no_files }}
+      upload_artifact_retention_days: ${{ inputs.upload_artifact_retention_days }}
+      upload_artifact_include_hidden_files: ${{ inputs.upload_artifact_include_hidden_files }}
     secrets:
       SSH_KEY: ${{ secrets.SSH_KEY }}

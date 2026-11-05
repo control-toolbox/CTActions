@@ -33,6 +33,31 @@ on:
         required: false
         type: string
         default: main
+      upload_artifact_path:
+        description: "Optional file or directory to upload after tests, including on failure"
+        required: false
+        type: string
+        default: ''
+      upload_artifact_name:
+        description: "Optional base name for the test artifact; matrix identity is appended"
+        required: false
+        type: string
+        default: ''
+      upload_artifact_if_no_files:
+        description: "Behavior when the artifact path is missing: warn, error, or ignore"
+        required: false
+        type: string
+        default: warn
+      upload_artifact_retention_days:
+        description: "Optional artifact retention in days; empty keeps the repository default"
+        required: false
+        type: string
+        default: ''
+      upload_artifact_include_hidden_files:
+        description: "Whether hidden files are included in the test artifact"
+        required: false
+        type: boolean
+        default: false
     secrets:
       SSH_KEY:
         required: false
@@ -263,3 +288,32 @@ jobs:
           echo "::warning::Tests failed on first attempt — purging $COMPILED_DIR in case it's a stale precompile cache, then retrying once"
           rm -rf "$COMPILED_DIR"
           run_tests
+
+      - name: Warn on an incomplete artifact request
+        if: ${{ always() && ((inputs.upload_artifact_path != '') != (inputs.upload_artifact_name != '')) }}
+        shell: bash
+        run: echo '::warning::Both upload_artifact_path and upload_artifact_name are required; no test artifact is uploaded.'
+
+      - name: Build the test artifact name
+        id: artifact-name
+        if: ${{ always() && inputs.upload_artifact_path != '' && inputs.upload_artifact_name != '' }}
+        shell: bash
+        env:
+          ARTIFACT_BASE: ${{ inputs.upload_artifact_name }}
+          JULIA_VERSION: ${{ matrix.version }}
+          RUNS_ON: ${{ toJSON(matrix.runs_on) }}
+        run: |
+          name="${ARTIFACT_BASE}-${JULIA_VERSION}-${RUNS_ON}"
+          name=$(printf '%s' "$name" | sed 's/[^A-Za-z0-9._-]/-/g; s/--*/-/g; s/^-//; s/-$//')
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload requested test artifact
+        if: ${{ always() && inputs.upload_artifact_path != '' && inputs.upload_artifact_name != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact-name.outputs.name }}
+          path: ${{ inputs.upload_artifact_path }}
+          if-no-files-found: ${{ inputs.upload_artifact_if_no_files }}
+          include-hidden-files: ${{ inputs.upload_artifact_include_hidden_files }}
+          # 0 keeps the repository default retention
+          retention-days: ${{ fromJSON(inputs.upload_artifact_retention_days || '0') }}

@@ -48,6 +48,11 @@ forward-slash glob.
 | `runner_type` | `'github'` | `github` or `self-hosted`: selects the caching and test steps |
 | `use_ct_registry` | `false` | Add `ct-registry` (needs `SSH_KEY`) |
 | `test_args` | `''` | Forwarded to `Pkg.test` (e.g. `'GPU'`, `'cron'`, file globs) |
+| `upload_artifact_path` | `''` | Optional file or directory uploaded after the test, including on failure |
+| `upload_artifact_name` | `''` | Optional artifact base name; Julia version and the runner labels are appended as `<name>-<julia version>-<runs_on>` |
+| `upload_artifact_if_no_files` | `warn` | `warn`, `error`, or `ignore` when the path is absent |
+| `upload_artifact_retention_days` | `''` | Optional retention in days; empty keeps the repository default |
+| `upload_artifact_include_hidden_files` | `false` | Include files whose names begin with `.` |
 
 | Secret | |
 | --- | --- |
@@ -69,6 +74,15 @@ forward-slash glob.
 - **Windows with `ct-registry`:** Git's own OpenSSH client and Pkg's CLI git, because
   Windows' OpenSSH and Julia's LibGit2 cannot use the agent `add-julia-registry` starts
   (details in the workflow's comments).
+- **Optional test artifacts:** when both upload inputs are non-empty, the requested path
+  is uploaded with `actions/upload-artifact@v4` after the test step, with the matrix Julia
+  version and sanitized runner labels appended to the artifact name as
+  `<name>-<julia version>-<runs_on>`. The path may contain several newline-separated
+  paths. The upload runs even when tests fail; a missing path warns by default (or
+  errors/ignores according to `upload_artifact_if_no_files`). Hidden files are excluded
+  unless `upload_artifact_include_hidden_files` is true. On a self-hosted retry, the
+  artifact contains the files left by the last test attempt. Setting only one of
+  `upload_artifact_path` and `upload_artifact_name` produces a warning.
 
 ## Split CI
 
