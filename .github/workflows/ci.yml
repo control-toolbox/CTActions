@@ -43,6 +43,21 @@ on:
         required: false
         type: string
         default: ''
+      upload_artifact_if_no_files:
+        description: "Behavior when the artifact path is missing: warn, error, or ignore"
+        required: false
+        type: string
+        default: warn
+      upload_artifact_retention_days:
+        description: "Optional artifact retention in days; empty keeps the repository default"
+        required: false
+        type: string
+        default: ''
+      upload_artifact_include_hidden_files:
+        description: "Whether hidden files are included in the test artifact"
+        required: false
+        type: boolean
+        default: false
     secrets:
       SSH_KEY:
         required: false
@@ -274,10 +289,35 @@ jobs:
           rm -rf "$COMPILED_DIR"
           run_tests
 
-      - name: Upload requested test artifact
+      - name: Warn on an incomplete artifact request
+        if: ${{ always() && ((inputs.upload_artifact_path != '') != (inputs.upload_artifact_name != '')) }}
+        shell: bash
+        run: echo '::warning::Both upload_artifact_path and upload_artifact_name are required; no test artifact is uploaded.'
+
+      - name: Build the test artifact name
+        id: artifact-name
         if: ${{ always() && inputs.upload_artifact_path != '' && inputs.upload_artifact_name != '' }}
+        shell: bash
+        run: |
+          name='${{ inputs.upload_artifact_name }}-${{ matrix.version }}-${{ toJSON(matrix.runs_on) }}'
+          name=$(printf '%s' "$name" | sed 's/[^A-Za-z0-9._-]/-/g; s/--*/-/g; s/^-//; s/-$//')
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+
+      - name: Upload requested test artifact (repository retention)
+        if: ${{ always() && inputs.upload_artifact_path != '' && inputs.upload_artifact_name != '' && inputs.upload_artifact_retention_days == '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ inputs.upload_artifact_name }}-${{ matrix.version }}-${{ runner.os }}
+          name: ${{ steps.artifact-name.outputs.name }}
           path: ${{ inputs.upload_artifact_path }}
-          if-no-files-found: ignore
+          if-no-files-found: ${{ inputs.upload_artifact_if_no_files }}
+          include-hidden-files: ${{ inputs.upload_artifact_include_hidden_files }}
+
+      - name: Upload requested test artifact (explicit retention)
+        if: ${{ always() && inputs.upload_artifact_path != '' && inputs.upload_artifact_name != '' && inputs.upload_artifact_retention_days != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.artifact-name.outputs.name }}
+          path: ${{ inputs.upload_artifact_path }}
+          if-no-files-found: ${{ inputs.upload_artifact_if_no_files }}
+          include-hidden-files: ${{ inputs.upload_artifact_include_hidden_files }}
+          retention-days: ${{ fromJSON(inputs.upload_artifact_retention_days) }}

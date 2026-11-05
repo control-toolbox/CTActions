@@ -14,7 +14,7 @@ to one package.
 | `CPUProbe.yml`, `GPUProbe.yml` | CTFlows.jl, CTSolvers.jl | Capability probes, see [below](#probes) |
 | `CITargeted.yml` | CTFlows.jl | By hand: a subset of the tests (`tests`: file globs) on a chosen self-hosted runner (`kkt` or `occidata`), to iterate on one failing file. Calls `ci.yml` with `test_args` |
 | `CronIntegration.yml` | CTFlows.jl | Weekly (Monday 03:00 UTC): the slow end-to-end tests excluded from regular CI (`test_args: 'cron'`), on GitHub-hosted runners and `occidata`; opens an issue on failure. Calls `ci.yml` |
-| `Cron*.yml` and `cron-reusable.yml` | OptimalControlProblems.jl | One weekly workflow per test scope, with optional GPU coverage, report artifacts, and idempotent issue updates. Calls `ci.yml`/`ci-gpu.yml` |
+| `CronJuMP.yml`, `CronOptimalControl.yml`, `CronOptimalControlScalarized.yml`, `CronComparison.yml`, `CronModelingToolkit.yml`, `cron-reusable.yml` | OptimalControlProblems.jl | One weekly workflow per test scope, with optional GPU coverage and report artifacts. Calls `ci.yml`/`ci-gpu.yml`; the package workflow handles the issue transitions |
 | `benchmark-reusable.yml`, `benchmarks-orchestrator.yml` | CTBenchmarks.jl only | Benchmark orchestration specific to that repository |
 
 `CTDirect.jl`'s former `GPU.yml` (label `run GPU`) predates the split CI and has been
