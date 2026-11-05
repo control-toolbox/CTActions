@@ -71,3 +71,8 @@ in a `Name | Latest | Stable` table, posted on the PR or updating the previous c
   `run breakage applications` for the applications, most with `pkgbreak: doc` and some
   outside the organization (`pkgpath: agustinyabo`, …);
 - a **leaf** repository with no internal dependents has no `Breakage.yml`.
+
+## Superseded runs
+
+On a pull request, a new run cancels the previous one of the same workflow and pull request;
+nothing is cancelled on `main` or on a tag. See [Superseded runs](superseded-runs.md).

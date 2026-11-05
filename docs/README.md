@@ -73,6 +73,7 @@ token.
 | --- | --- | --- | --- |
 | [`ci.yml`](workflows/ci.md) | `CI.yml` | Test suite over a Julia × OS × arch matrix, on GitHub-hosted or self-hosted (GPU) runners | label `run ci <runner>` |
 | [`ci-gpu.yml`](workflows/ci-gpu.md) | `CI.yml` | `ci.yml` on `kkt`, or `occidata` if `kkt` is offline; pushes to `main` and tags | push |
+| [Superseded runs](workflows/superseded-runs.md) | `ci.yml`, `documentation.yml`, `breakage-suite.yml`, `breakage.yml` | On a pull request, a new run cancels the previous one of the same workflow; nothing is cancelled on `main` or tags | declared in the four, nothing to add in a package |
 | [`guard.yml`](workflows/guard.md) | `ci.yml`, `coverage.yml`, `breakage-suite.yml`, `documentation.yml` | Whether the jobs below run: no on a pull request that is not open; on `main`, the label `ci on main: changes only` | called by the four above |
 | [`select-gpu-runner.yml`](workflows/select-gpu-runner.md) | `ci-gpu.yml`, `documentation.yml` | Picks `kkt` unless offline, else `occidata` | called by the two above |
 | [`coverage.yml`](workflows/coverage.md) | `Coverage.yml` | Test suite with coverage, uploaded to Codecov | no (push and tags) |

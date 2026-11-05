@@ -127,6 +127,11 @@ the ecosystem as it was read on 2026-10-19). The reading of GitHub is replaced b
 as in the release tests. `breakage-tests.yml` runs them when the script or the workflow
 change. The `plan` and `break` jobs themselves are exercised by the callers.
 
+## Superseded runs
+
+On a pull request, a new run cancels the previous one of the same workflow and pull request;
+nothing is cancelled on `main` or on a tag. See [Superseded runs](superseded-runs.md).
+
 ## On a push to `main`: the label `ci on main: changes only`
 
 The first job, `changes`, decides whether the jobs of this workflow run on a push to `main`.

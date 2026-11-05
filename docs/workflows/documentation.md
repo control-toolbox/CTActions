@@ -125,6 +125,11 @@ burst of merges builds the first and the last commit. Tags carry their own ref a
 wait for `main`. Queuing rather than cancelling on `main` avoids killing a Julia process
 on the self-hosted runner (see [Labels](../conventions/labels.md#the-types-list-without-opened)).
 
+## Superseded runs
+
+On a pull request, a new run cancels the previous one of the same workflow and pull request;
+nothing is cancelled on `main` or on a tag. See [Superseded runs](superseded-runs.md).
+
 ## On a push to `main`: the label `ci on main: changes only`
 
 The first job, `changes`, decides whether the jobs of this workflow run on a push to `main`.

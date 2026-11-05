@@ -45,6 +45,16 @@ on:
       CT_RUNNERS_PRIVATE_KEY:
         required: false
 
+# Superseded runs: on a pull request, a new run cancels the previous one of the same pull
+# request (docs/workflows/superseded-runs.md). On a push to main, a tag, a schedule or a manual
+# run, the group is the run itself: nothing is cancelled and nothing waits. Declared here,
+# not in the caller: a label that changes nothing creates a run whose calling job is
+# skipped, and a `concurrency` of the caller would still cancel the run in progress. The
+# group starts with a name of its own: it must differ from every group of a caller.
+concurrency:
+  group: ctactions-documentation-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   # Whether the jobs below run (docs/workflows/guard.md): no on a pull request that is not
   # open; on a push to main, yes unless the merged pull request carries the label
