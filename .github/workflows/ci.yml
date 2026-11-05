@@ -322,7 +322,9 @@ jobs:
           RUNS_ON: ${{ toJSON(matrix.runs_on) }}
         run: |
           name="${ARTIFACT_BASE}-${JULIA_VERSION}-${RUNS_ON}"
-          name=$(printf '%s' "$name" | sed 's/[^A-Za-z0-9._-]/-/g; s/--*/-/g; s/^-//; s/-$//')
+          # a list of labels (self-hosted, GPU) is a multi-line JSON array: newlines go too,
+          # otherwise GITHUB_OUTPUT rejects the value
+          name=$(printf '%s' "$name" | tr '\n' '-' | sed 's/[^A-Za-z0-9._-]/-/g; s/--*/-/g; s/^-//; s/-$//')
           echo "name=$name" >> "$GITHUB_OUTPUT"
 
       - name: Upload requested test artifact
