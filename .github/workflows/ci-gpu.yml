@@ -23,6 +23,16 @@ on:
         required: false
         type: string
         default: ''
+      upload_artifact_path:
+        description: "Optional file or directory to upload after tests, including on failure"
+        required: false
+        type: string
+        default: ''
+      upload_artifact_name:
+        description: "Optional base name for the test artifact; matrix identity is appended"
+        required: false
+        type: string
+        default: ''
     secrets:
       SSH_KEY:
         required: false
@@ -47,5 +57,7 @@ jobs:
       runner_type: 'self-hosted'
       use_ct_registry: ${{ inputs.use_ct_registry }}
       test_args: ${{ inputs.test_args }}
+      upload_artifact_path: ${{ inputs.upload_artifact_path }}
+      upload_artifact_name: ${{ inputs.upload_artifact_name }}
     secrets:
       SSH_KEY: ${{ secrets.SSH_KEY }}

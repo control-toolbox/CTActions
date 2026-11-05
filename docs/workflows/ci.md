@@ -48,6 +48,8 @@ forward-slash glob.
 | `runner_type` | `'github'` | `github` or `self-hosted`: selects the caching and test steps |
 | `use_ct_registry` | `false` | Add `ct-registry` (needs `SSH_KEY`) |
 | `test_args` | `''` | Forwarded to `Pkg.test` (e.g. `'GPU'`, `'cron'`, file globs) |
+| `upload_artifact_path` | `''` | Optional file or directory uploaded after the test, including on failure |
+| `upload_artifact_name` | `''` | Optional artifact base name; Julia version and runner OS are appended |
 
 | Secret | |
 | --- | --- |
@@ -69,6 +71,10 @@ forward-slash glob.
 - **Windows with `ct-registry`:** Git's own OpenSSH client and Pkg's CLI git, because
   Windows' OpenSSH and Julia's LibGit2 cannot use the agent `add-julia-registry` starts
   (details in the workflow's comments).
+- **Optional test artifacts:** when both upload inputs are non-empty, the requested path
+  is uploaded with `actions/upload-artifact@v4` after the test step, with the matrix Julia
+  version and runner OS appended to the artifact name. Missing paths are ignored, and
+  the upload step runs even when tests fail.
 
 ## Split CI
 
