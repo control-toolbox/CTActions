@@ -1,11 +1,18 @@
-name: Probe workflow-level concurrency
+name: Probe CI
 on:
   workflow_call:
+    inputs:
+      runner_type:
+        type: string
+        default: github
+      runs_on:
+        type: string
+        default: '["ubuntu-latest"]'
 concurrency:
-  group: probe-wf-${{ github.ref }}
-  cancel-in-progress: true
+  group: ctactions-ci-${{ github.workflow }}-${{ inputs.runner_type }}-${{ inputs.runs_on }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   work:
     runs-on: ubuntu-latest
     steps:
-      - run: sleep 150
+      - run: sleep 120

@@ -2,10 +2,20 @@ name: Probe caller
 on:
   push:
     branches: ['probe/**']
+  pull_request:
 jobs:
-  wf:
+  github:
     uses: ./.github/workflows/probe-wf.yml
-  job:
-    uses: ./.github/workflows/probe-job.yml
-  matrix:
-    uses: ./.github/workflows/probe-matrix.yml
+    with:
+      runner_type: github
+      runs_on: '["ubuntu-latest"]'
+  kkt:
+    uses: ./.github/workflows/probe-wf.yml
+    with:
+      runner_type: self-hosted
+      runs_on: '[["kkt"]]'
+  occidata:
+    uses: ./.github/workflows/probe-wf.yml
+    with:
+      runner_type: self-hosted
+      runs_on: '[["occidata"]]'
