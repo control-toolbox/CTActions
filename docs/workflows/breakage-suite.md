@@ -17,7 +17,9 @@ every caller has moved.
   the `Project.toml` files (see [Which packages are tested](#which-packages-are-tested)),
   plus the `targets` the caller declares. The table of targets, with where each comes from,
   is in the job summary. The job fails, and nothing else runs, when the organization cannot
-  be read or when there is nothing to test.
+  be read. When there is nothing to test (no consumer, no declared target), the list is
+  empty: no cell runs, the report says so and the suite passes, so that a package keeps its
+  `Breakage.yml` while it has no consumer.
 - **`break`**, one job per cell: a downstream package × `latest` (its default branch) or
   `stable` (its newest tag, a beta included). The cell runs the package's tests (`test`)
   or builds its docs (`doc`) with the package under test `dev`ed, and writes its result
@@ -119,10 +121,11 @@ of the run: a package that starts to load P is tested from then on, and the repo
 
 `scripts/breakage/test/runtests.jl`: the verdict (not a release; a release breaking
 nothing, breaking something with or without a breaking number, only the stable column
-counting, no baseline, missing cells, a new target, `test` and `doc` cells apart) and the
-files written; the consumers (each place a package may be loaded from, the uuid and not the
+counting, no baseline, missing cells, a new target, `test` and `doc` cells apart, nothing to
+test) and the files written; the consumers (each place a package may be loaded from, the uuid and not the
 name, archived repositories, forks, exclusions, a repository that cannot be read being an
-error and not an empty list, the declared targets and their validation, the command line,
+error and not an empty list, nothing to test being an empty list and not an error, the
+declared targets and their validation, the command line,
 the ecosystem as it was read on 2026-10-19). The reading of GitHub is replaced by a fake,
 as in the release tests. `breakage-tests.yml` runs them when the script or the workflow
 change. The `plan` and `break` jobs themselves are exercised by the callers.

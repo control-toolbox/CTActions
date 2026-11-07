@@ -164,8 +164,9 @@ end
     plan(name, uuid; declared=Target[], derive=true, org=ORG) -> Vector{Target}
 
 The targets of the suite: the derived consumers and the declared targets. A declared target
-replaces the derived one of the same package, owner and check. Throws when there is
-nothing to test: a package without consumers has no use for the suite.
+replaces the derived one of the same package, owner and check. Empty when there is nothing
+to test: the suite then runs no cell and passes, so that a caller keeps its workflow while
+the package has no consumer.
 """
 function plan(name::AbstractString, uuid::AbstractString; declared::Vector{Target}=Target[], derive::Bool=true, org::AbstractString=ORG)
     targets = declared
@@ -173,7 +174,6 @@ function plan(name::AbstractString, uuid::AbstractString; declared::Vector{Targe
         mine = Set((t.name, t.owner, t.break_) for t in declared)
         targets = vcat(declared, [t for t in consumers(name, uuid; org) if (t.name, t.owner, t.break_) ∉ mine])
     end
-    isempty(targets) && error("no downstream package to test for $name: remove the Breakage workflow, or declare a target")
     return sort!(targets; by=t -> (t.name, t.break_, t.owner))
 end
 
@@ -184,6 +184,8 @@ json_targets(targets) = "[" * join(("{\"name\":\"$(t.name)\",\"owner\":\"$(t.own
 function targets_table(name, targets)
     io = IOBuffer()
     println(io, "### Breakage targets — downstream of $name\n")
+    isempty(targets) && return String(take!(io)) *
+        "No downstream package to test: nothing to do. Declare a target with the `targets` input to test one.\n"
     println(io, "| Package | Check | Owner | Source |\n| --- | --- | --- | --- |")
     for t in targets
         println(io, "| $(t.name) | $(t.break_) | $(t.owner) | $(t.source) |")

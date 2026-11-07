@@ -50,6 +50,9 @@ cell(name, version, status; brk="test") =
         @test v.ok && any(contains("no downstream release broken"), v.lines)
         @test any(contains("C (test) has no result on the base (a new target): not compared"), v.lines)
         @test !any(contains("A (test) has no result"), v.lines)
+        # nothing to test: no cell, an empty baseline; nothing is broken
+        v = verdict([], []; expected=0, base_version=V0, head_version=V1)
+        @test v.ok && any(contains("no downstream release broken"), v.lines)
         # more cells than expected (a rerun) is not "missing"
         @test verdict(vcat(base, base[1:1]), base; expected=4, base_version=V0, head_version=V1).ok
         # a beta release is checked the same way
@@ -85,6 +88,20 @@ cell(name, version, status; brk="test") =
                 @test report_main([cells]) == 2
             end
             @test contains(read(joinpath(d, "out3", "summary.md"), String), "Release check")
+        end
+        # nothing to test: no cell; the empty breakage.toml on main is the baseline of a release
+        mktempdir() do d
+            empty = joinpath(d, "cells"); mkpath(empty)
+            redirect_stdout(devnull) do
+                @test report_main([empty, joinpath(d, "main"), "--expected", "0"]) == 0
+                @test report_main([empty, joinpath(d, "pr"), "--expected", "0", "--baseline", joinpath(d, "main", "breakage.toml"),
+                                   "--base-version", "0.30.11", "--head-version", "0.30.12"]) == 0
+            end
+            @test !haskey(TOML.parsefile(joinpath(d, "main", "breakage.toml")), "cell") ||
+                  isempty(TOML.parsefile(joinpath(d, "main", "breakage.toml"))["cell"])
+            text = read(joinpath(d, "pr", "summary.md"), String)
+            @test contains(text, "No downstream package to test: nothing to do") && !contains(text, "| Package |")
+            @test contains(text, "no downstream release broken")
         end
     end
 end
@@ -247,9 +264,11 @@ names(ts) = [t.name for t in ts]
             # without derivation, the declared targets only
             p = plan("Base", UU["Base"]; declared=decl, derive=false)
             @test [(t.name, t.break_) for t in p] == [("App", "doc"), ("Mid", "doc")]
-            # nothing to test is an error, not an empty matrix
-            @test_throws ErrorException plan("Leaf", UU["Leaf"])
-            @test_throws ErrorException plan("Base", UU["Base"]; derive=false)
+            # nothing to test: no target, not an error; the suite then runs no cell and passes
+            @test isempty(plan("Leaf", UU["Leaf"]))
+            @test isempty(plan("Base", UU["Base"]; derive=false))
+            @test json_targets(plan("Leaf", UU["Leaf"])) == "[]"
+            @test contains(targets_table("Leaf", Target[]), "nothing to do")
         end
         t = parse_targets("""[{"name": "A"}, {"name": "B", "owner": "me", "break": "doc"}]""")
         @test json_targets(t) == """[{"name":"A","owner":"control-toolbox","break":"test"},{"name":"B","owner":"me","break":"doc"}]"""
@@ -270,7 +289,7 @@ names(ts) = [t.name for t in ts]
                 @test consumers_main(["plan", "--project", proj, "--declared", "{"]) == 2
                 write(joinpath(d, "NoPkg.toml"), "x = 1\n")
                 @test consumers_main(["list", "--project", joinpath(d, "NoPkg.toml")]) == 2
-                @test consumers_main(["plan", "--project", proj, "--no-derive"]) == 1        # nothing to test
+
               end
               code, out = captured() do
                   consumers_main(["plan", "--project", proj, "--no-derive", "--declared", """[{"name": "App", "owner": "me", "break": "doc"}]""",
@@ -278,6 +297,10 @@ names(ts) = [t.name for t in ts]
               end
               @test code == 0 && out == """[{"name":"App","owner":"me","break":"doc"}]\n"""
               @test contains(read(summary_file, String), "| App | doc | me | declared |")
+              # nothing to test: an empty list and success, the summary says so
+              code, out = captured(() -> consumers_main(["plan", "--project", proj, "--no-derive", "--summary", summary_file]))
+              @test code == 0 && out == "[]\n"
+              @test contains(read(summary_file, String), "No downstream package to test: nothing to do")
             end
             # derived through the (faked) organization
             files = Dict(("Mid.jl", "Project.toml") => toml_text("Mid"; deps=["Base"]))
