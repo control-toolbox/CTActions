@@ -127,8 +127,9 @@ jobs:
         with:
           version: '1'
 
-      # fails, rather than testing fewer packages, when the organization cannot be read or
-      # when there is nothing to test; the table of targets goes to the job summary
+      # fails, rather than testing fewer packages, when the organization cannot be read; an
+      # empty list when there is nothing to test (no cell runs, the suite passes); the table
+      # of targets goes to the job summary
       - name: Targets
         id: plan
         env:
@@ -146,8 +147,9 @@ jobs:
     needs: plan
     # `!cancelled()`: `changes` (two levels up) is skipped outside a push to `main`, and the
     # default `success()` of a `needs` is false when a job anywhere upstream was skipped,
-    # even though `plan` ran: without it no cell would run on a pull request.
-    if: ${{ !cancelled() && needs.plan.result == 'success' }}
+    # even though `plan` ran: without it no cell would run on a pull request. No cell when
+    # there is nothing to test: an empty matrix is an error for GitHub Actions.
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.targets != '[]' }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -262,7 +264,10 @@ jobs:
         with:
           version: '1'
 
+      # no cell when there is nothing to test: the report then has no row, and its
+      # `breakage.toml` is the (empty) baseline of a release PR
       - uses: actions/download-artifact@v8
+        if: needs.break.result != 'skipped'
         with:
           path: cells/
           pattern: breakage-cell-${{ inputs.group }}-*
