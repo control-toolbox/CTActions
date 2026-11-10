@@ -1,2 +1,4 @@
 .DS_Store
 .devin
+__pycache__/
+*.pyc
