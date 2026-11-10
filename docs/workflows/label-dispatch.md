@@ -70,7 +70,7 @@ jobs:
 ```yaml
 # .github/workflows/CI.yml: the other callers follow the same pattern
 name: CI
-run-name: CI ${{ inputs.target }}${{ inputs.pr && format(' #{0}', inputs.pr) || '' }}
+run-name: "CI ${{ inputs.target }}${{ inputs.pr && format(' #{0}', inputs.pr) || '' }}"
 
 on:
   push:
