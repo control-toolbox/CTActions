@@ -71,6 +71,7 @@ token.
 
 | Workflow | Caller | Role | Runs on a PR |
 | --- | --- | --- | --- |
+| [`dispatch.yml`](workflows/dispatch.md) | `Dispatcher.yml` | Central PR gate, debounce, and label dispatcher reading `.github/ci.toml` | every PR |
 | [`ci.yml`](workflows/ci.md) | `CI.yml` | Test suite over a Julia × OS × arch matrix, on GitHub-hosted or self-hosted (GPU) runners | label `run ci <runner>` |
 | [`ci-gpu.yml`](workflows/ci-gpu.md) | `CI.yml` | `ci.yml` on `kkt`, or `occidata` if `kkt` is offline; pushes to `main` and tags | push |
 | [Superseded runs](workflows/superseded-runs.md) | `ci.yml`, `documentation.yml`, `breakage-suite.yml`, `breakage.yml` | On a pull request, a new run cancels the previous one of the same workflow; nothing is cancelled on `main` or tags | declared in the four, nothing to add in a package |
@@ -98,6 +99,7 @@ token.
 | [`compat-prune-tests.yml`](workflows/compat-prune.md#tests) | Self-test of the prune: its test suite, then a real dry-run audit | PR or push touching it, by hand |
 | [`release-tests.yml`](workflows/release-gate.md#tests) | Self-test of the release tool (`scripts/release`) on Julia 1.10, 1.12, 1.13 | PR or push touching it, by hand |
 | [`guard-tests.yml`](workflows/guard.md#testing-a-change) | Self-test of `guard.yml`: `run` follows the state of the pull request | PR touching it, by hand |
+| [`dispatch-tests.yml`](workflows/dispatch.md) | Self-test of `dispatch.yml` and `scripts/dispatch/dispatch.py` | PR touching it, by hand |
 | [`ci-main-tests.yml`](workflows/ci-on-main.md#testing-a-change-to-this-mechanism) | Self-test of the changes-only decision (`scripts/ci-main`) | PR or push touching it, by hand |
 | [`breakage-tests.yml`](workflows/breakage-suite.md#tests) | Self-test of the breakage report (`scripts/breakage`) | PR or push touching it, by hand |
 | `lint-workflows.yml` | actionlint on every workflow (expressions, inputs and secrets of reusable workflows, runner labels from `.github/actionlint.yaml`, shellcheck on `run:` scripts) | PR or push touching `.github/`, by hand |
