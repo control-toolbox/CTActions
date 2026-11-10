@@ -4,18 +4,110 @@
 import argparse
 import json
 import os
+import secrets
 import subprocess
 import sys
 import tomllib
 from pathlib import Path
 
 
+SCHEMA = {
+    "use_ct_registry": bool,
+    "ci": {
+        "github": {
+            "enabled": bool,
+            "label": str,
+            "versions": list,
+            "runs_on": list,
+            "test_args": str,
+            "fail_fast": bool,
+            "scope_script": str,
+            "scope_test_dirs": list,
+            "results_script": str,
+            "upload_artifact_path": str,
+            "upload_artifact_name": str,
+            "smoke_test": bool,
+        },
+        "occidata": {
+            "enabled": bool,
+            "label": str,
+            "versions": list,
+            "runs_on": list,
+            "test_args": str,
+            "run_on_push": bool,
+        },
+        "kkt": {
+            "enabled": bool,
+            "label": str,
+            "versions": list,
+            "runs_on": list,
+            "test_args": str,
+        },
+        "gpu_main": {
+            "enabled": bool,
+            "versions": list,
+            "test_args": str,
+        },
+    },
+    "documentation": {
+        "enabled": bool,
+        "label": str,
+        "preview_label": str,
+        "gpu_runner": str,
+        "gpu_timeout_minutes": (int, float),
+    },
+    "breakage": {
+        "packages": {
+            "enabled": bool,
+            "label": str,
+            "consumers": bool,
+            "versions": list,
+            "targets": list,
+        },
+        "applications": {
+            "enabled": bool,
+            "label": str,
+            "consumers": bool,
+            "versions": list,
+            "targets": list,
+        },
+    },
+    "release_gate": {
+        "enabled": bool,
+        "julia_lowest": str,
+    },
+}
+
+
+def validate_config(cfg: dict, schema: dict = SCHEMA, prefix: str = "") -> None:
+    """Validate cfg against schema: reject unknown keys and verify types."""
+    if not isinstance(cfg, dict):
+        raise TypeError(f"Configuration at '{prefix or 'root'}' must be a dictionary/table, got {type(cfg).__name__}")
+
+    for k, v in cfg.items():
+        field_path = f"{prefix}.{k}" if prefix else k
+        if k not in schema:
+            allowed = ", ".join(f"'{a}'" for a in sorted(schema.keys()))
+            raise ValueError(f"Unknown key '{field_path}' in ci.toml. Allowed keys at this level: {allowed}")
+
+        expected = schema[k]
+        if isinstance(expected, dict):
+            if not isinstance(v, dict):
+                raise TypeError(f"Section '{field_path}' must be a table, got {type(v).__name__}")
+            validate_config(v, expected, field_path)
+        else:
+            if not isinstance(v, expected):
+                exp_names = expected.__name__ if isinstance(expected, type) else "/".join(t.__name__ for t in expected)
+                raise TypeError(f"Field '{field_path}' must be of type {exp_names}, got {type(v).__name__}")
+
+
 def load_config(config_path: Path) -> dict:
-    """Load .github/ci.toml if present, returning merged defaults."""
+    """Load .github/ci.toml if present, validating keys and returning merged defaults."""
     cfg = {}
     if config_path.is_file():
         with open(config_path, "rb") as f:
             cfg = tomllib.load(f)
+        validate_config(cfg)
 
     # Defaults
     defaults = {
@@ -133,7 +225,7 @@ def run_scope_script(
                 cwd=str(root),
             )
             if res.returncode != 0:
-                print(f"::warning::Scope tests in {tdir} failed with exit code {res.returncode}", file=sys.stderr)
+                raise RuntimeError(f"Scope tests in '{tdir}' failed with exit code {res.returncode}")
 
     cmd = [sys.executable, str(script_path), "--event", event, "--labels", json.dumps(labels), "--root", str(root)]
     if expected_files:
@@ -144,8 +236,7 @@ def run_scope_script(
     print(f"Executing scope script: {' '.join(cmd)}", file=sys.stderr)
     res = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True)
     if res.returncode != 0:
-        print(f"::warning::scope_script failed with code {res.returncode}: {res.stderr}", file=sys.stderr)
-        return ""
+        raise RuntimeError(f"scope_script '{scope_script}' failed with code {res.returncode}: {res.stderr}")
 
     args = res.stdout.strip()
     print(f"Computed scope test_args: '{args}'", file=sys.stderr)
@@ -218,7 +309,8 @@ def evaluate_dispatch(
             if brk_app["enabled"] and brk_app["label"] in labels_set:
                 run_breakage_applications = True
     elif event == "push":
-        # On push to main / tag: CI, documentation, breakage, and GPU main run by default
+        # Note: In standard repository setup, push on main is handled by CI.yml/Documentation.yml.
+        # This fallback is for manual or unified push triggers.
         gh_cfg = config["ci"]["github"]
         if gh_cfg["enabled"]:
             run_ci_github = True
@@ -322,6 +414,18 @@ def evaluate_dispatch(
     return outputs
 
 
+def write_github_output(output_path: Path, outputs: dict[str, str]) -> None:
+    """Safely append key-value pairs to GITHUB_OUTPUT, supporting multi-line strings."""
+    with open(output_path, "a", encoding="utf-8") as f:
+        for k, v in outputs.items():
+            val = str(v)
+            if "\n" in val:
+                delim = f"DELIMITER_{secrets.token_hex(8)}"
+                f.write(f"{k}<<{delim}\n{val}\n{delim}\n")
+            else:
+                f.write(f"{k}={val}\n")
+
+
 def generate_summary(outputs: dict[str, str], event: str, pr_state: str, labels: list[str]) -> str:
     """Generate Markdown summary table for GITHUB_STEP_SUMMARY."""
     lines = [
@@ -374,24 +478,31 @@ def main():
     output_path = args.output or (Path(os.environ["GITHUB_OUTPUT"]) if "GITHUB_OUTPUT" in os.environ else None)
     summary_path = args.summary or (Path(os.environ["GITHUB_STEP_SUMMARY"]) if "GITHUB_STEP_SUMMARY" in os.environ else None)
 
-    cfg = load_config(args.root / args.config if not args.config.is_absolute() else args.config)
+    config_file = args.root / args.config if not args.config.is_absolute() else args.config
+    try:
+        cfg = load_config(config_file)
+    except (ValueError, TypeError, tomllib.TOMLDecodeError) as e:
+        print(f"::error file={config_file}::{e}", file=sys.stderr)
+        sys.exit(1)
 
-    outputs = evaluate_dispatch(
-        cfg,
-        event=args.event,
-        action=args.action,
-        pr_state=args.pr_state,
-        labels=labels_list,
-        expected_files=args.expected_files,
-        summary_path=summary_path,
-        root=args.root,
-    )
+    try:
+        outputs = evaluate_dispatch(
+            cfg,
+            event=args.event,
+            action=args.action,
+            pr_state=args.pr_state,
+            labels=labels_list,
+            expected_files=args.expected_files,
+            summary_path=summary_path,
+            root=args.root,
+        )
+    except RuntimeError as e:
+        print(f"::error::{e}", file=sys.stderr)
+        sys.exit(1)
 
     # Write to output file or stdout
     if output_path:
-        with open(output_path, "a", encoding="utf-8") as f:
-            for k, v in outputs.items():
-                f.write(f"{k}={v}\n")
+        write_github_output(output_path, outputs)
     else:
         for k, v in outputs.items():
             print(f"{k}={v}")
@@ -405,4 +516,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

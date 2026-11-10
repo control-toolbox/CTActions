@@ -778,6 +778,22 @@ failures(results) = [r.message for r in results if r.status === :fail]
                                          "  if: contains(github.event.pull_request.labels.*.name, 'run ci github-runner')\n")
             write(joinpath(d, "Old.yml.disabled"), "contains(github.event.pull_request.labels.*.name, 'run gpu')\n")
             @test run_labels(d) == Set(["run ci github-runner"])
+            gh_dir = d
+            wf_dir = joinpath(gh_dir, "workflows")
+            mkpath(wf_dir)
+            write(joinpath(gh_dir, "ci.toml"), "use_ct_registry = true\n")
+            @test run_labels(wf_dir) == Set(["run ci github-runner", "run documentation", "run breakage"])
+            write(joinpath(gh_dir, "ci.toml"), """
+            [ci.github]
+            label = "run ci fast"
+            [ci.occidata]
+            enabled = true
+            [documentation]
+            enabled = false
+            [breakage.packages]
+            enabled = false
+            """)
+            @test run_labels(wf_dir) == Set(["run ci fast", "run ci occidata-runner"])
         end
         # the reference section missing from the changelog: stop at the first older one
         c = changelog("0.4.4" => "- x.", "0.4.1" => "### 💥 Breaking Changes\n\n- old.")
@@ -961,6 +977,42 @@ failures(results) = [r.message for r in results if r.status === :fail]
         with_gh(fake_disp_nogate_full) do
             r = ready("o/P", 2)
             @test notready(r, "release-gate")
+        end
+        # B1: An unrelated label run (where only dispatch ran) does not invalidate prior green run
+        disp_runs_unrelated = [(1, "Dispatcher.yml", "completed", "success"),
+                               (2, "SpellCheck.yml", "completed", "success"),
+                               (3, "Dispatcher.yml", "completed", "success")]
+        disp_jobs_unrelated = Dict(
+            1 => [("dispatch", "success"), ("release-gate / gate", "success"),
+                  ("test-cpu-github / test (1.10, ubuntu-latest)", "success"),
+                  ("test-gpu-kkt / test (1.12)", "success"),
+                  ("documentation / build", "success"),
+                  ("breakage-packages / report", "success")],
+            2 => [("spell", "success")],
+            3 => [("dispatch", "success")])
+        fake_unrelated, _ = fake_github(runs=disp_runs_unrelated, jobs=disp_jobs_unrelated)
+        with_gh(args -> contains(join(args, " "), "contents/.github/workflows?ref=H") ? join(sort(collect(keys(disp_workflows))), "\n") * "\n" :
+                        (m = match(r"contents/\.github/workflows/([^?]+)\?ref=H", join(args, " ")); m !== nothing && haskey(disp_workflows, m[1]) ? disp_workflows[m[1]] : fake_unrelated(args))) do
+            r = ready("o/P", 2)
+            @test r.ready
+        end
+        # B2: Aggregation across multiple runs on the same commit (e.g. CI in run 1, Doc in run 2)
+        disp_runs_split = [(1, "Dispatcher.yml", "completed", "success"),
+                           (2, "Dispatcher.yml", "completed", "success"),
+                           (3, "SpellCheck.yml", "completed", "success")]
+        disp_jobs_split = Dict(
+            1 => [("dispatch", "success"), ("release-gate / gate", "success"),
+                  ("test-cpu-github / test (1.10, ubuntu-latest)", "success"),
+                  ("test-gpu-kkt / test (1.12)", "success")],
+            2 => [("dispatch", "success"), ("release-gate / gate", "success"),
+                  ("documentation / build", "success"),
+                  ("breakage-packages / report", "success")],
+            3 => [("spell", "success")])
+        fake_split, _ = fake_github(runs=disp_runs_split, jobs=disp_jobs_split)
+        with_gh(args -> contains(join(args, " "), "contents/.github/workflows?ref=H") ? join(sort(collect(keys(disp_workflows))), "\n") * "\n" :
+                        (m = match(r"contents/\.github/workflows/([^?]+)\?ref=H", join(args, " ")); m !== nothing && haskey(disp_workflows, m[1]) ? disp_workflows[m[1]] : fake_split(args))) do
+            r = ready("o/P", 2)
+            @test r.ready
         end
         # parsing
         @test gated_jobs(workflows["CI.yml"]) == [("test-cpu-github", ["run ci github-runner"]), ("test-gpu-kkt", ["run ci kkt-runner"]),

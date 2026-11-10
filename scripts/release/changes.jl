@@ -47,7 +47,6 @@ const DISPATCH_OUTPUT_LABELS = Dict(
     "run_documentation" => "run documentation",
     "run_breakage_packages" => "run breakage",
     "run_breakage_applications" => "run breakage applications",
-    "run_probe" => "run probe",
 )
 
 "The run labels a package's workflows react to (`contains(… .labels.*.name, '<label>')` or `.github/ci.toml`)."
@@ -55,35 +54,32 @@ function run_labels(workflows::AbstractString)
     labels = Set{String}()
     ci_toml = joinpath(dirname(workflows), "ci.toml")
     if isfile(ci_toml)
-        try
-            cfg = TOML.parsefile(ci_toml)
-            for (sec, key) in (("ci", "github"), ("ci", "occidata"), ("ci", "kkt"))
-                if haskey(cfg, sec) && haskey(cfg[sec], key)
-                    sub = cfg[sec][key]
-                    if get(sub, "enabled", true) && haskey(sub, "label")
-                        push!(labels, sub["label"])
-                    end
-                end
-            end
-            if haskey(cfg, "documentation")
-                sub = cfg["documentation"]
-                if get(sub, "enabled", true) && haskey(sub, "label")
-                    push!(labels, sub["label"])
-                end
-            end
-            if haskey(cfg, "breakage")
-                for key in ("packages", "applications")
-                    if haskey(cfg["breakage"], key)
-                        sub = cfg["breakage"][key]
-                        if get(sub, "enabled", true) && haskey(sub, "label")
-                            push!(labels, sub["label"])
-                        end
-                    end
-                end
-            end
-            !isempty(labels) && return labels
-        catch
-        end
+        cfg = TOML.parsefile(ci_toml)
+        # ci.github (default enabled)
+        gh = get(get(cfg, "ci", Dict()), "github", Dict())
+        get(gh, "enabled", true) && push!(labels, get(gh, "label", "run ci github-runner"))
+
+        # ci.occidata (default disabled)
+        occi = get(get(cfg, "ci", Dict()), "occidata", Dict())
+        get(occi, "enabled", false) && push!(labels, get(occi, "label", "run ci occidata-runner"))
+
+        # ci.kkt (default disabled)
+        kkt = get(get(cfg, "ci", Dict()), "kkt", Dict())
+        get(kkt, "enabled", false) && push!(labels, get(kkt, "label", "run ci kkt-runner"))
+
+        # documentation (default enabled)
+        doc = get(cfg, "documentation", Dict())
+        get(doc, "enabled", true) && push!(labels, get(doc, "label", "run documentation"))
+
+        # breakage.packages (default enabled)
+        brk_pkg = get(get(cfg, "breakage", Dict()), "packages", Dict())
+        get(brk_pkg, "enabled", true) && push!(labels, get(brk_pkg, "label", "run breakage"))
+
+        # breakage.applications (default disabled)
+        brk_app = get(get(cfg, "breakage", Dict()), "applications", Dict())
+        get(brk_app, "enabled", false) && push!(labels, get(brk_app, "label", "run breakage applications"))
+
+        return labels
     end
     isdir(workflows) || return labels
     for f in readdir(workflows; join=true)

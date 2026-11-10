@@ -2,11 +2,18 @@
 """Unit tests for scripts/dispatch/dispatch.py."""
 
 import json
+import os
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from scripts.dispatch.dispatch import evaluate_dispatch, load_config
+# Allow direct execution: python3 scripts/dispatch/test/test_dispatch.py
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.dispatch.dispatch import evaluate_dispatch, load_config, write_github_output
 
 
 class TestDispatch(unittest.TestCase):
@@ -59,6 +66,29 @@ julia_lowest = "1.11"
             self.assertTrue(cfg["breakage"]["applications"]["enabled"])
             self.assertEqual(cfg["breakage"]["applications"]["targets"], [{"name": "Tutorials", "break": "doc"}])
             self.assertEqual(cfg["release_gate"]["julia_lowest"], "1.11")
+
+    def test_invalid_config_unknown_key(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_file = Path(tmpdir) / "ci.toml"
+            cfg_file.write_text("""
+[ci.github]
+versions = ["1.10"]
+unknown_setting = true
+""")
+            with self.assertRaises(ValueError) as ctx:
+                load_config(cfg_file)
+            self.assertIn("Unknown key 'ci.github.unknown_setting'", str(ctx.exception))
+
+    def test_invalid_config_wrong_type(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_file = Path(tmpdir) / "ci.toml"
+            cfg_file.write_text("""
+[ci.github]
+versions = "1.10"
+""")
+            with self.assertRaises(TypeError) as ctx:
+                load_config(cfg_file)
+            self.assertIn("Field 'ci.github.versions' must be of type list", str(ctx.exception))
 
     def test_pr_closed_exits_early(self):
         cfg = load_config(Path("nonexistent.toml"))
@@ -129,6 +159,64 @@ julia_lowest = "1.11"
         self.assertEqual(json.loads(outputs["ci_github_versions"]), ["1.10", "1.13"])
         self.assertEqual(json.loads(outputs["ci_github_runs_on"]), ["ubuntu-latest", "macos-latest", "windows-latest"])
         self.assertEqual(outputs["use_ct_registry"], "true")
+
+    def test_custom_label_and_disabled_sections(self):
+        cfg = load_config(Path("nonexistent.toml"))
+        cfg["ci"]["github"]["label"] = "run ci fast"
+        cfg["documentation"]["enabled"] = False
+
+        # Even with 'run documentation' present, documentation is disabled in config
+        outputs = evaluate_dispatch(
+            cfg,
+            event="pull_request",
+            action="labeled",
+            pr_state="open",
+            labels=["run ci fast", "run documentation"],
+            expected_files="",
+            summary_path=None,
+            root=Path("."),
+        )
+        self.assertEqual(outputs["run_ci_github"], "true")
+        self.assertEqual(outputs["run_documentation"], "false")
+
+    def test_multiline_output_delimiter(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "github_output"
+            outputs = {
+                "simple": "hello",
+                "multiline": "line1\nline2\nline3",
+            }
+            write_github_output(out_file, outputs)
+            content = out_file.read_text(encoding="utf-8")
+            self.assertIn("simple=hello\n", content)
+            self.assertIn("multiline<<DELIMITER_", content)
+            self.assertIn("line1\nline2\nline3\n", content)
+
+    def test_scope_script_execution(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            scope_py = root / "scope.py"
+            scope_py.write_text("""#!/usr/bin/env python3
+import sys
+print("scoped_test_A scoped_test_B")
+""")
+            os.chmod(scope_py, 0o755)
+
+            cfg = load_config(Path("nonexistent.toml"))
+            cfg["ci"]["github"]["scope_script"] = "scope.py"
+
+            outputs = evaluate_dispatch(
+                cfg,
+                event="pull_request",
+                action="labeled",
+                pr_state="open",
+                labels=["run ci github-runner"],
+                expected_files="",
+                summary_path=None,
+                root=root,
+            )
+            self.assertEqual(outputs["run_ci_github"], "true")
+            self.assertEqual(outputs["ci_github_test_args"], "scoped_test_A scoped_test_B")
 
     def test_push_event(self):
         cfg = load_config(Path("nonexistent.toml"))

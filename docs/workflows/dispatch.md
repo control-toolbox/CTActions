@@ -102,14 +102,21 @@ name: Dispatcher
 
 on:
   pull_request:
-    types: [opened, labeled, unlabeled, synchronize, reopened, edited]
+    types: [opened, labeled, unlabeled, synchronize, reopened]
 
 concurrency:
-  group: ${{ (github.event_name == 'pull_request' && github.event.pull_request.state == 'open' && (github.event.action != 'labeled' && github.event.action != 'unlabeled' || startsWith(github.event.label.name, 'run ') || startsWith(github.event.label.name, 'test ') || github.event.label.name == 'documentation push preview' || github.event.label.name == 'release')) && format('pr-dispatch-{0}', github.event.pull_request.number) || format('pr-dispatch-ignore-{0}', github.run_id) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.pull_request.state == 'open' && (github.event.action != 'labeled' && github.event.action != 'unlabeled' || startsWith(github.event.label.name, 'run ') || startsWith(github.event.label.name, 'test ') || github.event.label.name == 'documentation push preview' || github.event.label.name == 'release') }}
+  group: ${{ (github.event_name == 'pull_request' && github.event.pull_request.state == 'open' && (github.event.action != 'labeled' && github.event.action != 'unlabeled' || startsWith(github.event.label.name, 'run ') || github.event.label.name == 'documentation push preview' || github.event.label.name == 'release')) && format('pr-dispatch-{0}', github.event.pull_request.number) || format('pr-dispatch-ignore-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.pull_request.state == 'open' && (github.event.action != 'labeled' && github.event.action != 'unlabeled' || startsWith(github.event.label.name, 'run ') || github.event.label.name == 'documentation push preview' || github.event.label.name == 'release') }}
 
 jobs:
   dispatch:
+    if: >-
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.state == 'open' &&
+       (github.event.action != 'labeled' && github.event.action != 'unlabeled' ||
+        startsWith(github.event.label.name, 'run ') ||
+        github.event.label.name == 'documentation push preview' ||
+        github.event.label.name == 'release'))
     uses: control-toolbox/CTActions/.github/workflows/dispatch.yml@main
 
   release-gate:

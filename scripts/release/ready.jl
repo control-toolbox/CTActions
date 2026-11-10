@@ -103,22 +103,53 @@ function ready(repo::AbstractString, pr::Integer)
             push!(lines, verdict_line(:wait, "`$f`: a run is in progress"))
             continue
         end
-        real = findlast(r -> r.conclusion != "skipped", rs)
-        if real === nothing
-            mandatory && push!(lines, verdict_line(:fail, "`$f`: no run executed its jobs on $(head[1:min(end, 8)]) (a missing label?)"))
-            continue
+        if f == "Dispatcher.yml"
+            # Aggregate job outcomes across all completed non-skipped runs on this head commit
+            non_skipped = filter(r -> r.conclusion != "skipped", rs)
+            if isempty(non_skipped)
+                mandatory && push!(lines, verdict_line(:fail, "`$f`: no run executed its jobs on $(head[1:min(end, 8)]) (a missing label?)"))
+                continue
+            end
+            latest_jobs = Dict{String,String}()
+            for run in non_skipped
+                jobs_out = something(gh("api", "repos/$repo/actions/runs/$(run.id)/jobs?per_page=100",
+                                        "--jq", ".jobs[] | \"\\(.name)\\t\\(.conclusion)\""), "")
+                for l in split(jobs_out, '\n'; keepempty=false)
+                    parts = split(l, '\t'; limit=2)
+                    length(parts) == 2 || continue
+                    n, c = parts
+                    # A skipped execution in a later run does not erase a prior success on the same commit
+                    if c != "skipped" || !haskey(latest_jobs, n)
+                        latest_jobs[n] = c
+                    end
+                end
+            end
+            bad = [n for (n, c) in latest_jobs if !(c in ("success", "skipped", "neutral"))]
+            isempty(bad) || push!(lines, verdict_line(:fail, "`$f`: $(join(("`$n`" for n in bad), ", ")) did not pass"))
+            missing_jobs = [id for (id, _) in required if !any(((n, c),) -> job_of(n, id) && c == "success", latest_jobs)]
+            isempty(missing_jobs) ||
+                push!(lines, verdict_line(:fail, "`$f`: $(join(("`$j`" for j in missing_jobs), ", ")) did not run (skipped): add its label, the workflow runs again"))
+            last_run = last(non_skipped)
+            isempty(bad) && isempty(missing_jobs) &&
+                push!(lines, verdict_line(:pass, "`$f`, run $(last_run.id): $(count(((n, c),) -> c == "success", latest_jobs)) job(s) passed"))
+        else
+            real = findlast(r -> r.conclusion != "skipped", rs)
+            if real === nothing
+                mandatory && push!(lines, verdict_line(:fail, "`$f`: no run executed its jobs on $(head[1:min(end, 8)]) (a missing label?)"))
+                continue
+            end
+            run = rs[real]
+            jobs_out = something(gh("api", "repos/$repo/actions/runs/$(run.id)/jobs?per_page=100",
+                                    "--jq", ".jobs[] | \"\\(.name)\\t\\(.conclusion)\""), "")
+            ran = [(n, c) for (n, c) in (split(l, '\t'; limit=2) for l in split(jobs_out, '\n'; keepempty=false))]
+            bad = [n for (n, c) in ran if !(c in ("success", "skipped", "neutral"))]
+            isempty(bad) || push!(lines, verdict_line(:fail, "`$f`, run $(run.id): $(join(("`$n`" for n in bad), ", ")) did not pass"))
+            missing_jobs = [id for (id, _) in required if !any(((n, c),) -> job_of(n, id) && c == "success", ran)]
+            isempty(missing_jobs) ||
+                push!(lines, verdict_line(:fail, "`$f`, run $(run.id): $(join(("`$j`" for j in missing_jobs), ", ")) did not run (skipped): add its label, the workflow runs again"))
+            isempty(bad) && isempty(missing_jobs) &&
+                push!(lines, verdict_line(:pass, "`$f`, run $(run.id): $(count(((n, c),) -> c == "success", ran)) job(s) passed"))
         end
-        run = rs[real]
-        jobs_out = something(gh("api", "repos/$repo/actions/runs/$(run.id)/jobs?per_page=100",
-                                "--jq", ".jobs[] | \"\\(.name)\\t\\(.conclusion)\""), "")
-        ran = [(n, c) for (n, c) in (split(l, '\t'; limit=2) for l in split(jobs_out, '\n'; keepempty=false))]
-        bad = [n for (n, c) in ran if !(c in ("success", "skipped", "neutral"))]
-        isempty(bad) || push!(lines, verdict_line(:fail, "`$f`, run $(run.id): $(join(("`$n`" for n in bad), ", ")) did not pass"))
-        missing_jobs = [id for (id, _) in required if !any(((n, c),) -> job_of(n, id) && c == "success", ran)]
-        isempty(missing_jobs) ||
-            push!(lines, verdict_line(:fail, "`$f`, run $(run.id): $(join(("`$j`" for j in missing_jobs), ", ")) did not run (skipped): add its label, the workflow runs again"))
-        isempty(bad) && isempty(missing_jobs) &&
-            push!(lines, verdict_line(:pass, "`$f`, run $(run.id): $(count(((n, c),) -> c == "success", ran)) job(s) passed"))
     end
     ok = !isempty(lines) && all(l -> l.status === :pass, lines)
     return (; ready=ok, head, branch, lines)

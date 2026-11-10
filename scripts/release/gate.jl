@@ -157,7 +157,10 @@ function gate(dir::AbstractString, base::AbstractString; labels, text::AbstractS
     end
 
     # the preview of the documentation: asked for by a label, which the workflows do not require
-    (isfile(joinpath(dir, ".github", "workflows", "Documentation.yml")) || "run documentation" in run_labels(joinpath(dir, ".github", "workflows"))) && !(PREVIEW_LABEL in labels) &&
+    ci_toml = joinpath(dir, ".github", "ci.toml")
+    doc_configured = isfile(joinpath(dir, ".github", "workflows", "Documentation.yml")) ||
+        (isfile(ci_toml) && get(get(TOML.parsefile(ci_toml), "documentation", Dict()), "enabled", true))
+    doc_configured && !(PREVIEW_LABEL in labels) &&
         push!(results, info("—", "the PR has no `$PREVIEW_LABEL` label: no preview of the documentation is deployed (add it if the repository has the label)"))
 
     # REL4: a stable resolves from General alone
