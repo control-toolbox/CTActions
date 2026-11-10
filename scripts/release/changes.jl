@@ -39,9 +39,52 @@ function shipped(files, old_project::AbstractDict, new_project::AbstractDict)
     return out
 end
 
-"The run labels a package's workflows react to (`contains(… .labels.*.name, '<label>')`)."
+"Map of dispatch.yml output names to the run labels they represent."
+const DISPATCH_OUTPUT_LABELS = Dict(
+    "run_ci_github" => "run ci github-runner",
+    "run_ci_occidata" => "run ci occidata-runner",
+    "run_ci_kkt" => "run ci kkt-runner",
+    "run_documentation" => "run documentation",
+    "run_breakage_packages" => "run breakage",
+    "run_breakage_applications" => "run breakage applications",
+    "run_probe" => "run probe",
+)
+
+"The run labels a package's workflows react to (`contains(… .labels.*.name, '<label>')` or `.github/ci.toml`)."
 function run_labels(workflows::AbstractString)
     labels = Set{String}()
+    ci_toml = joinpath(dirname(workflows), "ci.toml")
+    if isfile(ci_toml)
+        try
+            cfg = TOML.parsefile(ci_toml)
+            for (sec, key) in (("ci", "github"), ("ci", "occidata"), ("ci", "kkt"))
+                if haskey(cfg, sec) && haskey(cfg[sec], key)
+                    sub = cfg[sec][key]
+                    if get(sub, "enabled", true) && haskey(sub, "label")
+                        push!(labels, sub["label"])
+                    end
+                end
+            end
+            if haskey(cfg, "documentation")
+                sub = cfg["documentation"]
+                if get(sub, "enabled", true) && haskey(sub, "label")
+                    push!(labels, sub["label"])
+                end
+            end
+            if haskey(cfg, "breakage")
+                for key in ("packages", "applications")
+                    if haskey(cfg["breakage"], key)
+                        sub = cfg["breakage"][key]
+                        if get(sub, "enabled", true) && haskey(sub, "label")
+                            push!(labels, sub["label"])
+                        end
+                    end
+                end
+            end
+            !isempty(labels) && return labels
+        catch
+        end
+    end
     isdir(workflows) || return labels
     for f in readdir(workflows; join=true)
         endswith(f, ".yml") || endswith(f, ".yaml") || continue
@@ -49,6 +92,9 @@ function run_labels(workflows::AbstractString)
             startswith(lstrip(line), "#") && continue   # a commented-out guard requires nothing
             for m in eachmatch(r"labels\.\*\.name, '([^']+)'", line)
                 push!(labels, m[1])
+            end
+            for m in eachmatch(r"outputs\.(run_[a-z_]+)", line)
+                haskey(DISPATCH_OUTPUT_LABELS, m[1]) && push!(labels, DISPATCH_OUTPUT_LABELS[m[1]])
             end
         end
     end

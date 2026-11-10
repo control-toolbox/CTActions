@@ -182,6 +182,40 @@ failures(results) = [r.message for r in results if r.status === :fail]
             @test missing_labels(e, ["run ci github-runner"]) == ["one of `run ci kkt-runner`, `run ci occidata-runner`"]
             @test missing_labels(e, String[]) == ["run ci github-runner", "one of `run ci kkt-runner`, `run ci occidata-runner`"]
         end
+        mktempdir() do d
+            dotgithub = joinpath(d, ".github")
+            workflows = joinpath(dotgithub, "workflows")
+            mkpath(workflows)
+            write(joinpath(dotgithub, "ci.toml"), """
+            [ci.github]
+            enabled = true
+            label = "run ci github-runner"
+            [ci.occidata]
+            enabled = true
+            label = "run ci occidata-runner"
+            [documentation]
+            enabled = true
+            label = "run documentation"
+            [breakage.packages]
+            enabled = true
+            label = "run breakage"
+            """)
+            e = run_labels(workflows)
+            @test e == Set(["run ci github-runner", "run ci occidata-runner", "run documentation", "run breakage"])
+        end
+        mktempdir() do d
+            write(joinpath(d, "Dispatcher.yml"), """
+            jobs:
+              dispatch:
+                uses: control-toolbox/CTActions/.github/workflows/dispatch.yml@main
+              test-cpu-github:
+                if: needs.dispatch.outputs.run_ci_github == 'true'
+              documentation:
+                if: needs.dispatch.outputs.run_documentation == 'true'
+            """)
+            e = run_labels(d)
+            @test e == Set(["run ci github-runner", "run documentation"])
+        end
         @test isempty(run_labels("/nonexistent"))
     end
 
@@ -876,6 +910,57 @@ failures(results) = [r.message for r in results if r.status === :fail]
         with_gh(fake) do
             ok, msg = merge_release("o/P", 2; confirm=true)
             @test !ok && length(merged) == 1 && contains(msg, "refused")
+        end
+        # Dispatcher.yml: unified PR workflow
+        disp_workflows = Dict(
+            "Dispatcher.yml" => "jobs:\n" *
+                                "  dispatch:\n    uses: control-toolbox/CTActions/.github/workflows/dispatch.yml@main\n" *
+                                "  release-gate:\n    if: needs.dispatch.outputs.run_release_gate == 'true'\n    uses: x\n" *
+                                "  test-cpu-github:\n    if: needs.dispatch.outputs.run_ci_github == 'true'\n    uses: x\n" *
+                                "  test-gpu-kkt:\n    if: needs.dispatch.outputs.run_ci_kkt == 'true'\n    uses: x\n" *
+                                "  documentation:\n    if: needs.dispatch.outputs.run_documentation == 'true'\n    uses: x\n" *
+                                "  breakage-packages:\n    if: needs.dispatch.outputs.run_breakage_packages == 'true'\n    uses: x\n",
+            "SpellCheck.yml" => "jobs:\n  spell:\n    runs-on: ubuntu-latest\n")
+        disp_runs = [(1, "Dispatcher.yml", "completed", "success"), (2, "SpellCheck.yml", "completed", "success")]
+        disp_jobs = Dict(
+            1 => [("dispatch", "success"), ("release-gate / gate", "success"),
+                  ("test-cpu-github / test (1.10, ubuntu-latest)", "success"),
+                  ("test-gpu-kkt / test (1.12)", "success"),
+                  ("documentation / build", "success"),
+                  ("breakage-packages / report", "success")],
+            2 => [("spell", "success")])
+        fake_disp, _ = fake_github(runs=disp_runs, jobs=disp_jobs)
+        fake_disp_full = function (args)
+            a = join(args, " ")
+            contains(a, "contents/.github/workflows?ref=H") && return join(sort(collect(keys(disp_workflows))), "\n") * "\n"
+            m = match(r"contents/\.github/workflows/([^?]+)\?ref=H", a)
+            m !== nothing && haskey(disp_workflows, m[1]) && return disp_workflows[m[1]]
+            return fake_disp(args)
+        end
+        with_gh(fake_disp_full) do
+            r = ready("o/P", 2)
+            @test r.ready
+            @test any(l -> contains(l.message, "`Dispatcher.yml`, run 1"), r.lines)
+        end
+        # Dispatcher.yml without release-gate execution fails
+        disp_jobs_nogate = Dict(
+            1 => [("dispatch", "success"),
+                  ("test-cpu-github / test (1.10, ubuntu-latest)", "success"),
+                  ("test-gpu-kkt / test (1.12)", "success"),
+                  ("documentation / build", "success"),
+                  ("breakage-packages / report", "success")],
+            2 => [("spell", "success")])
+        fake_disp_nogate, _ = fake_github(runs=disp_runs, jobs=disp_jobs_nogate)
+        fake_disp_nogate_full = function (args)
+            a = join(args, " ")
+            contains(a, "contents/.github/workflows?ref=H") && return join(sort(collect(keys(disp_workflows))), "\n") * "\n"
+            m = match(r"contents/\.github/workflows/([^?]+)\?ref=H", a)
+            m !== nothing && haskey(disp_workflows, m[1]) && return disp_workflows[m[1]]
+            return fake_disp_nogate(args)
+        end
+        with_gh(fake_disp_nogate_full) do
+            r = ready("o/P", 2)
+            @test notready(r, "release-gate")
         end
         # parsing
         @test gated_jobs(workflows["CI.yml"]) == [("test-cpu-github", ["run ci github-runner"]), ("test-gpu-kkt", ["run ci kkt-runner"]),

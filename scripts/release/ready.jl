@@ -33,6 +33,9 @@ function gated_jobs(workflow::AbstractString)
                 for l in eachmatch(r"labels\.\*\.name, '([^']+)'", line)
                     l[1] in last(jobs[end]) || push!(last(jobs[end]), l[1])
                 end
+                for l in eachmatch(r"outputs\.(run_[a-z_]+)", line)
+                    haskey(DISPATCH_OUTPUT_LABELS, l[1]) && (DISPATCH_OUTPUT_LABELS[l[1]] in last(jobs[end]) || push!(last(jobs[end]), DISPATCH_OUTPUT_LABELS[l[1]]))
+                end
             end
         end
     end
@@ -93,8 +96,8 @@ function ready(repo::AbstractString, pr::Integer)
     foreach(v -> sort!(v; by=r -> r.id), values(runs))
 
     for f in sort!(unique(vcat(files, collect(keys(runs)))))
-        required = [(id, ls) for (id, ls) in get(jobs, f, []) if any(needed, ls)]
-        mandatory = !isempty(required) || f == "ReleaseGate.yml"
+        required = [(id, ls) for (id, ls) in get(jobs, f, []) if any(needed, ls) || (f == "Dispatcher.yml" && id == "release-gate")]
+        mandatory = !isempty(required) || f == "ReleaseGate.yml" || f == "Dispatcher.yml"
         rs = get(runs, f, NamedTuple[])
         if any(r -> r.status != "completed", rs)
             push!(lines, verdict_line(:wait, "`$f`: a run is in progress"))

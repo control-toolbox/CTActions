@@ -136,11 +136,12 @@ function audit_checks(f, t)
                 add(:fail, "pr", "`Project.toml` changes more than `version`")
         end
         isempty(t.runs) && add(:fail, "pr", "no workflow ran on the head commit of #$(f.pr.number)")
-        haskey(t.runs, "ReleaseGate.yml") ||
-            isempty(t.runs) || add(:fail, "pr", "the release gate (`ReleaseGate.yml`) did not run on the head commit")
+        has_gate = haskey(t.runs, "ReleaseGate.yml") || haskey(t.runs, "Dispatcher.yml")
+        has_gate ||
+            isempty(t.runs) || add(:fail, "pr", "the release gate (`ReleaseGate.yml` or `Dispatcher.yml`) did not run on the head commit")
         bad = sort!([w for (w, c) in t.runs if c != "success"])
         isempty(bad) || add(:fail, "pr", "on the head commit, the latest run of $(join(("`$w`" for w in bad), ", ")) did not succeed")
-        !isempty(t.runs) && isempty(bad) && haskey(t.runs, "ReleaseGate.yml") &&
+        !isempty(t.runs) && isempty(bad) && has_gate &&
             add(:pass, "pr", "on the head commit, the latest run of each of $(length(t.runs)) workflows succeeded, the gate among them")
     end
 
