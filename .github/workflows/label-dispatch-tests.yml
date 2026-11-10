@@ -1,0 +1,26 @@
+name: Label dispatch tests
+
+# Self-test of label-dispatch.yml (docs/workflows/label-dispatch.md): the tests of its
+# mapping label -> workflow (scripts/label-dispatch/test.sh).
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/label-dispatch.yml'
+      - '.github/workflows/label-dispatch-tests.yml'
+      - 'scripts/label-dispatch/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/label-dispatch.yml'
+      - '.github/workflows/label-dispatch-tests.yml'
+      - 'scripts/label-dispatch/**'
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash scripts/label-dispatch/test.sh

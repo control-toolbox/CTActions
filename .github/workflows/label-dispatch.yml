@@ -1,0 +1,82 @@
+name: Label dispatch
+
+# Starts, for a label added to a pull request, the workflow of that label, and only that
+# one (docs/workflows/label-dispatch.md). The heavy workflows of a package (CI,
+# Documentation, Breakage) do not listen to `pull_request`: a label is not a filter of that
+# event, so every label would create a run of each of them, and the latest run, all jobs
+# skipped, would hide on the pull request page the one still running. They listen to
+# `workflow_dispatch`, and this workflow dispatches them:
+#
+#   - `labeled`: the workflow of the label just added; a label that starts nothing, nothing;
+#   - `synchronize`, `reopened`: the workflow of every label the pull request carries.
+#
+# A run started by a label is never cancelled by another label. A new push cancels the run
+# of the same workflow and the same pull request (docs/workflows/superseded-runs.md).
+# The mapping label -> workflow is scripts/label-dispatch/plan.sh. Each dispatched workflow
+# declares the inputs it is given: `pr` always, `target` (CI, Breakage), `preview`
+# (Documentation).
+#
+# Not for a pull request that is not open, nor for one from a fork: a fork's branch cannot
+# be dispatched and its token is read-only. The job says so in its summary.
+
+on:
+  workflow_call:
+    inputs:
+      ctactions_ref:
+        description: 'Ref of CTActions whose script is used (main; a branch to test a change)'
+        required: false
+        type: string
+        default: main
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write   # gh workflow run
+    env:
+      DISPATCHABLE: ${{ github.event.pull_request.state == 'open' && github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - name: Not dispatched
+        if: env.DISPATCHABLE != 'true'
+        run: |
+          echo "Not dispatched, the pull request is not open or its branch is in a fork." >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v7
+        if: env.DISPATCHABLE == 'true'
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+          sparse-checkout: scripts/label-dispatch
+
+      - name: Dispatch
+        if: env.DISPATCHABLE == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTION: ${{ github.event.action }}
+          LABEL: ${{ github.event.label.name }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          PR: ${{ github.event.pull_request.number }}
+          REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          plan=$(bash .ctactions/scripts/label-dispatch/plan.sh)
+          if [ -z "$plan" ]; then
+            echo "Nothing to dispatch for \`$ACTION\` ${LABEL:+(label \`$LABEL\`)}." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          status=0
+          echo "Dispatched on \`$REF\` for #$PR:" >> "$GITHUB_STEP_SUMMARY"
+          while read -r file args; do
+            flags=(-f "pr=$PR")
+            for kv in $args; do flags+=(-f "$kv"); done
+            if gh workflow run "$file" --ref "$REF" "${flags[@]}"; then
+              echo "- \`$file\` $args" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "::error::could not dispatch $file: does it have a workflow_dispatch trigger with the inputs pr and the ones of the label?"
+              echo "- ❌ \`$file\` $args" >> "$GITHUB_STEP_SUMMARY"
+              status=1
+            fi
+          done <<< "$plan"
+          exit $status

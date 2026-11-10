@@ -9,6 +9,14 @@ and always run on `push` to `main` and on tags, so that `main` stays green.
 
 ## The guard
 
+> **Superseded for the heavy workflows.** `CI.yml`, `Documentation.yml` and `Breakage.yml`
+> no longer listen to `pull_request`: a label dispatches them through
+> [`label-dispatch.yml`](../workflows/label-dispatch.md), one run per label, and they guard
+> their jobs on the dispatch inputs, not on the labels. What follows (the `if:` guard, the
+> `types:` list) applies to a workflow that still listens to `pull_request`. The vocabulary
+> below is unchanged, and the mapping is in `scripts/label-dispatch/plan.sh`.
+
+
 The caller guards its job with:
 
 ```yaml
