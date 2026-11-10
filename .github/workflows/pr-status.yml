@@ -26,6 +26,11 @@ on:
         required: false
         type: string
         default: '[]'
+      preview_pr:
+        description: "End, documentation: number of the pull request whose preview was deployed; adds the status '<context> / preview' linking to it. Empty: none."
+        required: false
+        type: string
+        default: ''
 
 jobs:
   status:
@@ -40,6 +45,8 @@ jobs:
           CONTEXT: ${{ inputs.context }}
           PHASE: ${{ inputs.phase }}
           RESULTS: ${{ inputs.results }}
+          PREVIEW_PR: ${{ inputs.preview_pr }}
+          OWNER: ${{ github.repository_owner }}
           URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ "$PHASE" = start ]; then
@@ -54,3 +61,11 @@ jobs:
           gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
             -f state="$state" -f context="$CONTEXT" -f description="$description" -f target_url="$URL"
           echo "\`$CONTEXT\`: $state" >> "$GITHUB_STEP_SUMMARY"
+
+          # The documentation site is https://<owner>.org/<repository>/ (control-toolbox.org)
+          if [ "$PHASE" = end ] && [ "$state" = success ] && [ -n "$PREVIEW_PR" ]; then
+            preview="https://$OWNER.org/${GITHUB_REPOSITORY#*/}/previews/PR$PREVIEW_PR/"
+            gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+              -f state=success -f context="$CONTEXT / preview" -f description="Preview of the documentation" -f target_url="$preview"
+            echo "\`$CONTEXT / preview\`: $preview" >> "$GITHUB_STEP_SUMMARY"
+          fi
