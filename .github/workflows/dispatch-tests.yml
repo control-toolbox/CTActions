@@ -1,0 +1,51 @@
+name: Dispatch tests
+
+# Self-test of dispatch.yml (docs/workflows/dispatch.md) and scripts/dispatch/dispatch.py:
+# tests unit test suite for dispatch.py and verifies dispatch.yml outputs on PRs and by hand.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - '.github/workflows/dispatch.yml'
+      - '.github/workflows/dispatch-tests.yml'
+      - 'scripts/dispatch/**'
+  workflow_dispatch:
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run unit tests for dispatch.py
+        run: python3 -m unittest discover -s scripts/dispatch/test -p 'test_*.py' -v
+
+  dispatch:
+    needs: unittest
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/dispatch.yml
+    with:
+      ctactions_ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+  check:
+    needs: dispatch
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check dispatch decision
+        env:
+          OPEN: ${{ needs.dispatch.outputs.open }}
+          STATE: ${{ github.event.pull_request.state || 'open' }}
+        run: |
+          expected=true
+          [ "$STATE" = open ] || expected=false
+          echo "state=$STATE open=$OPEN (expected open=$expected)"
+          if [ "$OPEN" != "$expected" ]; then
+            echo "::error::dispatch answered open=$OPEN for state=$STATE"
+            exit 1
+          fi
+

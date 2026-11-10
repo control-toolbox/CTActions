@@ -1,0 +1,325 @@
+name: Dispatch
+
+# The central PR gate and label dispatcher for control-toolbox packages.
+# Reads .github/ci.toml in the caller repository, checks PR state (< 2s early exit
+# on closed PRs), debounces rapid consecutive labeling events, and outputs boolean
+# run flags and configured workflow arguments to downstream reusable workflows.
+# See docs/workflows/dispatch.md.
+
+on:
+  workflow_call:
+    inputs:
+      config:
+        description: 'Path to repository CI configuration file'
+        required: false
+        type: string
+        default: '.github/ci.toml'
+      debounce_seconds:
+        description: 'Sleep duration on labeled/unlabeled events to debounce rapid changes'
+        required: false
+        type: number
+        default: 5
+      ctactions_ref:
+        description: 'Ref of CTActions whose scripts are used'
+        required: false
+        type: string
+        default: main
+    outputs:
+      open:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.open }}
+      run_release_gate:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.run_release_gate }}
+      run_ci_github:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.run_ci_github }}
+      run_ci_occidata:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.run_ci_occidata }}
+      run_ci_kkt:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.run_ci_kkt }}
+      run_ci_gpu_main:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.run_ci_gpu_main }}
+      run_documentation:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.run_documentation }}
+      run_breakage_packages:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.run_breakage_packages }}
+      run_breakage_applications:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.run_breakage_applications }}
+      use_ct_registry:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.use_ct_registry }}
+      ci_github_versions:
+        description: 'JSON array of Julia versions for GitHub CI'
+        value: ${{ jobs.dispatch.outputs.ci_github_versions }}
+      ci_github_runs_on:
+        description: 'JSON array of runners for GitHub CI'
+        value: ${{ jobs.dispatch.outputs.ci_github_runs_on }}
+      ci_github_test_args:
+        description: 'test_args string for GitHub CI'
+        value: ${{ jobs.dispatch.outputs.ci_github_test_args }}
+      ci_github_fail_fast:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.ci_github_fail_fast }}
+      ci_github_upload_artifact_path:
+        description: 'Path to upload as test artifact'
+        value: ${{ jobs.dispatch.outputs.ci_github_upload_artifact_path }}
+      ci_github_upload_artifact_name:
+        description: 'Base name of test artifact'
+        value: ${{ jobs.dispatch.outputs.ci_github_upload_artifact_name }}
+      ci_github_smoke_test:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.ci_github_smoke_test }}
+      ci_occidata_versions:
+        description: 'JSON array of Julia versions for Occidata GPU'
+        value: ${{ jobs.dispatch.outputs.ci_occidata_versions }}
+      ci_occidata_runs_on:
+        description: 'JSON array of runners for Occidata GPU'
+        value: ${{ jobs.dispatch.outputs.ci_occidata_runs_on }}
+      ci_occidata_test_args:
+        description: 'test_args string for Occidata GPU'
+        value: ${{ jobs.dispatch.outputs.ci_occidata_test_args }}
+      ci_kkt_versions:
+        description: 'JSON array of Julia versions for KKT GPU'
+        value: ${{ jobs.dispatch.outputs.ci_kkt_versions }}
+      ci_kkt_runs_on:
+        description: 'JSON array of runners for KKT GPU'
+        value: ${{ jobs.dispatch.outputs.ci_kkt_runs_on }}
+      ci_kkt_test_args:
+        description: 'test_args string for KKT GPU'
+        value: ${{ jobs.dispatch.outputs.ci_kkt_test_args }}
+      ci_gpu_main_versions:
+        description: 'JSON array of Julia versions for GPU on main'
+        value: ${{ jobs.dispatch.outputs.ci_gpu_main_versions }}
+      ci_gpu_main_test_args:
+        description: 'test_args string for GPU on main'
+        value: ${{ jobs.dispatch.outputs.ci_gpu_main_test_args }}
+      documentation_gpu_runner:
+        description: 'GPU runner string or JSON array for documentation'
+        value: ${{ jobs.dispatch.outputs.documentation_gpu_runner }}
+      documentation_gpu_timeout_minutes:
+        description: 'Timeout in minutes for documentation GPU pass'
+        value: ${{ jobs.dispatch.outputs.documentation_gpu_timeout_minutes }}
+      breakage_packages_consumers:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.breakage_packages_consumers }}
+      breakage_packages_versions:
+        description: 'JSON array of versions for breakage packages'
+        value: ${{ jobs.dispatch.outputs.breakage_packages_versions }}
+      breakage_packages_targets:
+        description: 'JSON array of targets for breakage packages'
+        value: ${{ jobs.dispatch.outputs.breakage_packages_targets }}
+      breakage_applications_consumers:
+        description: "'true' or 'false'"
+        value: ${{ jobs.dispatch.outputs.breakage_applications_consumers }}
+      breakage_applications_versions:
+        description: 'JSON array of versions for breakage applications'
+        value: ${{ jobs.dispatch.outputs.breakage_applications_versions }}
+      breakage_applications_targets:
+        description: 'JSON array of targets for breakage applications'
+        value: ${{ jobs.dispatch.outputs.breakage_applications_targets }}
+      release_gate_julia_lowest:
+        description: 'Lowest Julia version for release gate'
+        value: ${{ jobs.dispatch.outputs.release_gate_julia_lowest }}
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      open: ${{ steps.closed.outputs.open || steps.unrelated.outputs.open || steps.eval.outputs.open }}
+      run_release_gate: ${{ steps.closed.outputs.run_release_gate || steps.unrelated.outputs.run_release_gate || steps.eval.outputs.run_release_gate }}
+      run_ci_github: ${{ steps.closed.outputs.run_ci_github || steps.unrelated.outputs.run_ci_github || steps.eval.outputs.run_ci_github }}
+      run_ci_occidata: ${{ steps.closed.outputs.run_ci_occidata || steps.unrelated.outputs.run_ci_occidata || steps.eval.outputs.run_ci_occidata }}
+      run_ci_kkt: ${{ steps.closed.outputs.run_ci_kkt || steps.unrelated.outputs.run_ci_kkt || steps.eval.outputs.run_ci_kkt }}
+      run_ci_gpu_main: ${{ steps.closed.outputs.run_ci_gpu_main || steps.unrelated.outputs.run_ci_gpu_main || steps.eval.outputs.run_ci_gpu_main }}
+      run_documentation: ${{ steps.closed.outputs.run_documentation || steps.unrelated.outputs.run_documentation || steps.eval.outputs.run_documentation }}
+      run_breakage_packages: ${{ steps.closed.outputs.run_breakage_packages || steps.unrelated.outputs.run_breakage_packages || steps.eval.outputs.run_breakage_packages }}
+      run_breakage_applications: ${{ steps.closed.outputs.run_breakage_applications || steps.unrelated.outputs.run_breakage_applications || steps.eval.outputs.run_breakage_applications }}
+      use_ct_registry: ${{ steps.closed.outputs.use_ct_registry || steps.unrelated.outputs.use_ct_registry || steps.eval.outputs.use_ct_registry }}
+      ci_github_versions: ${{ steps.closed.outputs.ci_github_versions || steps.unrelated.outputs.ci_github_versions || steps.eval.outputs.ci_github_versions }}
+      ci_github_runs_on: ${{ steps.closed.outputs.ci_github_runs_on || steps.unrelated.outputs.ci_github_runs_on || steps.eval.outputs.ci_github_runs_on }}
+      ci_github_test_args: ${{ steps.closed.outputs.ci_github_test_args || steps.unrelated.outputs.ci_github_test_args || steps.eval.outputs.ci_github_test_args }}
+      ci_github_fail_fast: ${{ steps.closed.outputs.ci_github_fail_fast || steps.unrelated.outputs.ci_github_fail_fast || steps.eval.outputs.ci_github_fail_fast }}
+      ci_github_upload_artifact_path: ${{ steps.closed.outputs.ci_github_upload_artifact_path || steps.unrelated.outputs.ci_github_upload_artifact_path || steps.eval.outputs.ci_github_upload_artifact_path }}
+      ci_github_upload_artifact_name: ${{ steps.closed.outputs.ci_github_upload_artifact_name || steps.unrelated.outputs.ci_github_upload_artifact_name || steps.eval.outputs.ci_github_upload_artifact_name }}
+      ci_github_smoke_test: ${{ steps.closed.outputs.ci_github_smoke_test || steps.unrelated.outputs.ci_github_smoke_test || steps.eval.outputs.ci_github_smoke_test }}
+      ci_occidata_versions: ${{ steps.closed.outputs.ci_occidata_versions || steps.unrelated.outputs.ci_occidata_versions || steps.eval.outputs.ci_occidata_versions }}
+      ci_occidata_runs_on: ${{ steps.closed.outputs.ci_occidata_runs_on || steps.unrelated.outputs.ci_occidata_runs_on || steps.eval.outputs.ci_occidata_runs_on }}
+      ci_occidata_test_args: ${{ steps.closed.outputs.ci_occidata_test_args || steps.unrelated.outputs.ci_occidata_test_args || steps.eval.outputs.ci_occidata_test_args }}
+      ci_kkt_versions: ${{ steps.closed.outputs.ci_kkt_versions || steps.unrelated.outputs.ci_kkt_versions || steps.eval.outputs.ci_kkt_versions }}
+      ci_kkt_runs_on: ${{ steps.closed.outputs.ci_kkt_runs_on || steps.unrelated.outputs.ci_kkt_runs_on || steps.eval.outputs.ci_kkt_runs_on }}
+      ci_kkt_test_args: ${{ steps.closed.outputs.ci_kkt_test_args || steps.unrelated.outputs.ci_kkt_test_args || steps.eval.outputs.ci_kkt_test_args }}
+      ci_gpu_main_versions: ${{ steps.closed.outputs.ci_gpu_main_versions || steps.unrelated.outputs.ci_gpu_main_versions || steps.eval.outputs.ci_gpu_main_versions }}
+      ci_gpu_main_test_args: ${{ steps.closed.outputs.ci_gpu_main_test_args || steps.unrelated.outputs.ci_gpu_main_test_args || steps.eval.outputs.ci_gpu_main_test_args }}
+      documentation_gpu_runner: ${{ steps.closed.outputs.documentation_gpu_runner || steps.unrelated.outputs.documentation_gpu_runner || steps.eval.outputs.documentation_gpu_runner }}
+      documentation_gpu_timeout_minutes: ${{ steps.closed.outputs.documentation_gpu_timeout_minutes || steps.unrelated.outputs.documentation_gpu_timeout_minutes || steps.eval.outputs.documentation_gpu_timeout_minutes }}
+      breakage_packages_consumers: ${{ steps.closed.outputs.breakage_packages_consumers || steps.unrelated.outputs.breakage_packages_consumers || steps.eval.outputs.breakage_packages_consumers }}
+      breakage_packages_versions: ${{ steps.closed.outputs.breakage_packages_versions || steps.unrelated.outputs.breakage_packages_versions || steps.eval.outputs.breakage_packages_versions }}
+      breakage_packages_targets: ${{ steps.closed.outputs.breakage_packages_targets || steps.unrelated.outputs.breakage_packages_targets || steps.eval.outputs.breakage_packages_targets }}
+      breakage_applications_consumers: ${{ steps.closed.outputs.breakage_applications_consumers || steps.unrelated.outputs.breakage_applications_consumers || steps.eval.outputs.breakage_applications_consumers }}
+      breakage_applications_versions: ${{ steps.closed.outputs.breakage_applications_versions || steps.unrelated.outputs.breakage_applications_versions || steps.eval.outputs.breakage_applications_versions }}
+      breakage_applications_targets: ${{ steps.closed.outputs.breakage_applications_targets || steps.unrelated.outputs.breakage_applications_targets || steps.eval.outputs.breakage_applications_targets }}
+      release_gate_julia_lowest: ${{ steps.closed.outputs.release_gate_julia_lowest || steps.unrelated.outputs.release_gate_julia_lowest || steps.eval.outputs.release_gate_julia_lowest }}
+    steps:
+      - name: A pull request that is not open
+        id: closed
+        if: github.event_name == 'pull_request' && github.event.pull_request.state != 'open'
+        run: |
+          {
+            echo "open=false"
+            echo "run_release_gate=false"
+            echo "run_ci_github=false"
+            echo "run_ci_occidata=false"
+            echo "run_ci_kkt=false"
+            echo "run_ci_gpu_main=false"
+            echo "run_documentation=false"
+            echo "run_breakage_packages=false"
+            echo "run_breakage_applications=false"
+            echo "use_ct_registry=false"
+            echo "ci_github_versions=[]"
+            echo "ci_github_runs_on=[]"
+            echo "ci_github_test_args="
+            echo "ci_github_fail_fast=true"
+            echo "ci_github_upload_artifact_path="
+            echo "ci_github_upload_artifact_name="
+            echo "ci_github_smoke_test=false"
+            echo "ci_occidata_versions=[]"
+            echo "ci_occidata_runs_on=[]"
+            echo "ci_occidata_test_args="
+            echo "ci_kkt_versions=[]"
+            echo "ci_kkt_runs_on=[]"
+            echo "ci_kkt_test_args="
+            echo "ci_gpu_main_versions=[]"
+            echo "ci_gpu_main_test_args="
+            echo "documentation_gpu_runner="
+            echo "documentation_gpu_timeout_minutes=120"
+            echo "breakage_packages_consumers=true"
+            echo "breakage_packages_versions=[]"
+            echo "breakage_packages_targets=[]"
+            echo "breakage_applications_consumers=false"
+            echo "breakage_applications_versions=[]"
+            echo "breakage_applications_targets=[]"
+            echo "release_gate_julia_lowest=1.10"
+          } >> "$GITHUB_OUTPUT"
+          echo "Skipped: the pull request is not open." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: An unrelated label event
+        id: unrelated
+        if: >
+          steps.closed.outputs.open != 'false' &&
+          github.event_name == 'pull_request' &&
+          (github.event.action == 'labeled' || github.event.action == 'unlabeled') &&
+          !(startsWith(github.event.label.name, 'run ') ||
+            startsWith(github.event.label.name, 'test ') ||
+            github.event.label.name == 'documentation push preview' ||
+            github.event.label.name == 'release')
+        env:
+          LABEL: ${{ github.event.label.name }}
+          ACTION: ${{ github.event.action }}
+        run: |
+          {
+            echo "skip=true"
+            echo "open=true"
+            echo "run_release_gate=false"
+            echo "run_ci_github=false"
+            echo "run_ci_occidata=false"
+            echo "run_ci_kkt=false"
+            echo "run_ci_gpu_main=false"
+            echo "run_documentation=false"
+            echo "run_breakage_packages=false"
+            echo "run_breakage_applications=false"
+            echo "use_ct_registry=false"
+            echo "ci_github_versions=[]"
+            echo "ci_github_runs_on=[]"
+            echo "ci_github_test_args="
+            echo "ci_github_fail_fast=true"
+            echo "ci_github_upload_artifact_path="
+            echo "ci_github_upload_artifact_name="
+            echo "ci_github_smoke_test=false"
+            echo "ci_occidata_versions=[]"
+            echo "ci_occidata_runs_on=[]"
+            echo "ci_occidata_test_args="
+            echo "ci_kkt_versions=[]"
+            echo "ci_kkt_runs_on=[]"
+            echo "ci_kkt_test_args="
+            echo "ci_gpu_main_versions=[]"
+            echo "ci_gpu_main_test_args="
+            echo "documentation_gpu_runner="
+            echo "documentation_gpu_timeout_minutes=120"
+            echo "breakage_packages_consumers=true"
+            echo "breakage_packages_versions=[]"
+            echo "breakage_packages_targets=[]"
+            echo "breakage_applications_consumers=false"
+            echo "breakage_applications_versions=[]"
+            echo "breakage_applications_targets=[]"
+            echo "release_gate_julia_lowest=1.10"
+          } >> "$GITHUB_OUTPUT"
+          echo "Skipped: label \`$LABEL\` ($ACTION) does not gate any workflow." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Debounce and query live PR state
+        id: live_pr
+        if: steps.closed.outputs.open != 'false' && steps.unrelated.outputs.skip != 'true' && github.event_name == 'pull_request' && (github.event.action == 'labeled' || github.event.action == 'unlabeled')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DEBOUNCE: ${{ inputs.debounce_seconds }}
+        run: |
+          sleep "$DEBOUNCE"
+          data=$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" --jq '{state: .state, labels: [.labels[].name]}' 2>/dev/null || echo '')
+          if [ -n "$data" ]; then
+            echo "live_data=$data" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout caller repository
+        if: steps.closed.outputs.open != 'false' && steps.unrelated.outputs.skip != 'true'
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Checkout CTActions scripts
+        if: steps.closed.outputs.open != 'false' && steps.unrelated.outputs.skip != 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      - name: Evaluate dispatch
+        id: eval
+        if: steps.closed.outputs.open != 'false' && steps.unrelated.outputs.skip != 'true'
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          PR_STATE: ${{ github.event.pull_request.state || '' }}
+          EVENT_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          LIVE_DATA: ${{ steps.live_pr.outputs.live_data }}
+          EXPECTED_FILES: ${{ github.event.pull_request.changed_files || '' }}
+          CONFIG: ${{ inputs.config }}
+        run: |
+          labels="$EVENT_LABELS"
+          pr_state="$PR_STATE"
+          if [ -n "$LIVE_DATA" ]; then
+            live_state=$(jq -r '.state // empty' <<< "$LIVE_DATA")
+            [ -n "$live_state" ] && pr_state="$live_state"
+            live_labels=$(jq -c '.labels // empty' <<< "$LIVE_DATA")
+            [ -n "$live_labels" ] && labels="$live_labels"
+          fi
+          python3 .ctactions/scripts/dispatch/dispatch.py \
+            --config "$CONFIG" \
+            --event "$EVENT" \
+            --action "$ACTION" \
+            --pr-state "${pr_state:-open}" \
+            --labels "${labels:-[]}" \
+            --expected-files "$EXPECTED_FILES" \
+            --root .
+

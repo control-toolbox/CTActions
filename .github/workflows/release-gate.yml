@@ -30,6 +30,10 @@ on:
         type: string
         default: main
 
+concurrency:
+  group: ctactions-release-gate-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   gate:
     runs-on: ubuntu-latest
@@ -37,12 +41,21 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: A pull request that is not open
+        id: closed
+        if: github.event_name == 'pull_request' && github.event.pull_request.state != 'open'
+        run: |
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          echo "Skipped: the pull request is not open." >> "$GITHUB_STEP_SUMMARY"
+
       # the merge of the PR into its base, with the whole history and the tags
       - uses: actions/checkout@v7
+        if: steps.closed.outputs.skip != 'true'
         with:
           fetch-depth: 0
 
       - uses: actions/checkout@v7
+        if: steps.closed.outputs.skip != 'true'
         with:
           repository: control-toolbox/CTActions
           ref: ${{ inputs.ctactions_ref }}
@@ -50,12 +63,15 @@ jobs:
 
       # General only: no ct-registry, no SSH key
       - uses: julia-actions/setup-julia@v2
+        if: steps.closed.outputs.skip != 'true'
         with:
           version: ${{ inputs.julia_lowest }}
       - name: Add the General registry
+        if: steps.closed.outputs.skip != 'true'
         run: julia --startup-file=no -e 'using Pkg; Pkg.Registry.add("General")'
 
       - name: REL4 on the lowest Julia
+        if: steps.closed.outputs.skip != 'true'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
@@ -63,10 +79,12 @@ jobs:
           julia --startup-file=no .ctactions/scripts/release/release.jl registrable --base "$RUNNER_TEMP/base.toml" Project.toml
 
       - uses: julia-actions/setup-julia@v2
+        if: steps.closed.outputs.skip != 'true'
         with:
           version: '1'
 
       - name: The gate, on the newest Julia
+        if: steps.closed.outputs.skip != 'true'
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}

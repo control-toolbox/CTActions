@@ -283,8 +283,12 @@ jobs:
           GROUP: ${{ inputs.group }}
         run: |
           file=$(basename "${WORKFLOW_REF%%@*}")
-          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$file/runs?head_sha=$BASE_SHA&status=completed&per_page=50" \
-                  --jq '[.workflow_runs[] | select(.event != "pull_request")][0].id // empty')
+          run=""
+          for wf in "$file" "Breakage.yml"; do
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$wf/runs?head_sha=$BASE_SHA&status=completed&per_page=50" \
+                    --jq '[.workflow_runs[] | select(.event != "pull_request")][0].id // empty' 2>/dev/null || true)
+            [ -n "$run" ] && break
+          done
           if [ -n "$run" ] && gh run download "$run" --repo "$GITHUB_REPOSITORY" --name "breakage-$GROUP" --dir baseline; then
             echo "Baseline: run $run on $BASE_SHA"
           else
