@@ -78,6 +78,7 @@ jobs:
       context: Documentation
       phase: end
       results: ${{ toJSON(needs.*.result) }}
+      preview_pr: ${{ github.event.inputs.preview == 'true' && github.event.inputs.pr || '' }}
 
   # Whether the jobs below run (docs/workflows/guard.md): no on a pull request that is not
   # open; on a push to main, yes unless the merged pull request carries the label
