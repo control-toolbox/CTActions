@@ -69,6 +69,27 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '') }}
 
 jobs:
+  # A run started by label-dispatch.yml shows as a commit status (pr-status.yml).
+  status-start:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '' }}
+    permissions:
+      statuses: write
+    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@feat/149-label-dispatch
+    with:
+      context: Breakage / ${{ inputs.group }}
+      phase: start
+
+  status-end:
+    needs: [changes, carry-baseline, plan, break, report]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '' }}
+    permissions:
+      statuses: write
+    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@feat/149-label-dispatch
+    with:
+      context: Breakage / ${{ inputs.group }}
+      phase: end
+      results: ${{ toJSON(needs.*.result) }}
+
   # Whether the suite runs (docs/workflows/guard.md): no on a pull request that is not open;
   # on a push to main, yes unless the merged pull request carries the label
   # `ci on main: changes only` (docs/workflows/ci-on-main.md); yes otherwise. When it does
