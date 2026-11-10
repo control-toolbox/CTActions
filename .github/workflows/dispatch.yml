@@ -300,14 +300,14 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           ACTION: ${{ github.event.action }}
-          PR_STATE: ${{ github.event.pull_request.state || '' }}
+          EVENT_PR_STATE: ${{ github.event.pull_request.state || '' }}
           EVENT_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
           LIVE_DATA: ${{ steps.live_pr.outputs.live_data }}
           EXPECTED_FILES: ${{ github.event.pull_request.changed_files || '' }}
           CONFIG: ${{ inputs.config }}
         run: |
           labels="$EVENT_LABELS"
-          pr_state="$PR_STATE"
+          pr_state="$EVENT_PR_STATE"
           if [ -n "$LIVE_DATA" ]; then
             live_state=$(jq -r '.state // empty' <<< "$LIVE_DATA")
             [ -n "$live_state" ] && pr_state="$live_state"
