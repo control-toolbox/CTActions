@@ -39,17 +39,45 @@ function shipped(files, old_project::AbstractDict, new_project::AbstractDict)
     return out
 end
 
-"The run labels a package's workflows react to (`contains(… .labels.*.name, '<label>')`)."
+"""
+The run label each target of label-dispatch.yml stands for (scripts/label-dispatch/plan.sh):
+a job guarded by `inputs.target == '<target>'` is the one of that label.
+"""
+const TARGET_LABELS = Dict("github" => "run ci github-runner", "occidata" => "run ci occidata-runner",
+                           "kkt" => "run ci kkt-runner", "packages" => "run breakage",
+                           "applications" => "run breakage applications")
+
+"The label of the documentation workflow, which has no `target`: it takes the input `preview`."
+const DOCUMENTATION_LABEL = "run documentation"
+
+"""
+    line_labels(line) -> Vector{String}
+
+The run labels a line of a workflow names: `contains(… .labels.*.name, '<label>')` (a caller
+on `pull_request`), `inputs.target == '<target>'` (a caller dispatched by label-dispatch.yml).
+"""
+function line_labels(line::AbstractString)
+    out = String[m[1] for m in eachmatch(r"labels\.\*\.name, '([^']+)'", line)]
+    for m in eachmatch(r"inputs\.target == '([^']+)'", line)
+        haskey(TARGET_LABELS, m[1]) && push!(out, TARGET_LABELS[m[1]])
+    end
+    return out
+end
+
+"Whether a workflow is the documentation one of label-dispatch.yml: `workflow_dispatch` takes the input `preview`."
+dispatches_documentation(workflow::AbstractString) = occursin(r"^      preview:\s*$"m, workflow)
+
+"The run labels a package's workflows react to (see `line_labels`)."
 function run_labels(workflows::AbstractString)
     labels = Set{String}()
     isdir(workflows) || return labels
     for f in readdir(workflows; join=true)
         endswith(f, ".yml") || endswith(f, ".yaml") || continue
-        for line in eachline(f)
+        text = read(f, String)
+        dispatches_documentation(text) && push!(labels, DOCUMENTATION_LABEL)
+        for line in eachline(IOBuffer(text))
             startswith(lstrip(line), "#") && continue   # a commented-out guard requires nothing
-            for m in eachmatch(r"labels\.\*\.name, '([^']+)'", line)
-                push!(labels, m[1])
-            end
+            union!(labels, line_labels(line))
         end
     end
     return labels

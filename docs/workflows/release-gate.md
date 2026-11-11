@@ -65,7 +65,12 @@ reports *success*, and GitHub shows the latest result of a check name: a check c
 green while the real tests failed or still run.
 
 `ready` reads what actually ran on the head commit of the PR (the Actions runs and their
-jobs, not the checks): for each workflow, the **latest run that executed jobs** counts; it
+jobs, not the checks). The runs of the PR's own events (`pull_request`) count, and so do the
+ones [label-dispatch.yml](label-dispatch.md) dispatched on its branch (`workflow_dispatch`:
+the list of runs does not say which PR they belong to, the branch does). A package's guard
+is read from its callers, `contains(… .labels.*.name, '<label>')` or `inputs.target ==
+'<target>'`; the documentation workflow, which has no guard, is the one that takes the
+dispatch input `preview` (`run documentation`). For each workflow, the **latest run that executed jobs** counts; it
 must be complete, every job in it passed or was skipped, and every job gated by a label
 the release needs ran and passed (of the GPU jobs, the one of the GPU label on the PR:
 `kkt`, else `occidata`). The release gate must have run and passed; the PR must be open,

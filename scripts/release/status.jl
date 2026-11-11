@@ -18,6 +18,21 @@ gh(args...) = GH[](collect(String, args))
 gh_strip(args...) = (out = gh(args...); out === nothing ? nothing : strip(out))
 
 """
+    pr_runs(repo, head, branch, fields) -> Union{String,Nothing}
+
+The runs on the head commit `head` of a pull request whose branch is `branch`, one line per
+run, `fields` (jq expressions) separated by tabs: the runs of its own events
+(`pull_request`) and the ones label-dispatch.yml dispatched on its branch
+(`workflow_dispatch`; docs/workflows/label-dispatch.md). The list of runs does not say which
+pull request a dispatched run belongs to (`pull_requests` is empty): the branch does.
+"""
+function pr_runs(repo, head, branch, fields)
+    sel = ".workflow_runs[] | select(.event == \"pull_request\" or (.event == \"workflow_dispatch\" and .head_branch == \"$branch\"))"
+    return gh("api", "repos/$repo/actions/runs?head_sha=$head&per_page=100",
+              "--jq", "$sel | \"" * join(("\\(" * f * ")" for f in fields), "\t") * "\"")
+end
+
+"""
     facts(repo; version=nothing) -> NamedTuple
 
 Everything that says where the release of `version` stands. Without `version`: the
