@@ -5,7 +5,8 @@
 # are all skipped (the label added was another one) reports success; the latest result of a
 # check name is the one GitHub shows. So a check can look green while the real tests failed
 # or are still running. Here, for each workflow, the latest run that executed jobs is the
-# one that counts, and every job its labels call for must have run and passed.
+# one that counts, and every job its labels call for must have run and passed. The runs of
+# the PR are its own events and the ones label-dispatch.yml dispatched on its branch.
 
 @isdefined(facts) || include(joinpath(@__DIR__, "status.jl"))
 @isdefined(GPU_LABELS) || include(joinpath(@__DIR__, "changes.jl"))
@@ -14,7 +15,9 @@
     gated_jobs(workflow) -> Vector{Tuple{String,Vector{String}}}
 
 The top-level jobs of a workflow file (its text), with the run labels named in each one
-(`contains(… .labels.*.name, '<label>')`). Commented lines are ignored.
+(`line_labels`: `contains(… .labels.*.name, '<label>')`, or `inputs.target == '<target>'`). The jobs of
+the documentation workflow of label-dispatch.yml, which has no guard, are those of `run documentation`.
+Commented lines are ignored.
 """
 function gated_jobs(workflow::AbstractString)
     jobs = Tuple{String,Vector{String}}[]
@@ -30,10 +33,15 @@ function gated_jobs(workflow::AbstractString)
             if m !== nothing
                 push!(jobs, (m[1], String[]))
             elseif !isempty(jobs)
-                for l in eachmatch(r"labels\.\*\.name, '([^']+)'", line)
-                    l[1] in last(jobs[end]) || push!(last(jobs[end]), l[1])
+                for l in line_labels(line)
+                    l in last(jobs[end]) || push!(last(jobs[end]), l)
                 end
             end
+        end
+    end
+    if dispatches_documentation(workflow)
+        for (_, ls) in jobs
+            isempty(ls) && push!(ls, DOCUMENTATION_LABEL)
         end
     end
     return jobs
@@ -82,8 +90,7 @@ function ready(repo::AbstractString, pr::Integer)
         push!(lines, verdict_line(:fail, "the package has GPU jobs and the PR has no GPU label (`run ci kkt-runner`, else `run ci occidata-runner`)"))
 
     # the runs of the head commit, per workflow, oldest first
-    runs_out = something(gh("api", "repos/$repo/actions/runs?head_sha=$head&event=pull_request&per_page=100",
-                            "--jq", ".workflow_runs[] | \"\\(.id)\\t\\(.path)\\t\\(.status)\\t\\(.conclusion)\""), "")
+    runs_out = something(pr_runs(repo, head, branch, (".id", ".path", ".status", ".conclusion")), "")
     runs = Dict{String,Vector{NamedTuple}}()
     for l in split(runs_out, '\n'; keepempty=false)
         id, path, status, conclusion = split(l, '\t')

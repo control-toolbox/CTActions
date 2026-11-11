@@ -46,7 +46,7 @@
 - [ ] `AddToProject.yml` added **iff** tracked on the board.
 - [ ] CI inputs set (`versions`, `runs_on` with `windows-latest`, `use_ct_registry`).
 - [ ] Runner split decided **iff** the package has GPU-dependent code to test.
-- [ ] Every label-gated caller uses `types: [labeled, synchronize, reopened]`, **no `opened`**.
+- [ ] `Labels.yml` calls [`label-dispatch.yml`](workflows/label-dispatch.md); `CI.yml`, `Documentation.yml` and `Breakage.yml` have no `pull_request`, and take `pr`, `target` or `preview` from `workflow_dispatch`. (A caller still on `pull_request` with a label guard uses `types: [labeled, synchronize, reopened]`, **no `opened`**.)
 - [ ] Trigger labels created, spelled as in [Labels](conventions/labels.md#the-vocabulary).
 - [ ] `README.template.md` present and `UpdateReadme.yml` inputs filled.
 

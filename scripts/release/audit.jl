@@ -212,6 +212,7 @@ function trail(repo::AbstractString, f)
     if f.pr !== nothing
         n = string(f.pr.number)
         head = gh_strip("pr", "view", n, "-R", repo, "--json", "headRefOid", "--jq", ".headRefOid")
+        branch = gh_strip("pr", "view", n, "-R", repo, "--json", "headRefName", "--jq", ".headRefName")
         info = something(gh("pr", "view", n, "-R", repo, "--json", "title,body", "--jq",
                             "[(.title | @base64), (.body | @base64)] | @tsv"), "")
         title, body = length(split(strip(info), '\t')) == 2 ? decode.(split(strip(info), '\t')) : ("", "")
@@ -223,9 +224,8 @@ function trail(repo::AbstractString, f)
         events = something(gh_strip("api", "repos/$repo/issues/$n/events", "--paginate", "--jq", ".[].event"), "")
         pr = (; title, body=String(body), files=String.(files), project_changes=String.(changed),
               auto_merge="auto_merge_enabled" in split(events, '\n'))
-        if head !== nothing
-            out = something(gh("api", "repos/$repo/actions/runs?head_sha=$head&event=pull_request&per_page=100",
-                               "--jq", ".workflow_runs[] | \"\\(.id)\\t\\(.path)\\t\\(.conclusion)\""), "")
+        if head !== nothing && branch !== nothing
+            out = something(pr_runs(repo, head, branch, (".id", ".path", ".conclusion")), "")
             rs = Dict{String,Vector{Tuple{Int,String}}}()
             for l in split(out, '\n'; keepempty=false)
                 id, path, conclusion = split(l, '\t')

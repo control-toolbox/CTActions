@@ -648,6 +648,7 @@ failures(results) = [r.message for r in results if r.status === :fail]
                 contains(a, "issue view 7") && contains(a, "comments") && return "bob\t2026-10-19T11:00:00Z\t$(b64("hello\nworld"))\n"
                 contains(a, "commits/M/comments") && return "bob\t2026-10-19T12:00:00Z\t$(b64("on the commit"))\n"
                 contains(a, "headRefOid") && return "H\n"
+                contains(a, "headRefName") && return "release/v0.4.3\n"
                 contains(a, "title,body") && return "$(b64("a title"))\t$(b64("a body\nover lines"))\n"
                 contains(a, "json files") && contains(a, ".files[].path") && return "Project.toml\nCHANGELOG.md\n"
                 contains(a, "pulls/2/files") && return "@@ -1 +1 @@\n-version = \"0.4.2\"\n+version = \"0.4.3\"\n context\n"
@@ -881,6 +882,30 @@ failures(results) = [r.message for r in results if r.status === :fail]
         @test gated_jobs(workflows["CI.yml"]) == [("test-cpu-github", ["run ci github-runner"]), ("test-gpu-kkt", ["run ci kkt-runner"]),
                                                   ("test-gpu-occidata", ["run ci occidata-runner"]), ("smoke", ["run ci github-runner"])]
         @test gated_jobs("on:\n  push:\njobs:\n  a:\n    runs-on: x\nenv:\n  b:\n    c: 1\n") == [("a", String[])]
+        # the callers dispatched by label-dispatch.yml: the targets stand for the labels
+        dispatched = "on:\n  workflow_dispatch:\n    inputs:\n      pr:\n      target:\njobs:\n" *
+                     "  test-cpu-github:\n    if: github.event_name == 'push' || inputs.target == 'github'\n" *
+                     "  test-gpu-kkt:\n    if: inputs.target == 'kkt'\n" *
+                     "  call:\n    if: inputs.pr == '' || inputs.target == 'packages'\n"
+        @test gated_jobs(dispatched) == [("test-cpu-github", ["run ci github-runner"]), ("test-gpu-kkt", ["run ci kkt-runner"]),
+                                         ("call", ["run breakage"])]
+        @test line_labels("if: inputs.target == 'unknown'") == String[]
+        # its documentation has no guard: the input `preview` says what it is
+        docs = "on:\n  workflow_dispatch:\n    inputs:\n      pr:\n      preview:\njobs:\n  call:\n    uses: x\n"
+        @test gated_jobs(docs) == [("call", ["run documentation"])]
+        @test gated_jobs("on:\n  push:\njobs:\n  call:\n    uses: x\n") == [("call", String[])]
+        mktempdir() do d
+            write(joinpath(d, "CI.yml"), dispatched)
+            write(joinpath(d, "Documentation.yml"), docs)
+            @test run_labels(d) == Set(["run ci github-runner", "run ci kkt-runner", "run breakage", "run documentation"])
+        end
+        # the runs of a pull request: its own events and the ones dispatched on its branch
+        seen = String[]
+        with_gh(a -> (push!(seen, join(a, " ")); "")) do
+            pr_runs("o/P", "H", "release/v0.4.3", (".id", ".path"))
+        end
+        @test length(seen) == 1 && contains(seen[1], "actions/runs?head_sha=H") &&
+              contains(seen[1], "workflow_dispatch") && contains(seen[1], "release/v0.4.3")
         @test job_of("call / build", "call") && job_of("call (CTModels, stable) / break", "call") && job_of("smoke (ubuntu)", "smoke")
         @test job_of("smoke", "smoke") && !job_of("call-gpu / build", "call") && !job_of("smoker", "smoke")
     end
