@@ -51,11 +51,35 @@ on:
 # not in the caller: a label that changes nothing creates a run whose calling job is
 # skipped, and a `concurrency` of the caller would still cancel the run in progress. The
 # group starts with a name of its own: it must differ from every group of a caller.
+# A run started by label-dispatch.yml (a `workflow_dispatch` with the input `pr`) is a
+# run of that pull request: same group, same cancellation.
 concurrency:
-  group: ctactions-documentation-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ctactions-documentation-${{ github.workflow }}-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '') }}
 
 jobs:
+  # A run started by label-dispatch.yml shows as a commit status (pr-status.yml).
+  status-start:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '' }}
+    permissions:
+      statuses: write
+    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@main
+    with:
+      context: Documentation
+      phase: start
+
+  status-end:
+    needs: [changes, build]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '' }}
+    permissions:
+      statuses: write
+    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@main
+    with:
+      context: Documentation
+      phase: end
+      results: ${{ toJSON(needs.*.result) }}
+      preview_pr: ${{ github.event.inputs.preview == 'true' && github.event.inputs.pr || '' }}
+
   # Whether the jobs below run (docs/workflows/guard.md): no on a pull request that is not
   # open; on a push to main, yes unless the merged pull request carries the label
   # `ci on main: changes only` (docs/workflows/ci-on-main.md); yes otherwise.
@@ -118,15 +142,23 @@ jobs:
       # PR previews are opt-in: `DOCUMENTER_PUSH_PREVIEW` is "true" only on a PR carrying
       # the `documentation push preview` label, "false" otherwise. A caller's make.jl reads
       # it as `push_preview = get(ENV, "DOCUMENTER_PUSH_PREVIEW", "false") == "true"`.
-      # Inside a reusable workflow `github.event` is the caller's event, so the PR's labels
-      # are visible here. A make.jl that still hardcodes `push_preview` ignores it.
+      # Inside a reusable workflow `github.event` is the caller's event: the PR's labels
+      # are visible here on a `pull_request`, and on a `workflow_dispatch` from
+      # label-dispatch.yml the inputs `pr` and `preview` say the same. A make.jl that
+      # still hardcodes `push_preview` ignores it.
+      # Documenter takes a build for a preview only on `GITHUB_EVENT_NAME=pull_request` and
+      # `GITHUB_REF=refs/pull/<n>/merge`; a dispatched run has neither, so the build is told.
       - name: Build and deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DOCUMENTER_KEY: ${{ secrets.DOCUMENTER_KEY }}
-          DOCUMENTER_PUSH_PREVIEW: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'documentation push preview') }}
+          DOCUMENTER_PUSH_PREVIEW: ${{ (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'documentation push preview')) || (github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '' && github.event.inputs.preview == 'true') }}
+          DISPATCH_PR: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pr || '' }}
           GKSwstype: 100
         run: |
+          if [ -n "$DISPATCH_PR" ]; then
+            export GITHUB_EVENT_NAME=pull_request GITHUB_REF="refs/pull/$DISPATCH_PR/merge"
+          fi
           julia --project=docs/ -e 'ENV["GKSwstype"]="nul"; include("docs/make.jl")'
           echo "📂 Listing docs/build/assets:"
           ls -R docs/build/assets || true
@@ -145,7 +177,7 @@ jobs:
     # `build` ran.
     if: >
       !cancelled() && needs.build.result == 'success' &&
-      inputs.gpu_runner == 'auto' && github.event_name != 'pull_request'
+      inputs.gpu_runner == 'auto' && github.event_name != 'pull_request' && !github.event.inputs.pr
     uses: control-toolbox/CTActions/.github/workflows/select-gpu-runner.yml@main
     secrets:
       CT_RUNNERS_CLIENT_ID: ${{ secrets.CT_RUNNERS_CLIENT_ID }}
@@ -157,7 +189,7 @@ jobs:
     needs: [build, select-gpu]
     if: >
       always() && needs.build.result == 'success' &&
-      inputs.gpu_runner != '' && github.event_name != 'pull_request' &&
+      inputs.gpu_runner != '' && github.event_name != 'pull_request' && !github.event.inputs.pr &&
       (inputs.gpu_runner != 'auto' || needs.select-gpu.result == 'success')
     runs-on: ${{ fromJSON(inputs.gpu_runner == 'auto' && needs.select-gpu.outputs.runs_on_labels || inputs.gpu_runner) }}
     timeout-minutes: ${{ inputs.gpu_timeout_minutes }}

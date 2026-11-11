@@ -31,9 +31,11 @@ on:
 # skipped, and a `concurrency` of the caller would still cancel the run in progress. The
 # group starts with a name of its own: it must differ from every group of a caller.
 # The inputs keep apart the packages called by one caller workflow.
+# A run started by label-dispatch.yml (a `workflow_dispatch` with the input `pr`) is a
+# run of that pull request: same group, same cancellation.
 concurrency:
-  group: ctactions-breakage-${{ github.workflow }}-${{ inputs.pkgname }}-${{ inputs.pkgpath }}-${{ inputs.pkgbreak }}-${{ inputs.pkgversion }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ctactions-breakage-${{ github.workflow }}-${{ inputs.pkgname }}-${{ inputs.pkgpath }}-${{ inputs.pkgbreak }}-${{ inputs.pkgversion }}-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '') }}
 
 jobs:
   break:
@@ -217,12 +219,14 @@ jobs:
       - name: Comment on PR
         if: github.event.pull_request.head.repo.fork != true
         uses: actions/github-script@v9
+        env:
+          PR: ${{ github.event.pull_request.number || github.event.inputs.pr }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs')
             const msg = fs.readFileSync('breakage/summary.md', 'utf8')
-            const prNumber = context.payload.pull_request?.number
+            const prNumber = Number(process.env.PR)
             if (!prNumber) {
               console.log("No PR number found.")
               return

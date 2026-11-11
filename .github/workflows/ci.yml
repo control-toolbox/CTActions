@@ -75,11 +75,34 @@ on:
 # group starts with a name of its own: it must differ from every group of a caller.
 # `runner_type` and `runs_on` keep apart the calls of one caller workflow (the GitHub, kkt
 # and occidata runners of one `CI.yml`, which also reach this workflow through ci-gpu.yml).
+# A run started by label-dispatch.yml (a `workflow_dispatch` with the input `pr`) is a
+# run of that pull request: same group, same cancellation.
 concurrency:
-  group: ctactions-ci-${{ github.workflow }}-${{ inputs.runner_type }}-${{ inputs.runs_on }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ctactions-ci-${{ github.workflow }}-${{ inputs.runner_type }}-${{ inputs.runs_on }}-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '') }}
 
 jobs:
+  # A run started by label-dispatch.yml shows as a commit status (pr-status.yml).
+  status-start:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '' }}
+    permissions:
+      statuses: write
+    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@main
+    with:
+      context: CI / ${{ github.event.inputs.target }}
+      phase: start
+
+  status-end:
+    needs: [changes, test]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '' }}
+    permissions:
+      statuses: write
+    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@main
+    with:
+      context: CI / ${{ github.event.inputs.target }}
+      phase: end
+      results: ${{ toJSON(needs.*.result) }}
+
   # Whether the jobs below run (docs/workflows/guard.md): no on a pull request that is not
   # open; on a push to main, yes unless the merged pull request carries the label
   # `ci on main: changes only` (docs/workflows/ci-on-main.md); yes otherwise.

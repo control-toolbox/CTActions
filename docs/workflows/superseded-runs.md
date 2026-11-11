@@ -40,6 +40,14 @@ concurrency:
 - **The prefix `ctactions-…`** differs from every group of a caller. A caller and a callee
   in the same group wait for each other for ever.
 
+## Runs started by a label
+
+A run started by [`label-dispatch.yml`](label-dispatch.md) is a `workflow_dispatch` with
+the input `pr`. For these four workflows it counts as a run of that pull request: the
+group ends with `github.event.inputs.pr`, and `cancel-in-progress` is on. A push cancels
+the run of each labelled workflow, a label never cancels the run of another one: their
+groups differ by workflow and, in `ci.yml`, by runner.
+
 ## Why not in the callers
 
 The package workflows run on label events (`labeled`, `unlabeled`) and guard their calling

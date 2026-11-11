@@ -62,11 +62,34 @@ on:
 # skipped, and a `concurrency` of the caller would still cancel the run in progress. The
 # group starts with a name of its own: it must differ from every group of a caller.
 # `group` keeps apart the suites called by one caller workflow.
+# A run started by label-dispatch.yml (a `workflow_dispatch` with the input `pr`) is a
+# run of that pull request: same group, same cancellation.
 concurrency:
-  group: ctactions-breakage-suite-${{ github.workflow }}-${{ inputs.group }}-${{ github.event.pull_request.number || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ctactions-breakage-suite-${{ github.workflow }}-${{ inputs.group }}-${{ github.event.pull_request.number || github.event.inputs.pr || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '') }}
 
 jobs:
+  # A run started by label-dispatch.yml shows as a commit status (pr-status.yml).
+  status-start:
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '' }}
+    permissions:
+      statuses: write
+    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@main
+    with:
+      context: Breakage / ${{ inputs.group }}
+      phase: start
+
+  status-end:
+    needs: [changes, carry-baseline, plan, break, report]
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '' }}
+    permissions:
+      statuses: write
+    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@main
+    with:
+      context: Breakage / ${{ inputs.group }}
+      phase: end
+      results: ${{ toJSON(needs.*.result) }}
+
   # Whether the suite runs (docs/workflows/guard.md): no on a pull request that is not open;
   # on a push to main, yes unless the merged pull request carries the label
   # `ci on main: changes only` (docs/workflows/ci-on-main.md); yes otherwise. When it does
@@ -273,12 +296,27 @@ jobs:
           pattern: breakage-cell-${{ inputs.group }}-*
           merge-multiple: true
 
-      # On a PR: the run of this workflow on the base commit, outside a PR (push or dispatch)
-      - name: Baseline
-        if: github.event_name == 'pull_request'
+      # The pull request of this run: the event's on a `pull_request`, the input `pr` on a
+      # dispatch from label-dispatch.yml, none on a push, a manual run or the cron.
+      - name: Pull request
+        id: pr
         env:
           GH_TOKEN: ${{ github.token }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
+        run: |
+          [ -n "$NUMBER" ] || exit 0
+          {
+            echo "number=$NUMBER"
+            gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER" \
+              --jq '"base_sha=\(.base.sha)", "fork=\(.head.repo.fork // false)"'
+          } >> "$GITHUB_OUTPUT"
+
+      # On a PR: the run of this workflow on the base commit, outside a PR (push or dispatch)
+      - name: Baseline
+        if: steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
           GROUP: ${{ inputs.group }}
         run: |
@@ -297,7 +335,7 @@ jobs:
           TARGETS: ${{ needs.plan.outputs.targets }}
           VERSIONS: ${{ inputs.versions }}
           GROUP: ${{ inputs.group }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
           SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
           expected=$(( $(jq length <<< "$TARGETS") * $(jq length <<< "$VERSIONS") ))
@@ -322,14 +360,15 @@ jobs:
       # Not on a pull request from a fork: its token is read-only and the comment would
       # fail the job (and hide the verdict below). The report is in the run's summary.
       - name: Comment on the PR
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork != true
+        if: steps.pr.outputs.number != '' && steps.pr.outputs.fork != 'true'
         uses: actions/github-script@v9
         env:
           MARKER: <!-- ct-breakage:${{ inputs.group }} -->
+          PR: ${{ steps.pr.outputs.number }}
         with:
           script: |
             const body = require('fs').readFileSync('out/summary.md', 'utf8')
-            const issue_number = context.payload.pull_request.number
+            const issue_number = Number(process.env.PR)
             const comments = await github.paginate(github.rest.issues.listComments,
               { owner: context.repo.owner, repo: context.repo.repo, issue_number })
             const mine = comments.find(c => c.body && c.body.startsWith(process.env.MARKER))

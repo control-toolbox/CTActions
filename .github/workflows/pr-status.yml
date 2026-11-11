@@ -1,0 +1,71 @@
+name: PR status
+
+# A commit status for a run started by label-dispatch.yml. A `workflow_dispatch` run is
+# attached to the head commit but not to the checks of the pull request (statusCheckRollup,
+# the merge box, `gh pr checks`): nothing there tells that a label started something. A
+# commit status is: one per context, they accumulate side by side, and the target link goes
+# to the run (docs/workflows/label-dispatch.md#status-of-a-dispatched-run).
+#
+# Called twice by ci.yml, documentation.yml and breakage-suite.yml, only when the run has
+# the input `pr`: `start` at the beginning (pending), `end` at the end, with the results of
+# the jobs (failure if one failed, error if cancelled, success otherwise).
+
+on:
+  workflow_call:
+    inputs:
+      context:
+        description: "Name of the status, e.g. 'CI / kkt'"
+        required: true
+        type: string
+      phase:
+        description: "'start' or 'end'"
+        required: true
+        type: string
+      results:
+        description: "End: JSON array of the results of the jobs of the run (toJSON(needs.*.result))"
+        required: false
+        type: string
+        default: '[]'
+      preview_pr:
+        description: "End, documentation: number of the pull request whose preview was deployed; adds the status '<context> / preview' linking to it. Empty: none."
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      statuses: write
+    steps:
+      - name: Post the status
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: ${{ inputs.context }}
+          PHASE: ${{ inputs.phase }}
+          RESULTS: ${{ inputs.results }}
+          PREVIEW_PR: ${{ inputs.preview_pr }}
+          OWNER: ${{ github.repository_owner }}
+          URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$PHASE" = start ]; then
+            state=pending; description="Running"
+          elif jq -e 'index("failure") != null' <<< "$RESULTS" > /dev/null; then
+            state=failure; description="Failed"
+          elif jq -e 'index("cancelled") != null' <<< "$RESULTS" > /dev/null; then
+            state=error; description="Cancelled"
+          else
+            state=success; description="Passed"
+          fi
+          gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+            -f state="$state" -f context="$CONTEXT" -f description="$description" -f target_url="$URL"
+          echo "\`$CONTEXT\`: $state" >> "$GITHUB_STEP_SUMMARY"
+
+          # The documentation site is https://<owner>.org/<repository>/ (control-toolbox.org)
+          if [ "$PHASE" = end ] && [ "$state" = success ] && [ -n "$PREVIEW_PR" ]; then
+            preview="https://$OWNER.org/${GITHUB_REPOSITORY#*/}/previews/PR$PREVIEW_PR/"
+            gh api -X POST "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA" \
+              -f state=success -f context="$CONTEXT / preview" -f description="Preview of the documentation" -f target_url="$preview"
+            echo "\`$CONTEXT / preview\`: $preview" >> "$GITHUB_STEP_SUMMARY"
+          fi
