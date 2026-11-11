@@ -118,16 +118,36 @@ is readable without passing it through every caller.
 
 - A dispatched run checks out the **head of the branch**, not the merge commit of the pull
   request (`refs/pull/<n>/merge`) that a `pull_request` run tests.
-- The run belongs to the head commit, so it is in the pull request's checks, with the
-  names of the callers' jobs. A branch protection that requires a check by name must be
-  checked once a package has moved.
+- The run is attached to the head commit and to the pull request, but it is **not in the
+  Checks tab nor in the checks list of the pull request** (`gh pr checks`, the merge box):
+  GitHub lists there only the runs of the pull request's own events. The status below
+  replaces it. A branch protection that requires a check by name must be checked once a
+  package has moved.
 - A run is named by `run-name`, for example `CI kkt #42`.
+
+## Status of a dispatched run
+
+[`pr-status.yml`](../../.github/workflows/pr-status.yml) posts a commit status for the run,
+which is in the merge box of the pull request: `CI / <target>`, `Documentation`,
+`Breakage / <group>`. One per workflow: they accumulate side by side, `pending` while the
+run goes on, then `success`, `failure` or `error` (cancelled), with a link to the run.
+`ci.yml`, `documentation.yml` and `breakage-suite.yml` call it twice, only when the run has
+the input `pr`.
+
+For the documentation with `preview=true`, a second status `Documentation / preview` links to
+`https://<owner>.org/<repository>/previews/PR<n>/`. Documenter posts the link of a
+preview only on a `pull_request` event, and a dispatched run has none.
+
+The jobs of the callee (`statuses: write`) need that permission from the caller: a package
+whose default token is read-only gives `statuses: write` to the job that calls them.
 
 ## Testing a change
 
 `label-dispatch-tests.yml` runs the tests of the mapping. The dispatch itself is tested on
 a pull request of a package whose `Labels.yml` points to the branch of CTActions
 (`label-dispatch.yml@<branch>`, with `ctactions_ref: <branch>`):
+
+Done on CTFlows.jl#518 (documentation, breakage, CI on GitHub and on `kkt`).
 
 1. A label: one run, the one of the label, and a `Labels` run of a few seconds.
 2. A second label while the first run goes on: both run, nothing is cancelled.

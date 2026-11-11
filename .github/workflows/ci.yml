@@ -87,7 +87,7 @@ jobs:
     if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '' }}
     permissions:
       statuses: write
-    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@feat/149-label-dispatch
+    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@main
     with:
       context: CI / ${{ github.event.inputs.target }}
       phase: start
@@ -97,7 +97,7 @@ jobs:
     if: ${{ always() && github.event_name == 'workflow_dispatch' && github.event.inputs.pr != '' }}
     permissions:
       statuses: write
-    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@feat/149-label-dispatch
+    uses: control-toolbox/CTActions/.github/workflows/pr-status.yml@main
     with:
       context: CI / ${{ github.event.inputs.target }}
       phase: end
