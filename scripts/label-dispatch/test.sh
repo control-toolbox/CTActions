@@ -5,6 +5,7 @@ plan="$(dirname "$0")/plan.sh"
 failed=0
 
 # check <name> <expected, one line per run> <ACTION> <LABEL> <LABELS>
+# (RESTART_LABELS and RESTART_PREFIX from the environment)
 check() {
   local name="$1" expected="$2" got
   got=$(ACTION="$3" LABEL="$4" LABELS="$5" "$plan") || { echo "FAIL $name: plan.sh failed"; failed=1; return; }
@@ -36,5 +37,23 @@ check "a pull request without label" "" \
   synchronize "" '[]'
 check "a reopening restarts them too" "CI.yml target=occidata" \
   reopened "" '["run ci occidata-runner","probe"]'
+
+# labels that restart the CI (a package's scope)
+export RESTART_LABELS='["release"]' RESTART_PREFIX='test '
+check "a scope label restarts the CI that is on" "CI.yml target=github" \
+  labeled "test JuMP backend" '["run ci github-runner","test JuMP backend"]'
+check "release restarts it too" "CI.yml target=github" \
+  labeled release '["run ci github-runner","release"]'
+check "a scope label without the CI label starts nothing" "" \
+  labeled "test JuMP backend" '["test JuMP backend"]'
+check "removing a scope label restarts the CI that is on" "CI.yml target=github" \
+  unlabeled "test JuMP backend" '["run ci github-runner"]'
+check "removing another label starts nothing" "" \
+  unlabeled bug '["run ci github-runner"]'
+check "removing a scope label without the CI label starts nothing" "" \
+  unlabeled "test JuMP backend" '[]'
+unset RESTART_LABELS RESTART_PREFIX
+check "without configuration a scope label starts nothing" "" \
+  labeled "test JuMP backend" '["run ci github-runner","test JuMP backend"]'
 
 exit $failed
