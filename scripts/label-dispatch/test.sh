@@ -46,6 +46,12 @@ check "release restarts it too" "CI.yml target=github" \
   labeled release '["run ci github-runner","release"]'
 check "a scope label without the CI label starts nothing" "" \
   labeled "test JuMP backend" '["test JuMP backend"]'
+check "removing a scope label restarts the CI that is on" "CI.yml target=github" \
+  unlabeled "test JuMP backend" '["run ci github-runner"]'
+check "removing another label starts nothing" "" \
+  unlabeled bug '["run ci github-runner"]'
+check "removing a scope label without the CI label starts nothing" "" \
+  unlabeled "test JuMP backend" '[]'
 unset RESTART_LABELS RESTART_PREFIX
 check "without configuration a scope label starts nothing" "" \
   labeled "test JuMP backend" '["run ci github-runner","test JuMP backend"]'
