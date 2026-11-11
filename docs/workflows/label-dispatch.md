@@ -42,6 +42,12 @@ same workflow, the same target and the same pull request
 The mapping is in [`scripts/label-dispatch/plan.sh`](../../scripts/label-dispatch/plan.sh),
 with its tests. Every dispatch also passes `pr`, the number of the pull request.
 
+A package whose CI scope depends on labels (OptimalControlProblems.jl: `test <environment>
+backend`, `release`) names them in its `Labels.yml`, `restart_labels: '["release"]'` and
+`restart_prefix: 'test '`. Such a label is not a trigger: added while `run ci github-runner`
+is on the pull request, it dispatches the CI again, which cancels the run in progress and
+restarts with the new scope; without `run ci github-runner` it starts nothing.
+
 `documentation push preview` starts nothing alone. Added after `run documentation`, it
 dispatches the documentation again, with `preview=true`.
 

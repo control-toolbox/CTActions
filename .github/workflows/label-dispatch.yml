@@ -27,6 +27,16 @@ on:
         required: false
         type: string
         default: main
+      restart_labels:
+        description: 'JSON array of labels that are not a trigger but restart the CI when `run ci github-runner` is on the pull request (a package whose CI scope depends on labels)'
+        required: false
+        type: string
+        default: '[]'
+      restart_prefix:
+        description: 'Prefix of such labels, e.g. "test "'
+        required: false
+        type: string
+        default: ''
 
 jobs:
   dispatch:
@@ -59,6 +69,8 @@ jobs:
           ACTION: ${{ github.event.action }}
           LABEL: ${{ github.event.label.name }}
           LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+          RESTART_LABELS: ${{ inputs.restart_labels }}
+          RESTART_PREFIX: ${{ inputs.restart_prefix }}
           PR: ${{ github.event.pull_request.number }}
           REF: ${{ github.event.pull_request.head.ref }}
         run: |
