@@ -10,7 +10,7 @@
 # and 2: a bound of 9 or more is satisfied by no version in General, which is what a
 # beta-only bound looks like.
 
-using Test, TOML, Base64
+using Test, TOML, Base64, Dates
 
 include(joinpath(@__DIR__, "..", "release.jl"))
 
@@ -1193,6 +1193,135 @@ failures(results) = [r.message for r in results if r.status === :fail]
         finally
             RUN[] = real
         end
+    end
+
+    @testset "facts and the request (phases 0 and 1)" begin
+        "A package `Pkg` 0.4.2, tagged, then merged PRs on `main`: what `candidates` must find."
+        function history()
+            dir = mktempdir()
+            g = "git -c user.name=t -c user.email=t@t"
+            project(deps, compat) = "name = \"Pkg\"\nuuid = \"$PKG_UUID\"\nversion = \"0.4.2\"\n\n[deps]\n$deps\n[compat]\n$compat"
+            write(joinpath(dir, "Project.toml"), project("", "julia = \"1.10\"\n"))
+            write(joinpath(dir, "CHANGELOG.md"), changelog("0.4.2" => "- first."))
+            write(joinpath(dir, "BREAKING.md"), "# Breaking\n\n## Non-breaking note (0.4.2)\n\n- none.\n")
+            mkpath(joinpath(dir, "src")); write(joinpath(dir, "src", "Pkg.jl"), "module Pkg\nexport foo, bar\npublic baz\nend\n")
+            sh(dir, "git init -q -b main && $g add -A && $g commit -qm init && git tag v0.4.2")
+            pr(n, title, cmd) = sh(dir, "git checkout -q -b b$n && $cmd && $g add -A && $g commit -qm '$title' && git checkout -q main && " *
+                                        "$g merge -q --no-ff b$n -m 'Merge pull request #$n from o/b$n' -m '$title'")
+            pr(10, "fix: cited by number", "echo '# a' >> src/a.jl")
+            pr(11, "fix: closes an issue", "echo '# b' >> src/b.jl")
+            pr(12, "feat: not cited (#7)", "echo '# c' >> src/c.jl")
+            pr(13, "ci: nothing shipped", "mkdir -p .github && echo x > .github/x.yml")
+            pr(14, "chore: bar is gone", "printf 'module Pkg\\nexport foo\\npublic baz\\nend\\n' > src/Pkg.jl")
+            write(joinpath(dir, "Project.toml"), project("Example = \"$EXAMPLE\"\n", "Example = \"0.5\"\njulia = \"1.10, 1.11\"\n"))
+            sh(dir, "$g commit -qam 'deps: Example (#15)'")
+            write(joinpath(dir, "CHANGELOG.md"), "# Changelog\n\n## [Unreleased]\n\n### 🐛 Bug Fixes\n\n- a fix ([#10](https://x/pull/10)); another (#5).\n\n" *
+                  split(read(joinpath(dir, "CHANGELOG.md"), String), "## [Unreleased]\n\n")[2])
+            sh(dir, "$g commit -qam 'docs: changelog'")
+            return dir
+        end
+        dir = history()
+        changelog_text = read(joinpath(dir, "CHANGELOG.md"), String)
+        c = candidates(dir, "v0.4.2", "main", changelog_text; closing=n -> n == 11 ? [5] : Int[])
+        ids = [x.id for x in c.review]
+        @test "pr-12" in ids && !("pr-10" in ids) && !("pr-11" in ids)        # cited by number, by the issue it closes
+        @test "pr-14" in ids && "pr-15" in ids                                # a squash `… (#15)` is a PR too
+        @test [x.id for x in c.unshipped] == ["pr-13"]                        # CI only: for information, no verdict
+        @test "export-bar" in ids && !("export-foo" in ids) && !("export-baz" in ids)
+        @test "dep-Example" in ids && "compat-Example" in ids && "compat-julia" in ids
+        @test contains(only(x for x in c.review if x.id == "pr-12").what, "touches src")
+        # the same history gives the same list: every agent reviews the same candidates
+        @test c == candidates(dir, "v0.4.2", "main", changelog_text; closing=n -> n == 11 ? [5] : Int[])
+
+        @test gpu_choice(["a", "run ci kkt-runner", "run ci occidata-runner"], r -> r == "kkt") == ["a", "run ci kkt-runner"]
+        @test gpu_choice(["a", "run ci kkt-runner", "run ci occidata-runner"], r -> r == "occidata") == ["a", "run ci occidata-runner"]
+        @test gpu_choice(["a", "run ci kkt-runner", "run ci occidata-runner"], r -> false) == ["a", "run ci kkt-runner"]
+        @test gpu_choice(["a", "run ci occidata-runner"], r -> false) == ["a", "run ci occidata-runner"]
+
+        # the facts, the skeleton, the request: the version is the gate's, every candidate needs a verdict
+        with_registries(Dict("General" => Dict("Pkg" => ["0.4.2"]))) do
+            with_gh(args -> nothing) do
+                f = release_facts(dir, "o/Pkg"; kind=:stable, base="main", resolution=false)
+                @test f.expected == v"0.4.3" && f.reference == v"0.4.2" && !f.breaking && !isempty(f.rel7)
+                @test Set(x.id for x in f.candidates) == union(Set(ids), Set(["pr-11"]))   # gh gives no closing issue here
+                toml, md = request_paths(f.expected)
+                mkpath(joinpath(dir, ".releases"))
+                write(joinpath(dir, toml), request_skeleton(f))
+                r = TOML.parsefile(joinpath(dir, toml))
+                @test r["release"]["version"] == "0.4.3" && r["facts"]["expected_version"] == "0.4.3"
+                @test length(r["review"]) == length(f.candidates) && all(x -> x["verdict"] == "", r["review"])
+                problems = check_request(dir, toml; repo="o/Pkg", base="main")
+                @test any(contains("mode"), problems) && any(contains("requested_by"), problems)
+                @test any(contains("proposal"), problems) && any(contains("no verdict"), problems) == false
+                @test count(contains("the verdict is ``"), problems) == length(f.candidates)
+                # completed: nothing left
+                s = read(joinpath(dir, toml), String)
+                s = replace(s, "mode = \"\"" => "mode = \"supervised\"", "requested_by = \"\"" => "requested_by = \"ocots\"",
+                            r"verdict = \"\"[^\n]*" => "verdict = \"covered\"", "note = \"\"" => "note = \"see the changelog\"")
+                write(joinpath(dir, toml), s)
+                write(joinpath(dir, md), "## Release proposal — Pkg v0.4.3 (stable)\n")
+                @test isempty(check_request(dir, toml; repo="o/Pkg", base="main"))
+                # a candidate left without a note, another version, the bot mentioned: refused
+                write(joinpath(dir, toml), replace(s, "note = \"see the changelog\"" => "note = \"\""; count=1))
+                @test any(contains("has no note"), check_request(dir, toml; repo="o/Pkg", base="main"))
+                write(joinpath(dir, toml), replace(s, "version = \"0.4.3\"" => "version = \"0.5.0\""; count=1))
+                @test !isempty(check_request(dir, toml; repo="o/Pkg", base="main"))
+                write(joinpath(dir, toml), s)
+                write(joinpath(dir, md), "ask $MENTION\n")
+                @test any(contains("REL6"), check_request(dir, toml; repo="o/Pkg", base="main"))
+                # `main` moved after the request
+                write(joinpath(dir, md), "proposal\n")
+                sh(dir, "echo '# d' >> src/d.jl && git -c user.name=t -c user.email=t@t add src && git -c user.name=t -c user.email=t@t commit -qm 'fix: d (#16)'")
+                @test any(contains("`main` moved"), check_request(dir, toml; repo="o/Pkg", base="main"))
+            end
+        end
+    end
+
+    @testset "the release commit and the CI of main (phase 3)" begin
+        dir = mktempdir()
+        write(joinpath(dir, "Project.toml"), "name = \"P\"\nversion = \"0.8.17-beta\"\n\n[compat]\nversion = \"1\"\n")
+        write(joinpath(dir, "CHANGELOG.md"), "# Changelog\n\n## [Unreleased]\n\n### 🐛 Bug Fixes\n\n- x.\n\n## [0.9.5-beta] - 2026-08-31\n\n- y.\n")
+        write(joinpath(dir, "BREAKING.md"), "# Breaking\n\n## Unreleased\n\n- z.\n\n## Non-breaking note (Unreleased)\n\n- w.\n")
+        @test sort(apply_release!(dir, v"0.9.6", Date(2026, 11, 12))) == ["BREAKING.md", "CHANGELOG.md", "Project.toml"]
+        p = read(joinpath(dir, "Project.toml"), String)
+        @test contains(p, "version = \"0.9.6\"") && contains(p, "[compat]\nversion = \"1\"")      # the first line only
+        c = read(joinpath(dir, "CHANGELOG.md"), String)
+        @test contains(c, "## [Unreleased]\n\n## [0.9.6] - 2026-11-12\n\n### 🐛 Bug Fixes")
+        @test !any(contains("Unreleased"), check_changelog(c, v"0.9.6"))       # an empty `[Unreleased]` on top
+        b = read(joinpath(dir, "BREAKING.md"), String)
+        @test contains(b, "## [0.9.6] - 2026-11-12") && contains(b, "Non-breaking note (0.9.6)") && names_version(b, v"0.9.6")
+        @test isempty(apply_release!(dir, v"0.9.6", Date(2026, 11, 13)))                        # done once: nothing again
+
+        runs(lines...) = args -> (a = join(args, " "); contains(a, "actions/runs?head_sha=S") ? join(lines, "\n") : nothing)
+        @test with_gh(() -> main_state("o/P", "S"), runs("1\t.github/workflows/CI.yml\tcompleted\tsuccess",
+                      "2\t.github/workflows/Documentation.yml\tcompleted\tskipped")).state === :green
+        @test with_gh(() -> main_state("o/P", "S"), runs("1\t.github/workflows/CI.yml\tin_progress\tnull")).state === :waiting
+        m = with_gh(() -> main_state("o/P", "S"), runs("1\t.github/workflows/CI.yml\tcompleted\tfailure",
+                    "3\t.github/workflows/Coverage.yml\tcompleted\tfailure", "4\t.github/workflows/Coverage.yml\tcompleted\tsuccess"))
+        @test m.state === :red && m.failed == ["CI.yml"]                      # the latest run of each workflow counts
+    end
+
+    @testset "finish: phase 3, a release the workflow started" begin
+        base = (; repo="o/P", name="P", version=v"0.9.6", kind=:stable, main_version=v"0.8.17-beta", main_sha="M",
+                issue=(; number=1, state="OPEN"), issues=1, mentions=0, bot_error=nothing, pr=nothing, tag=nothing,
+                tag_tree=nothing, release=nothing, registry="General", registered=nothing, general_pr=nothing, jump=:betas)
+        two = markers([(; author="b", time="t", body="**Phase 2.**\n<!-- ct-release phase=2 kind=stable version=0.9.6 mode=supervised pr=- merge=- state=done by=ocots base=B -->")])
+        @test only(two).by == "ocots" && only(two).base == "B" && only(two).mode == "supervised"
+        plan(main; ms=two, requester=nothing) = finish_plan(base, phase(base), ms, nothing; mode=:supervised, main, requester)
+        @test plan((; state=:green, failed=String[])).action === :start
+        p = plan((; state=:waiting, failed=String[]))
+        @test p.action === :none && isempty(p.comments)
+        p = plan((; state=:red, failed=["CI.yml"]))
+        @test p.action === :none && p.comments[end].phase == 3 && contains(p.comments[end].body, "`CI.yml`")
+        @test isempty(plan((; state=:red, failed=["CI.yml"]); ms=vcat(two, markers([(; author="b", time="t", body=p.comments[end].body)]))).comments)
+        p = plan((; state=:green, failed=String[]); requester="@x is not a release manager")
+        @test p.action === :none && contains(p.comments[end].body, "not a release manager")
+        # a release PR the workflow did not start: phases 0 to 3 stay the agent's
+        @test plan((; state=:green, failed=String[]); ms=NamedTuple[]).action === :none
+        # the label of the App is an opt-in
+        fake(args) = (a = join(args, " "); contains(a, "pr view 2") ? "false\trelease/v0.9.6\trelease: supervised\n" :
+                      contains(a, "issues/2/events") ? "$RELEASE_BOT\n" : nothing)
+        @test with_gh(() -> optin("o/P", 2, "ocots"), fake) == (; mode=:supervised, actor=RELEASE_BOT, reason="")
     end
 
     @testset "command line" begin

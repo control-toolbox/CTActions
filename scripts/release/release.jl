@@ -28,11 +28,19 @@
 #       whether a finished release left the trail the recipe asks for (the comments of the
 #       tracking issue, one registration mention, the PR, the tag, the registry, the clean-up);
 #       read only; exits 1 when a check fails
-#   julia release.jl finish --repo OWNER/REPO --managers "a,b" [--act merge|register|register-beta]
-#       one wake-up of the release-finish workflow on the release in progress: the phase
-#       comments, a stop, the close; or, with --act, the privileged action if it is still
-#       the next one. Writes `action=<merge|register|register-beta|none>` and `mode=` to
-#       $GITHUB_OUTPUT (to standard output when unset)
+#   julia release.jl facts --repo OWNER/REPO --kind stable|beta [DIR]
+#       phases 0 and 1, the facts: the state of the last release, the reference, the expected
+#       version, REL4, REL7, the labels, and the candidates the agent reviews; writes the
+#       skeleton of the request `.releases/vX.toml` in DIR when it does not exist
+#   julia release.jl request --repo OWNER/REPO [--no-dispatch] .releases/vX.toml [DIR]
+#       hand the release over: check the request, commit it on `release/vX`, push, start the
+#       release workflow (Release.yml) with the version
+#   julia release.jl finish --repo OWNER/REPO --managers "a,b" [--version V --actor LOGIN --dir DIR]
+#                           [--act start|merge|register|register-beta]
+#       one wake-up of the release workflow: phase 2 when started with a version, then the
+#       phase comments, a stop, the close; or, with --act, the privileged action if it is
+#       still the next one. Writes `action=<start|merge|register|register-beta|none>` and
+#       `mode=` to $GITHUB_OUTPUT (to standard output when unset)
 #
 # The Markdown report goes to standard output, and to $GITHUB_STEP_SUMMARY when set. Exit
 # code: 0 ready (or nothing to do), 1 blocked, 2 usage error; `status` exits 1 when the
@@ -44,6 +52,8 @@ include(joinpath(@__DIR__, "register.jl"))
 include(joinpath(@__DIR__, "ready.jl"))
 include(joinpath(@__DIR__, "audit.jl"))
 include(joinpath(@__DIR__, "register_beta.jl"))
+include(joinpath(@__DIR__, "prepare.jl"))
+include(joinpath(@__DIR__, "start.jl"))
 include(joinpath(@__DIR__, "finish.jl"))
 
 "The value of the option `--name` in `args`, removed from it, or `default`."
@@ -73,7 +83,9 @@ const USAGE = """
            julia release.jl register --repo OWNER/REPO --version V [--post] [--on-commit]
            julia release.jl register-beta --repo OWNER/REPO --version V [--confirm]
            julia release.jl audit --repo OWNER/REPO --version V
-           julia release.jl finish --repo OWNER/REPO --managers "a,b" [--act merge|register|register-beta]"""
+           julia release.jl facts --repo OWNER/REPO --kind stable|beta [DIR]
+           julia release.jl request --repo OWNER/REPO [--no-dispatch] .releases/vX.toml [DIR]
+           julia release.jl finish --repo OWNER/REPO --managers "a,b" [--version V --actor LOGIN --dir DIR] [--act start|merge|register|register-beta]"""
 
 function release_main(args)
     isempty(args) && (println(stderr, USAGE); return 2)
@@ -129,17 +141,51 @@ function release_main(args)
             ok, message = register_beta(repo, VersionNumber(version); confirm="--confirm" in args)
             println(message)
             return ok ? 0 : 1
+        elseif command == "facts"
+            repo = option!(args, "repo")
+            kind = option!(args, "kind")
+            (repo === nothing || !(kind in ("stable", "beta"))) && throw(ArgumentError("--repo and --kind stable|beta are required"))
+            dir = isempty(args) ? "." : only(args)
+            st = let f = facts(repo), p = phase(f)
+                "Last release: v$(f.version), phase $(p.phase), $(p.state)$(p.state === :done ? "" : ": $(p.next)").\n"
+            end
+            f = release_facts(dir, repo; kind=Symbol(kind))
+            emit(facts_report(f; status=st))
+            if f.expected !== nothing
+                path = joinpath(dir, request_paths(f.expected)[1])
+                if isfile(path)
+                    println("\nThe request `$(request_paths(f.expected)[1])` exists: not overwritten.")
+                else
+                    mkpath(dirname(path)); write(path, request_skeleton(f))
+                    println("\nWrote the skeleton of the request: `$(request_paths(f.expected)[1])`; the proposal goes in `$(request_paths(f.expected)[2])`.")
+                end
+            end
+            return f.expected === nothing ? 1 : 0
+        elseif command == "request"
+            repo = option!(args, "repo")
+            repo === nothing && throw(ArgumentError("--repo is required"))
+            dispatch = !("--no-dispatch" in args)
+            filter!(!=("--no-dispatch"), args)
+            isempty(args) && throw(ArgumentError("the path of the request is required"))
+            path = args[1]
+            dir = length(args) > 1 ? args[2] : "."
+            ok, message = request_release(dir, path; repo, dispatch)
+            println(message)
+            return ok ? 0 : 1
         elseif command == "finish"
             repo = option!(args, "repo")
             repo === nothing && throw(ArgumentError("--repo is required"))
             managers = option!(args, "managers", "")
             act = option!(args, "act", "step")
-            act in ("step", "merge", "register", "register-beta") ||
-                throw(ArgumentError("--act is merge, register or register-beta"))
-            r = finish(repo; managers, act=Symbol(replace(act, "-" => "_")))
+            act in ("step", "start", "merge", "register", "register-beta") ||
+                throw(ArgumentError("--act is start, merge, register or register-beta"))
+            version = option!(args, "version")
+            version = version === nothing || isempty(version) ? nothing : version
+            r = finish(repo; managers, act=Symbol(replace(act, "-" => "_")), version,
+                       actor=option!(args, "actor"), dir=option!(args, "dir"))
             emit(r.report)
             # for the jobs of the environment: what to do, and in which environment
-            outputs = "action=$(replace(string(r.action), "_" => "-"))\nmode=$(something(r.mode, ""))\n"
+            outputs = "action=$(replace(string(r.action), "_" => "-"))\nmode=$(something(r.mode, ""))\nversion=$(something(get(r, :version, nothing), ""))\n"
             out = get(ENV, "GITHUB_OUTPUT", "")
             isempty(out) ? print(outputs) : open(io -> print(io, outputs), out, "a")
             return r.ok ? 0 : 1

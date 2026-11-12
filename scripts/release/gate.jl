@@ -120,9 +120,10 @@ function gate(dir::AbstractString, base::AbstractString; labels, text::AbstractS
 
     # the diff of the PR: the release files only, and in Project.toml the version only
     files = split(something(git(dir, "diff", "--name-only", "$base...HEAD"), ""))
-    extra = setdiff(files, RELEASE_FILES)
+    allowed = [RELEASE_FILES..., request_paths(v)...]
+    extra = setdiff(files, allowed)
     isempty(extra) ? push!(results, pass("—", "the PR changes $(join(("`$f`" for f in files), ", ")) only")) :
-        push!(results, fail("—", "a release PR changes $(join(("`$f`" for f in RELEASE_FILES), ", ")) only; it also changes $(join(("`$f`" for f in extra), ", "))"))
+        push!(results, fail("—", "a release PR changes $(join(("`$f`" for f in allowed), ", ")) only; it also changes $(join(("`$f`" for f in extra), ", "))"))
     without_version(head) == without_version(old) ? push!(results, pass("—", "`Project.toml`: the version only")) :
         push!(results, fail("—", "`Project.toml` changes more than the version"))
 

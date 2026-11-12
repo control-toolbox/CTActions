@@ -1,4 +1,4 @@
-# Phases 4 to 8 of a release without an agent: the release-finish workflow wakes on an
+# Phases 4 to 8 of a release without an agent: the release workflow wakes on an
 # event, and this file decides, from the facts, the one next thing to do — post the phase
 # comments the tracking issue lacks, stop and say why, close, or hand one privileged action
 # (merge, register) to a job of the workflow that holds the App token. Nothing is
@@ -12,6 +12,7 @@ using SHA
 @isdefined(register) || include(joinpath(@__DIR__, "register.jl"))
 @isdefined(audit) || include(joinpath(@__DIR__, "audit.jl"))
 @isdefined(register_beta) || include(joinpath(@__DIR__, "register_beta.jl"))
+@isdefined(open_issue) || include(joinpath(@__DIR__, "start.jl"))
 
 "The labels that hand phases 4 to 8 of a release PR to the workflow, and the mode each one sets."
 const OPTIN_LABELS = ("release: supervised" => :supervised, "release: autonomous" => :autonomous)
@@ -31,8 +32,9 @@ managers_list(managers::AbstractString) = [lowercase(m) for m in split(managers,
 Whether the release PR `pr` is handed to the workflow, and in which mode: the PR comes from
 a `release/v…` branch of `repo` itself (no fork), carries exactly one label of
 `OPTIN_LABELS`, and the person who added it last is one of `managers` and has a role of
-`OPTIN_ROLES` on `repo`. Read from the PR's events, never from the author of the PR or of
-the issue, whom anyone can be. `mode === nothing` (with the reason) when it is not.
+`OPTIN_ROLES` on `repo` — or is the App (`RELEASE_BOT`), which adds it in phase 3 of a
+release started by a manager. Read from the PR's events, never from the author of the PR
+or of the issue, whom anyone can be. `mode === nothing` (with the reason) when it is not.
 """
 function optin(repo::AbstractString, pr::Integer, managers::AbstractString)
     no(reason) = (; mode=nothing, actor=nothing, reason)
@@ -50,11 +52,9 @@ function optin(repo::AbstractString, pr::Integer, managers::AbstractString)
                       ".[] | select(.event == \"labeled\" and .label.name == \"$label\") | .actor.login")
     actor = events === nothing || isempty(events) ? nothing : String(last(split(events, '\n')))
     actor === nothing && return no("cannot tell who added `$label` to #$pr")
-    allowed = managers_list(managers)
-    isempty(allowed) && return no("no release manager is set (organization variable `CT_RELEASE_MANAGERS`)")
-    lowercase(actor) in allowed || return no("`$label` was added by @$actor, who is not a release manager")
-    role = gh_strip("api", "repos/$repo/collaborators/$actor/permission", "--jq", ".role_name")
-    role in OPTIN_ROLES || return no("`$label` was added by @$actor, whose role on $repo is `$(something(role, "unknown"))`, not admin or maintain")
+    actor == RELEASE_BOT && return (; mode, actor, reason="")
+    why = authorized(repo, actor, managers)
+    why === nothing || return no("`$label` was added by @$actor: $why")
     return (; mode, actor, reason="")
 end
 
@@ -131,7 +131,7 @@ A comment that stops the release at phase `n` (`state` `stopped`), or waits for 
 function stop_comment(f, p, mode, n, reason; state="stopped", next=nothing)
     why = digest(reason)
     head = state == "stopped" ? "**Phase $n — stopped.**" : "**Phase $n — ⏸ waiting for you.**"
-    nxt = something(next, "a human (or an agent) resumes: fix the cause, then the next event, the hourly wake-up or a run of `ReleaseFinish.yml` by hand goes on from the facts")
+    nxt = something(next, "a human (or an agent) resumes: fix the cause, then the next event, the hourly wake-up or a run of `Release.yml` by hand goes on from the facts")
     body = """
         $head
         Reason: $reason.
@@ -149,15 +149,20 @@ function stop_comment(f, p, mode, n, reason; state="stopped", next=nothing)
 end
 
 """
-    finish_plan(f, p, ms, r; mode) -> (; comments, action, summary)
+    finish_plan(f, p, ms, r; mode, main=nothing, requester=nothing) -> (; comments, action, summary)
 
 What a wake-up does, from the `facts` `f`, their `phase` `p`, the state markers `ms` of
 the tracking issue (`markers`, oldest first) and the verdict `r` of `ready` (`nothing` once
 the PR is merged): the comments to post, in order — the phase comments the issue lacks
 (phases 4 to 7, then the final one), or one stop — and the one action left: `:none`,
-`:merge`, `:register`, `:register_beta` (the privileged jobs) or `:close`. Pure.
+`:start`, `:merge`, `:register`, `:register_beta` (the privileged jobs) or `:close`. Pure.
+
+Phase 3 is the workflow's only for a release it started (a comment of phase 2 with its
+marker): `requester` is `nothing` when the person who started it may, else why not; `main`
+is the state of the CI of `main` at the base of the request (`main_state`): the release PR
+is opened once it is green.
 """
-function finish_plan(f, p, ms, r; mode::Symbol)
+function finish_plan(f, p, ms, r; mode::Symbol, main=nothing, requester=nothing)
     comments = NamedTuple[]
     has(n) = any(m -> m.phase == n && m.state == "done", ms)
     last_m = isempty(ms) ? nothing : last(ms)
@@ -170,7 +175,7 @@ function finish_plan(f, p, ms, r; mode::Symbol)
     links = progress_links(f)
     pr = f.pr === nothing ? "" : "#$(f.pr.number)"
     merged = f.pr !== nothing && f.pr.state == "MERGED"
-    who = mode === :supervised ? "the merge job waits for an approval of the environment `release` (*Review deployments* on the run of `ReleaseFinish.yml`), then merges with `release.jl merge`" :
+    who = mode === :supervised ? "the merge job waits for an approval of the environment `release` (*Review deployments* on the run of `Release.yml`), then merges with `release.jl merge`" :
                                  "the merge, by `release.jl merge`, which checks again what ran on the head commit"
     reg = f.kind === :stable ?
         (mode === :supervised ? "the registration comment, once, after an approval of the environment `release`" : "the registration comment, once, by `release.jl register --post`") :
@@ -205,6 +210,14 @@ function finish_plan(f, p, ms, r; mode::Symbol)
     end
 
     p.state === :blocked && return stop!(p.phase, join(p.blockers, "; "))
+    if p.phase == 3 && f.pr === nothing && has(2)
+        requester === nothing || return stop!(3, "the release was started by someone who may not: $requester")
+        main === nothing && return (; comments, action=:none, summary="phase 3: cannot read the CI of `main`")
+        main.state === :waiting && return (; comments, action=:none, summary="phase 3: waiting for the CI of `main`")
+        main.state === :red &&
+            return stop!(3, "the CI of `main` is not green at the base of the request: $(join(("`$w`" for w in main.failed), ", ")) did not pass")
+        return (; comments, action=:start, summary="open the release PR")
+    end
     p.phase <= 3 && return (; comments, action=:none, summary="phase $(p.phase): the agent's or the human's")
     if p.phase == 4
         r === nothing && return (; comments, action=:none, summary="phase 4: cannot read the checks")
@@ -261,35 +274,56 @@ function post_comment(repo::AbstractString, n::Integer, body::AbstractString)
 end
 
 """
-    finish(repo; managers, act=:step) -> (; ok, action, mode, report)
+    finish(repo; managers, act=:step, version=nothing, actor=nothing, dir=nothing) -> (; ok, action, mode, report)
 
-One wake-up of the release-finish workflow on `repo`, for the release in progress.
+One wake-up of the release workflow on `repo`, for the release in progress.
+
+- With `version` (the workflow was started by `release.jl request`, by `actor`): phase 2
+  first, the tracking issue from the request in the clone `dir` of `release/vX`
+  (`open_issue`), if it does not exist yet.
 
 - `act = :step` (the job without powers, `GITHUB_TOKEN`): post the comments of
   `finish_plan`; for `:close`, close the issue, delete the release branch and post the
   audit when it fails. `action` is the privileged action the plan leaves, for the jobs
   of the environment (`:none` if none), and `mode` the mode of the opt-in.
-- `act = :merge`, `:register` or `:register_beta` (a job of the environment, the App's
+- `act = :start`, `:merge`, `:register` or `:register_beta` (a job of the environment, the App's
   token): do it if, computed again now, it is still the next action — an approval given
   late, or a second run, does nothing. `action` is then `:none`.
 
 `ok` is false when something failed: a comment not posted, the issue not closed, the
 audit, the privileged action. `report` is Markdown.
 """
-function finish(repo::AbstractString; managers::AbstractString, act::Symbol=:step)
-    nothing_to_do(why) = (; ok=true, action=:none, mode=nothing, report="## Release finish — nothing to do\n\n$why.\n")
-    f = facts(repo)
+function finish(repo::AbstractString; managers::AbstractString, act::Symbol=:step, version=nothing, actor=nothing, dir=nothing)
+    nothing_to_do(why; ok=true) = (; ok, action=:none, mode=nothing, report="## Release — nothing to do\n\n$why.\n")
+    opened = ""
+    if version !== nothing && act === :step
+        dir === nothing && throw(ArgumentError("a version needs the clone of its branch (--dir)"))
+        ok, msg = open_issue(repo, dir, version; actor, managers)
+        ok || return nothing_to_do("v$version, started by `$actor`: $msg"; ok=false)
+        opened = "Phase 2: $msg.\n\n"
+    end
+    f = version === nothing ? facts(repo) : facts(repo; version=VersionNumber(version))
     (f.issue === nothing || f.issue.state != "OPEN") && return nothing_to_do("no release in progress (no open `[RELEASE]` issue)")
-    f.pr === nothing && return nothing_to_do("v$(f.version): no release PR yet; phases 0 to 3 are the agent's or the human's")
-    o = optin(repo, f.pr.number, managers)
-    o.mode === nothing && return nothing_to_do("v$(f.version): $(o.reason)")
     p = phase(f)
-    r = f.pr.state == "OPEN" ? ready(repo, f.pr.number) : nothing
     ms = markers(issue_comments(repo, f.issue.number))
-    plan = finish_plan(f, p, ms, r; mode=o.mode)
+    started = findlast(m -> m.phase == 2 && m.state == "done" && !isempty(m.by), ms)
+    if f.pr === nothing
+        started === nothing && return nothing_to_do("v$(f.version): no release PR yet, and the release was not started by the workflow; phases 0 to 3 are the agent's or the human's")
+        o = (; mode=Symbol(ms[started].mode), actor=ms[started].by, reason="")
+        requester = authorized(repo, o.actor, managers)
+        main = main_state(repo, ms[started].base)
+        r = nothing
+    else
+        o = optin(repo, f.pr.number, managers)
+        o.mode === nothing && return nothing_to_do("v$(f.version): $(o.reason)")
+        requester = main = nothing
+        r = f.pr.state == "OPEN" ? ready(repo, f.pr.number) : nothing
+    end
+    plan = finish_plan(f, p, ms, r; mode=o.mode, main, requester)
     io = IOBuffer()
-    done(ok, action) = (; ok, action, mode=o.mode, report=String(take!(io)))
-    println(io, "## Release finish — $(f.name) v$(f.version) ($(f.kind), $(o.mode), opted in by @$(o.actor))\n")
+    done(ok, action) = (; ok, action, mode=o.mode, version=f.version, report=String(take!(io)))
+    print(io, opened)
+    println(io, "## Release — $(f.name) v$(f.version) ($(f.kind), $(o.mode), by @$(o.actor))\n")
     println(io, status_report(f, p))
     r === nothing || println(io, ready_report(repo, f.pr.number, r))
     println(io, "**Plan.** ", plan.summary, ".")
@@ -319,7 +353,10 @@ function finish(repo::AbstractString; managers::AbstractString, act::Symbol=:ste
     end
     plan.action === act ||
         (println(io, "\nNothing to do here: the next action is now `$(plan.action)`, not `$act`."); return done(true, :none))
-    if act === :merge
+    if act === :start
+        dir === nothing && throw(ArgumentError("--act start needs the clone of the branch (--dir)"))
+        ok, message = start(repo, dir; version=f.version)
+    elseif act === :merge
         ok, message = merge_release(repo, f.pr.number; confirm=true)
     elseif act === :register
         ok, message = register(repo, f.version; post=true)

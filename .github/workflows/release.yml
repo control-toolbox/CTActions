@@ -1,29 +1,39 @@
-name: Release finish
+name: Release
 
-# Phases 4 to 8 of a release (ct-agents recipes/release.md) without an agent: the checks,
-# the merge, the tag, the registration, the close. An agent or a human does phases 0 to 3
-# (proposal, tracking issue, release PR) and hands the rest over with a label on the release
-# PR, `release: supervised` or `release: autonomous`, added by a release manager (the
-# organization variable CT_RELEASE_MANAGERS) with the admin or maintain role.
+# A release of a package, from its request to its close, without an agent waiting: phases 2
+# to 8 of ct-agents recipes/release.md. An agent (or a human) does phases 0 and 1 — the
+# facts, the review, the proposal validated by a person — and writes the request
+# `.releases/vX.toml` on the branch `release/vX`; `release.jl request` pushes it and starts
+# this workflow with the version, as a release manager (the organization variable
+# CT_RELEASE_MANAGERS, with the admin or maintain role).
 #
-# Woken by events (the label, the end of the checks, the tag), by hand, and hourly. Each run
-# reads where the release stands (`release.jl finish`, from the facts only), does the one
-# next thing and stops: nothing is remembered between two runs, and every action is
-# "ensure", so a run that comes twice or late does nothing wrong.
+# Woken by that start, by events (the end of a check on `main` or on the release PR, the
+# tag, the label of the mode), by hand and hourly. Each run reads where the release stands
+# (`release.jl finish`, from the facts only), does the one next thing and stops. Nothing is
+# remembered between two runs and every step is "ensure": a run that comes twice, late or
+# after a person did a step by hand goes on from the facts. The runs queue (one at a time
+# per repository), never cancelled.
 #
-# - `step` holds no secret: with GITHUB_TOKEN it posts the phase comments on the tracking
-#   issue, a stop and its reason, the final comment; it closes the issue, deletes the
-#   release branch and runs the audit.
-# - `merge` and `register` are the only jobs with powers: they run in a GitHub Environment
-#   (`release`, with a required reviewer, in supervised mode: the checkpoints of the recipe
-#   become *Review deployments*; `release-autonomous` in autonomous mode), whose secrets
-#   hold the key of the App ct-release. Each computes the facts again before acting.
+# - `step` holds no secret: with GITHUB_TOKEN it opens the tracking issue (phase 2, the run
+#   started with a version), waits for the CI of `main`, posts the phase comments, a stop
+#   and its reason, the final comment; it closes the issue, deletes the branch, runs the
+#   audit.
+# - `start` (phase 3: the release commit, the gate, the PR and its labels), `merge` and
+#   `register` are the only jobs with powers: they run in a GitHub Environment (`release`,
+#   a required reviewer, in supervised mode: three approvals; `release-autonomous` in
+#   autonomous mode), whose secrets hold the key of the App ct-release. Each computes the
+#   facts again before acting.
 #
-# See docs/workflows/release-finish.md.
+# See docs/workflows/release.md.
 
 on:
   workflow_call:
     inputs:
+      version:
+        description: 'The version whose request starts the release (empty: a wake-up)'
+        required: false
+        type: string
+        default: ''
       environment:
         description: 'The environment of the privileged jobs in supervised mode (a required reviewer)'
         required: false
@@ -51,7 +61,7 @@ on:
 
 jobs:
   step:
-    # the opt-in label, or another event; never a pull request from a fork
+    # the label of a mode, or another event; never a pull request from a fork
     if: >
       github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
@@ -60,27 +70,39 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write         # delete the release branch at the close
-      issues: write           # the comments, the close
+      issues: write           # the tracking issue, the comments, the close
       pull-requests: read
-      actions: write          # read the runs (ready); cancel a stale approval
+      actions: write          # read the runs; cancel a stale approval
       checks: read
     concurrency:
-      group: release-finish-step-${{ github.repository }}
+      group: release-step-${{ github.repository }}
       cancel-in-progress: false
     outputs:
       action: ${{ steps.pending.outputs.action }}
       mode: ${{ steps.finish.outputs.mode }}
+      version: ${{ steps.finish.outputs.version }}
     steps:
-      # most runs end here, in seconds: no release in progress
+      # most runs end here, in seconds: no release in progress, and none started
       - name: A release in progress?
         id: open
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
         run: |
           n=$(gh issue list -R "$GITHUB_REPOSITORY" --label release --state open --json title \
                 --jq '[.[] | select(.title | startswith("[RELEASE] v"))] | length')
+          [ -n "$VERSION" ] && n=start
           echo "open=$n" >> "$GITHUB_OUTPUT"
-          [ "$n" != 0 ] || echo "## Release finish — nothing to do: no open \`[RELEASE]\` issue" >> "$GITHUB_STEP_SUMMARY"
+          [ "$n" != 0 ] || echo "## Release — nothing to do: no open \`[RELEASE]\` issue" >> "$GITHUB_STEP_SUMMARY"
+
+      # started with a version: the request, on its branch, with the history and the tags
+      - uses: actions/checkout@v7
+        if: inputs.version != ''
+        with:
+          ref: release/v${{ inputs.version }}
+          fetch-depth: 0
+          path: package
+          persist-credentials: false
 
       - uses: actions/checkout@v7
         if: steps.open.outputs.open != '0'
@@ -94,13 +116,18 @@ jobs:
         with:
           version: '1'
 
-      - name: Finish
+      - name: Step
         id: finish
         if: steps.open.outputs.open != '0'
         env:
           GH_TOKEN: ${{ github.token }}
           MANAGERS: ${{ vars.CT_RELEASE_MANAGERS }}
-        run: julia --startup-file=no .ctactions/scripts/release/release.jl finish --repo "$GITHUB_REPOSITORY" --managers "$MANAGERS"
+          VERSION: ${{ inputs.version }}
+          ACTOR: ${{ github.triggering_actor }}
+        run: |
+          args=(--repo "$GITHUB_REPOSITORY" --managers "$MANAGERS")
+          [ -n "$VERSION" ] && args+=(--version "$VERSION" --actor "$ACTOR" --dir package)
+          julia --startup-file=no .ctactions/scripts/release/release.jl finish "${args[@]}"
 
       # one approval at a time: an approval already asked for the same action is not asked
       # again; one asked for another action is stale (the step was done by hand): cancelled
@@ -113,7 +140,7 @@ jobs:
           WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           wf=${WORKFLOW_REF%@*}; wf=${wf#*/*/}
-          job=$([ "$NEXT" = merge ] && echo merge || echo register)
+          case "$NEXT" in merge) job=merge ;; start) job=start ;; *) job=register ;; esac
           action=$NEXT
           for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/runs?status=waiting&per_page=100" \
                          --jq ".workflow_runs[] | select(.path == \"$wf\") | .id"); do
@@ -129,6 +156,79 @@ jobs:
           done
           echo "action=$action" >> "$GITHUB_OUTPUT"
 
+  start:
+    needs: step
+    if: needs.step.outputs.action == 'start'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ needs.step.outputs.mode == 'autonomous' && inputs.autonomous_environment || inputs.environment }}
+    permissions:
+      contents: read
+      actions: write          # wake the workflow up again
+    concurrency:
+      group: release-act-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - name: Repository name
+        id: repo
+        run: echo "name=${GITHUB_REPOSITORY#*/}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/create-github-app-token@v3.3.0
+        id: app
+        with:
+          client-id: ${{ secrets.CT_RELEASE_CLIENT_ID }}
+          private-key: ${{ secrets.CT_RELEASE_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.repo.outputs.name }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+          permission-actions: read
+          permission-checks: read
+
+      # the branch, pushed as the App: its PR runs the CI (a push of GITHUB_TOKEN would not)
+      - uses: actions/checkout@v7
+        with:
+          ref: release/v${{ needs.step.outputs.version }}
+          fetch-depth: 0
+          path: package
+          token: ${{ steps.app.outputs.token }}
+
+      - uses: actions/checkout@v7
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+
+      # REL4: the gate resolves a stable from General alone
+      - name: Add the General registry
+        run: julia --startup-file=no -e 'using Pkg; Pkg.Registry.add("General")'
+
+      - name: The release PR
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          MANAGERS: ${{ vars.CT_RELEASE_MANAGERS }}
+          SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          id=$(gh api "/users/${SLUG}%5Bbot%5D" --jq .id)
+          git config --global user.name "${SLUG}[bot]"
+          git config --global user.email "${id}+${SLUG}[bot]@users.noreply.github.com"
+          julia --startup-file=no .ctactions/scripts/release/release.jl finish --repo "$GITHUB_REPOSITORY" --managers "$MANAGERS" --act start --dir package
+
+      - name: Wake up again
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          BRANCH: ${{ github.event.repository.default_branch || 'main' }}
+        run: |
+          wf=${WORKFLOW_REF%@*}
+          gh workflow run "${wf##*/}" -R "$GITHUB_REPOSITORY" --ref "$BRANCH"
+
   merge:
     needs: step
     if: needs.step.outputs.action == 'merge'
@@ -139,7 +239,7 @@ jobs:
       contents: read
       actions: write          # wake the workflow up again
     concurrency:
-      group: release-finish-act-${{ github.repository }}
+      group: release-act-${{ github.repository }}
       cancel-in-progress: false
     steps:
       - name: Repository name
@@ -196,17 +296,17 @@ jobs:
       contents: read
       actions: write          # wake the workflow up again
     concurrency:
-      group: release-finish-act-${{ github.repository }}
+      group: release-act-${{ github.repository }}
       cancel-in-progress: false
     steps:
       - name: Repositories of the token
         id: repo
         env:
-          ACTION: ${{ needs.step.outputs.action }}
+          NEXT: ${{ needs.step.outputs.action }}
         run: |
           name=${GITHUB_REPOSITORY#*/}
           # a beta is pushed to ct-registry
-          [ "$ACTION" = register-beta ] && name="$name,ct-registry"
+          [ "$NEXT" = register-beta ] && name="$name,ct-registry"
           echo "names=$name" >> "$GITHUB_OUTPUT"
 
       - uses: actions/create-github-app-token@v3.3.0

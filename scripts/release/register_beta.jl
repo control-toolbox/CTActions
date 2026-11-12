@@ -2,7 +2,7 @@
 # here, once, from the merge commit of the release PR, with LocalRegistry, and checked
 # afterwards — ct-registry must hold the version at the tree of the tag (REL5). Stdlib only
 # itself: LocalRegistry is installed in a throwaway environment of a child process. Needs
-# `gh` and `git`, and push access to ct-registry (the release-finish workflow sets up git
+# `gh` and `git`, and push access to ct-registry (the release workflow sets up git
 # with the App's token).
 
 @isdefined(facts) || include(joinpath(@__DIR__, "status.jl"))

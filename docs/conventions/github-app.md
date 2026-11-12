@@ -156,8 +156,8 @@ tokens, never on untrusted code, a human merges.
 
 ## `ct-release`: the App of the releases
 
-A second App, for [`release-finish.yml`](../workflows/release-finish.md) alone: it merges
-release PRs, posts the registration comment of a stable, pushes betas to ct-registry. Not
+A second App, for [`release.yml`](../workflows/release.md) alone: it opens
+release PRs (so that they run the CI), merges them, posts the registration comment of a stable, pushes betas to ct-registry. Not
 `ct-prune-compat`, for the reasons of the table above: it needs a permission the prune does
 not (*Actions: read*, to read the runs before a merge), its key lives in the environments
 of the packages rather than in CTActions, and a leak of one key does not touch the other
@@ -169,7 +169,7 @@ App.
 | Webhook | none (uncheck *Active*) |
 | Repository permissions | Contents: read and write · Pull requests: read and write · Issues: read and write · Actions: read · Checks: read · Metadata: read |
 | Where can it be installed | only on this account |
-| Installation | control-toolbox, **selected repositories**: the packages released with `release-finish.yml`, and **ct-registry** (the betas) |
+| Installation | control-toolbox, **selected repositories**: the packages released with `release.yml`, and **ct-registry** (the betas) |
 | Secrets | `CT_RELEASE_CLIENT_ID` and `CT_RELEASE_PRIVATE_KEY`, **environment** secrets of `release` (and `release-autonomous`) in each package: only the privileged jobs see them, after the environment's approval |
 
 No *Workflows* permission: a release PR changes `Project.toml`, `CHANGELOG.md` and

@@ -11,14 +11,14 @@
 | `CODECOV_TOKEN` → `codecov-secret` | organization (all repositories) | `coverage.yml` | Upload to Codecov |
 | `PROJECT_TOKEN` → `project_token` | organization (all repositories) | `add-to-project.yml` | Write to the organization's project board |
 | `CT_PRUNE_COMPAT_CLIENT_ID`, `CT_PRUNE_COMPAT_PRIVATE_KEY` | organization, **CTActions only** | `compat-prune-monthly.yml` (`publish` job) | Token of the organization's [GitHub App](github-app.md) |
-| `CT_RELEASE_CLIENT_ID`, `CT_RELEASE_PRIVATE_KEY` | **the environments `release` and `release-autonomous` of each package**, not the repository nor the organization | `release-finish.yml` (jobs `merge`, `register`) | Token of the App [`ct-release`](github-app.md#ct-release-the-app-of-the-releases): only the jobs of the environment, after its approval, can mint it |
-| `CT_RELEASE_REGISTRATION_TOKEN` (optional) | the same environments | `release-finish.yml` (job `register`) | A release manager's token for the registration comment of a stable, if the registration bot does not take a comment of an App |
+| `CT_RELEASE_CLIENT_ID`, `CT_RELEASE_PRIVATE_KEY` | **the environments `release` and `release-autonomous` of each package**, not the repository nor the organization | `release.yml` (jobs `start`, `merge`, `register`) | Token of the App [`ct-release`](github-app.md#ct-release-the-app-of-the-releases): only the jobs of the environment, after its approval, can mint it |
+| `CT_RELEASE_REGISTRATION_TOKEN` (optional) | the same environments | `release.yml` (job `register`) | A release manager's token for the registration comment of a stable, if the registration bot does not take a comment of an App |
 | `CT_RUNNERS_CLIENT_ID`, `CT_RUNNERS_PRIVATE_KEY` | organization (all repositories) | `select-gpu-runner.yml` | Token of the read-only App `ct-runners` ([details](../workflows/select-gpu-runner.md#the-github-app-ct-runners)) |
 | `OCCIDATA_SSH_KEY`, `OCCIDATA_KNOWN_HOSTS` | CTActions | `occidata-runner-watchdog.yml` | SSH to `occidata-cluster.irit.fr` |
 | `GITHUB_TOKEN` | built in | most workflows | Token of the repository the workflow runs in |
 
 The organization **variable** `CT_RELEASE_MANAGERS` (comma-separated logins) lists who may
-hand a release to [`release-finish.yml`](../workflows/release-finish.md). Not a secret: who
+hand a release to [`release.yml`](../workflows/release.md). Not a secret: who
 may release is public; changing it needs an organization owner.
 
 **Pass secrets explicitly, one by one** (`secrets: SSH_KEY: ${{ secrets.SSH_KEY }}`). Use
