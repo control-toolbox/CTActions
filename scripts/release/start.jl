@@ -48,6 +48,24 @@ function main_state(repo::AbstractString, sha::AbstractString)
     return (; state=isempty(failed) ? :green : :red, failed)
 end
 
+"""
+    issue_by_title(repo, title) -> Union{Nothing,Int}
+
+The issue of `repo` labelled `release` whose title is `title`, from the REST list: the
+lists `facts` reads show a new issue seconds or minutes after it is created (seen on the
+first real run), so two runs close together could each open one.
+"""
+function issue_by_title(repo::AbstractString, title::AbstractString)
+    out = gh_strip("api", "repos/$repo/issues?labels=release&state=all&per_page=100", "--paginate", "--jq",
+                   ".[] | select(.pull_request == null) | \"\\(.number)\\t\\(.title)\"")
+    out === nothing && return nothing
+    for l in split(out, '\n'; keepempty=false)
+        n, t = split(l, '\t'; limit=2)
+        t == title && return parse(Int, n)
+    end
+    return nothing
+end
+
 "The request of `version` in the clone `dir`, parsed, and its proposal."
 function read_request(dir, version)
     toml, md = request_paths(version)
@@ -63,18 +81,21 @@ function review_table(r)
 end
 
 """
-    open_issue(repo, dir, version; actor, managers) -> (Bool, String)
+    open_issue(repo, dir, version; actor, managers, tries=12, pause=5) -> (Bool, String)
 
 Phase 2: the tracking issue `[RELEASE] vX` of the request checked out in `dir`, and its
 first comment, the proposal as validated, with the verdicts and a marker naming who
 started it (`by=`) and the base of the request (`base=`). Only when `actor`, who started
 the run, is a release manager and the request passes `check_request`. Nothing when the issue
-exists.
+exists — in the lists `facts` reads, or already in the REST list (`issue_by_title`). Once
+opened, waits until `facts` sees it (`tries` reads, `pause` seconds apart).
 """
-function open_issue(repo::AbstractString, dir, version; actor, managers::AbstractString)
+function open_issue(repo::AbstractString, dir, version; actor, managers::AbstractString, tries::Integer=12, pause::Real=5)
     v = VersionNumber(version)
     f = facts(repo; version=v)
     f.issue === nothing || return (true, "the tracking issue #$(f.issue.number) exists")
+    known = issue_by_title(repo, "[RELEASE] v$v")
+    known === nothing || return (true, "the tracking issue #$known exists (not listed yet)")
     why = authorized(repo, actor, managers)
     why === nothing || return (false, "not started: $why")
     path = request_paths(v)[1]
@@ -96,6 +117,12 @@ function open_issue(repo::AbstractString, dir, version; actor, managers::Abstrac
     rm(path_body; force=true)
     n === nothing && return (false, "creating the tracking issue failed")
     f = facts(repo; version=v)
+    for _ in 2:tries
+        f.issue === nothing || break
+        sleep(pause)
+        f = facts(repo; version=v)
+    end
+    f.issue === nothing && return (true, "opened #$n; GitHub does not list it yet: the next run posts the proposal")
     comment = """
         **Phase 2 — Tracking issue.**
         Done: the tracking issue, from the request.

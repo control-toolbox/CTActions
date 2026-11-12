@@ -1451,7 +1451,7 @@ failures(results) = [r.message for r in results if r.status === :fail]
         base = strip(read(`git -C $origin rev-parse main`, String))
 
         st = Dict{Symbol,Any}(:issues => Dict{Int,String}(), :comments => Dict{Int,Vector{String}}(), :prs => Dict{Int,Vector{String}}(),
-                              :next => 7, :log => String[], :dispatched => String[], :main => "in_progress", :head_runs => "in_progress")
+                              :next => 7, :log => String[], :dispatched => String[], :main => "in_progress", :head_runs => "in_progress", :lag => 0)
         role(login) = login == "ocots" ? "admin\n" : login == "writer" ? "write\n" : nothing
         b64(s) = base64encode(s)
         file_arg(args, flag) = (i = findfirst(==(flag), args); read(replace(args[i + 1], r"^body=@" => ""), String))
@@ -1464,7 +1464,10 @@ failures(results) = [r.message for r in results if r.status === :fail]
             contains(a, "commits/main") && return strip(read(`git -C $origin rev-parse main`, String)) * "\n"
             contains(a, "commits/v") && return nothing                                  # no tag v0.4.3
             contains(a, "release view") && return nothing
+            # the lists lag behind a new issue (seen on the first real run), the REST list does not
+            contains(a, "issues?labels=release") && return join(("$n\t$t\n" for (n, t) in st[:issues]))
             if contains(a, "issue list")
+                st[:lag] > 0 && (st[:lag] -= 1; return "")
                 contains(a, "--state open") && return join(("$t\n" for (_, t) in st[:issues]))
                 return join(("$n OPEN\n" for (n, _) in st[:issues]))
             end
@@ -1558,6 +1561,11 @@ failures(results) = [r.message for r in results if r.status === :fail]
             # started twice: no second issue, no second comment
             r = finish("o/Pkg"; managers="ocots", version="0.4.3", actor="ocots", dir=wf)
             @test r.ok && length(st[:issues]) == 1 && length(comments()) == 1
+            # started again while the lists lag behind the issue: the REST list sees it, still one
+            st[:lag] = 10
+            r = finish("o/Pkg"; managers="ocots", version="0.4.3", actor="ocots", dir=wf)
+            @test r.ok && length(st[:issues]) == 1 && length(comments()) == 1
+            st[:lag] = 0
 
             # phase 3: once main is green, the job of the environment opens the PR
             st[:main] = "completed"

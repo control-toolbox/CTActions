@@ -304,6 +304,8 @@ function finish(repo::AbstractString; managers::AbstractString, act::Symbol=:ste
         opened = "Phase 2: $msg.\n\n"
     end
     f = version === nothing ? facts(repo) : facts(repo; version=VersionNumber(version))
+    (f.issue === nothing && !isempty(opened)) &&
+        return (; ok=true, action=:none, mode=nothing, version=nothing, report=opened * "GitHub does not list the issue yet: the next run goes on.\n")
     (f.issue === nothing || f.issue.state != "OPEN") && return nothing_to_do("no release in progress (no open `[RELEASE]` issue)")
     p = phase(f)
     ms = markers(issue_comments(repo, f.issue.number))
