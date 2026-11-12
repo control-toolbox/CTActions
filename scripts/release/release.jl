@@ -28,6 +28,10 @@
 #       whether a finished release left the trail the recipe asks for (the comments of the
 #       tracking issue, one registration mention, the PR, the tag, the registry, the clean-up);
 #       read only; exits 1 when a check fails
+#   julia release.jl lint-changelog [DIR]
+#       the format of `[Unreleased]` in CHANGELOG.md and BREAKING.md (CHG2-CHG4): the sections,
+#       their names and order, the footer, the BREAKING entry; exits 1 on a problem. For
+#       anyone who edits these files, a release or not
 #   julia release.jl facts --repo OWNER/REPO --kind stable|beta [DIR]
 #       phases 0 and 1, the facts: the state of the last release, the reference, the expected
 #       version, REL4, REL7, the labels, and the candidates the agent reviews; writes the
@@ -83,6 +87,7 @@ const USAGE = """
            julia release.jl register --repo OWNER/REPO --version V [--post] [--on-commit]
            julia release.jl register-beta --repo OWNER/REPO --version V [--confirm]
            julia release.jl audit --repo OWNER/REPO --version V
+           julia release.jl lint-changelog [DIR]
            julia release.jl facts --repo OWNER/REPO --kind stable|beta [DIR]
            julia release.jl request --repo OWNER/REPO [--no-dispatch] .releases/vX.toml [DIR]
            julia release.jl finish --repo OWNER/REPO --managers "a,b" [--version V --actor LOGIN --dir DIR] [--act start|merge|register|register-beta]"""
@@ -141,6 +146,12 @@ function release_main(args)
             ok, message = register_beta(repo, VersionNumber(version); confirm="--confirm" in args)
             println(message)
             return ok ? 0 : 1
+        elseif command == "lint-changelog"
+            dir = isempty(args) ? "." : only(args)
+            problems = changelog_lint(dir)
+            emit(isempty(problems) ? "## Changelog lint: ✅ `[Unreleased]` follows CHG2-CHG4\n" :
+                 "## Changelog lint: ❌ $(length(problems)) problem(s) in `[Unreleased]`\n\n" * join(("- $p" for p in problems), '\n') * "\n")
+            return isempty(problems) ? 0 : 1
         elseif command == "facts"
             repo = option!(args, "repo")
             kind = option!(args, "kind")

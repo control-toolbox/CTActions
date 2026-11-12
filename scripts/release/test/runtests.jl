@@ -654,7 +654,7 @@ failures(results) = [r.message for r in results if r.status === :fail]
 
         @testset "trail, on a fake GitHub" begin
             b64(s) = join(String(c) for c in [base64encode(s)])
-            gate_run = "11\t.github/workflows/ReleaseGate.yml@refs/pull/2/merge\tsuccess\n"
+            gate_run = ".github/workflows/ReleaseGate.yml@refs/pull/2/merge\t11\t.github/workflows/ReleaseGate.yml@refs/pull/2/merge\tsuccess\n"
             fake = function (args)
                 a = join(args, " ")
                 contains(a, "issue view 7") && contains(a, "json body") && return b64("Release of P.") * "\n"
@@ -666,7 +666,8 @@ failures(results) = [r.message for r in results if r.status === :fail]
                 contains(a, "json files") && contains(a, ".files[].path") && return "Project.toml\nCHANGELOG.md\n"
                 contains(a, "pulls/2/files") && return "@@ -1 +1 @@\n-version = \"0.4.2\"\n+version = \"0.4.3\"\n context\n"
                 contains(a, "issues/2/events") && return events[]
-                contains(a, "actions/runs?head_sha=H") && return gate_run * "12\t.github/workflows/CI.yml\tfailure\n13\t.github/workflows/CI.yml\tsuccess\n14\t.github/workflows/CI.yml\tskipped\n"
+                contains(a, "actions/runs?head_sha=H") && return gate_run * join((".github/workflows/CI.yml\t$x" for x in ("12\t.github/workflows/CI.yml\tfailure\n", "13\t.github/workflows/CI.yml\tsuccess\n", "14\t.github/workflows/CI.yml\tskipped\n"))) *
+                    ".github/workflows/Release.yml\t15\t.github/workflows/Release.yml\tfailure\n"     # the release workflow: not a check
                 contains(a, "release view") && return "notes\n"
                 contains(a, "actions/runs?branch=v0.4.3") && return "success\n"
                 contains(a, "git/ref/heads/release/v0.4.3") && return nothing
@@ -808,7 +809,7 @@ failures(results) = [r.message for r in results if r.status === :fail]
                 m = match(r"contents/\.github/workflows/([^?]+)\?ref=H", a)
                 m !== nothing && return workflows[m[1]]
                 contains(a, "actions/runs?head_sha=H") &&
-                    return join(("$id\t.github/workflows/$f\t$st\t$c" for (id, f, st, c) in runs), "\n") * "\n"
+                    return join((".github/workflows/$f\t$id\t.github/workflows/$f\t$st\t$c" for (id, f, st, c) in runs), "\n") * "\n"
                 m = match(r"actions/runs/(\d+)/jobs", a)
                 m !== nothing && return join(("$n\t$c" for (n, c) in get(jobs, parse(Int, m[1]), [])), "\n") * "\n"
                 if contains(a, "pr merge")
@@ -1215,7 +1216,8 @@ failures(results) = [r.message for r in results if r.status === :fail]
             pr(14, "chore: bar is gone", "printf 'module Pkg\\nexport foo\\npublic baz\\nend\\n' > src/Pkg.jl")
             write(joinpath(dir, "Project.toml"), project("Example = \"$EXAMPLE\"\n", "Example = \"0.5\"\njulia = \"1.10, 1.11\"\n"))
             sh(dir, "$g commit -qam 'deps: Example (#15)'")
-            write(joinpath(dir, "CHANGELOG.md"), "# Changelog\n\n## [Unreleased]\n\n### 🐛 Bug Fixes\n\n- a fix ([#10](https://x/pull/10)); another (#5).\n\n" *
+            write(joinpath(dir, "BREAKING.md"), "# Breaking\n\n## Non-breaking note (Unreleased)\n\n- none.\n\n## Non-breaking note (0.4.2)\n\n- none.\n")
+            write(joinpath(dir, "CHANGELOG.md"), "# Changelog\n\n## [Unreleased]\n\n### 🐛 Bug Fixes\n\n- a fix ([#10](https://x/pull/10)); another (#5).\n\n### ✅ Compatibility\n\n- No breaking changes.\n\n" *
                   split(read(joinpath(dir, "CHANGELOG.md"), String), "## [Unreleased]\n\n")[2])
             sh(dir, "$g commit -qam 'docs: changelog'")
             return dir
@@ -1261,6 +1263,11 @@ failures(results) = [r.message for r in results if r.status === :fail]
                 write(joinpath(dir, toml), s)
                 write(joinpath(dir, md), "## Release proposal — Pkg v0.4.3 (stable)\n")
                 @test isempty(check_request(dir, toml; repo="o/Pkg", base="main"))
+                # the format of [Unreleased] broken: the request is refused until it is fixed
+                cl = read(joinpath(dir, "CHANGELOG.md"), String)
+                write(joinpath(dir, "CHANGELOG.md"), replace(cl, "### 🐛 Bug Fixes" => "### Fixed"; count=1))
+                @test any(contains("format of `[Unreleased]`: `### Fixed`"), check_request(dir, toml; repo="o/Pkg", base="main"))
+                write(joinpath(dir, "CHANGELOG.md"), cl)
                 # a candidate left without a note, another version, the bot mentioned: refused
                 write(joinpath(dir, toml), replace(s, "note = \"see the changelog\"" => "note = \"\""; count=1))
                 @test any(contains("has no note"), check_request(dir, toml; repo="o/Pkg", base="main"))
@@ -1322,6 +1329,322 @@ failures(results) = [r.message for r in results if r.status === :fail]
         fake(args) = (a = join(args, " "); contains(a, "pr view 2") ? "false\trelease/v0.9.6\trelease: supervised\n" :
                       contains(a, "issues/2/events") ? "$RELEASE_BOT\n" : nothing)
         @test with_gh(() -> optin("o/P", 2, "ocots"), fake) == (; mode=:supervised, actor=RELEASE_BOT, reason="")
+    end
+
+    @testset "safety: what was found wrong once" begin
+        # `ready` without the list of the workflows required nothing: it said ready
+        fake(args) = (a = join(args, " ");
+            contains(a, "pr view") ? "OPEN\tfalse\tH\trelease/v0.4.3\tMERGEABLE\tbug\n" :
+            contains(a, "compare/main...H") ? "0\n" : contains(a, "actions/runs?head_sha=H") ? "" : nothing)
+        r = with_gh(() -> ready("o/P", 2), fake)
+        @test !r.ready && any(l -> contains(l.message, "cannot read the workflows"), r.lines)
+        # the gate is required even when the listing does not show it
+        fake2(args) = (a = join(args, " "); contains(a, "contents/.github/workflows?ref=H") ? "SpellCheck.yml\n" : fake(args))
+        r = with_gh(() -> ready("o/P", 2), fake2)
+        @test !r.ready && any(l -> contains(l.message, "`ReleaseGate.yml`: no run"), r.lines)
+        # the release workflow's own run is not a check: in progress, it does not keep `ready` waiting
+        lines(rs) = join(("$p\t$i\t$p\t$s\t$c" for (i, p, s, c) in rs), "\n") * "\n"
+        fake3(args) = (a = join(args, " ");
+            contains(a, "contents/.github/workflows?ref=H") ? "ReleaseGate.yml\nRelease.yml\n" :
+            contains(a, "contents/.github/workflows/") ? "jobs:\n  call:\n    uses: x\n" :
+            contains(a, "actions/runs?head_sha=H") ? lines([(1, ".github/workflows/ReleaseGate.yml", "completed", "success"),
+                                                            (2, ".github/workflows/Release.yml", "in_progress", "")]) :
+            contains(a, "runs/1/jobs") ? "call / gate\tsuccess\n" : fake(args))
+        r = with_gh(() -> ready("o/P", 2), fake3)
+        @test r.ready && !any(l -> contains(l.message, "Release.yml"), r.lines)
+        @test is_release_workflow(".github/workflows/Release.yml@refs/heads/main") && !is_release_workflow(".github/workflows/ReleaseGate.yml")
+        # no run on `main` yet (seconds after a push) is not green
+        @test with_gh(() -> main_state("o/P", "S"), args -> "").state === :waiting
+        # a stable after breaking betas: the triple after the betas, never a bump of the last beta (CTParser 0.9.6, not 0.10.0)
+        released = [v"0.8.15", v"0.9.0-beta", v"0.9.1-beta", v"0.9.5-beta"]
+        @test expected_version(:stable, released; breaking=true, feature=true) == v"0.9.6"
+        @test expected_version(:beta, released; breaking=true, feature=false) == v"0.10.0-beta"
+    end
+
+    @testset "finish_plan: properties over every combination of facts" begin
+        zero = repeat('0', 40)
+        prs = [nothing, (; number=2, state="OPEN", merge=nothing, auto=false), (; number=2, state="MERGED", merge="M", auto=false),
+               (; number=2, state="CLOSED", merge=nothing, auto=false)]
+        readies = [nothing, (; ready=true, head="H", branch="b", lines=[(; status=:pass, message="ok")]),
+                   (; ready=false, head="H", branch="b", lines=[(; status=:wait, message="running")]),
+                   (; ready=false, head="H", branch="b", lines=[(; status=:fail, message="red")])]
+        mains = [nothing, (; state=:green, failed=String[]), (; state=:waiting, failed=String[]), (; state=:red, failed=["CI.yml"])]
+        two = markers([(; author="b", time="t", body="<!-- ct-release phase=2 kind=stable version=0.4.3 mode=supervised pr=- merge=- state=done by=ocots base=B -->")])
+        n = 0
+        for kind in (:stable, :beta), pr in prs, tag in (nothing, "M", "X"), release in (nothing, true, false),
+            registered in (nothing, zero, "U"), mentions in (0, 1, 2), main_sha in ("M", "N"),
+            general in (nothing, (; number=9, state="OPEN"), (; number=9, state="MERGED")), jump in (:none, :betas),
+            mode in (:supervised, :autonomous), ms0 in (NamedTuple[], two)
+            kind === :beta && (general !== nothing || mentions > 0 || jump !== :none) && continue
+            f = (; repo="o/P", name="P", version=kind === :beta ? v"0.4.3-beta" : v"0.4.3", kind, main_version=v"0.4.3", main_sha,
+                 issue=(; number=1, state="OPEN"), issues=1, mentions, bot_error=nothing, pr, tag, tag_tree=tag === nothing ? nothing : zero,
+                 release, registry=kind === :beta ? "ct-registry" : "General", registered, general_pr=general, jump)
+            p = phase(f)
+            for r in (pr !== nothing && pr.state == "OPEN" ? readies : [nothing]), main in mains, requester in (nothing, "no")
+                plan = finish_plan(f, p, ms0, r; mode, main, requester)
+                n += 1
+                # REL6: no text of the workflow mentions the bot
+                @test all(c -> !contains(c.body, MENTION), plan.comments)
+                # a privileged action only when the facts call for it
+                plan.action === :merge && @test(p.phase == 4 && r !== nothing && r.ready)
+                plan.action === :start && @test(p.phase == 3 && pr === nothing && requester === nothing && main.state === :green)
+                plan.action === :register && @test(kind === :stable && p.phase == 7 && p.state === :todo && !get(p, :on_commit, false))
+                plan.action === :register_beta && @test(kind === :beta && p.phase == 7 && p.state === :todo)
+                plan.action === :close && @test(p.phase == 8 && p.state === :todo)
+                p.state === :blocked && @test(plan.action === :none)
+                # ensure: the same facts with the comments posted post nothing again, and decide the same
+                again = finish_plan(f, p, vcat(ms0, markers([(; author="b", time="t", body=c.body) for c in plan.comments])), r; mode, main, requester)
+                @test isempty(again.comments) && again.action === plan.action
+                # the markers stay in the order the audit checks
+                ph = [m.phase for m in markers([(; author="b", time="t", body=c.body) for c in plan.comments])]
+                @test issorted(ph)
+            end
+        end
+        @test n > 10_000
+    end
+
+    @testset "the workflow: who holds the powers" begin
+        wf = read(joinpath(@__DIR__, "..", "..", "..", ".github", "workflows", "release.yml"), String)
+        # the jobs, as blocks of text
+        body = split(wf, r"^jobs:\n"m)[2]
+        jobs = Dict(m[1] => m[2] for m in eachmatch(r"^  ([a-z-]+):\n((?:(?!^  [a-z-]+:\n)[\s\S])*)"m, body))
+        @test Set(keys(jobs)) == Set(["step", "start", "merge", "register"])
+        for (name, text) in jobs
+            app = contains(text, "create-github-app-token") || contains(text, "secrets.")
+            # the App's key, or any secret, only in a job of an environment; never in `step`
+            app && @test(contains(text, "    environment: "))
+            name == "step" && @test(!app && !contains(text, "environment:"))
+            # the queues: never cancelled
+            @test contains(text, "cancel-in-progress: false")
+            # a privileged job runs only for its action
+            name != "step" && @test(contains(text, "needs.step.outputs.action == '$(name == "register" ? "register" : name)'"))
+        end
+        @test !contains(wf, "pull_request_target")
+        @test contains(jobs["step"], "head.repo.full_name == github.repository")          # never from a fork
+        # the environment follows the mode, with a reviewer by default
+        @test count("inputs.autonomous_environment || inputs.environment", wf) == 3
+        @test contains(wf, "default: release\n")
+    end
+
+    if any(r -> r.name == GENERAL, Pkg.Registry.reachable_registries())
+    @testset "a release from its request to its checks, on a simulated GitHub" begin
+        # a package released as 0.4.2, then a fix merged; its GitHub is a bare repository (the
+        # pushes) and a fake with a state: issues, comments, PRs, labels and their events, runs
+        root = mktempdir()
+        dir = joinpath(root, "agent"); mkpath(dir)
+        origin = joinpath(root, "origin.git")
+        g = "git -c user.name=t -c user.email=t@t"
+        write(joinpath(dir, "Project.toml"), "name = \"Pkg\"\nuuid = \"$PKG_UUID\"\nversion = \"0.4.2\"\n\n[compat]\njulia = \"1.10\"\n")
+        write(joinpath(dir, "CHANGELOG.md"), changelog("0.4.2" => "- first."))
+        write(joinpath(dir, "BREAKING.md"), "# Breaking\n\n## Non-breaking note (0.4.2)\n\n- none.\n")
+        mkpath(joinpath(dir, "src")); write(joinpath(dir, "src", "Pkg.jl"), "module Pkg end\n")
+        mkpath(joinpath(dir, ".github", "workflows"))
+        write(joinpath(dir, ".github", "workflows", "CI.yml"), "jobs:\n  test:\n    if: contains(github.event.pull_request.labels.*.name, 'run ci github-runner')\n")
+        sh(dir, "git init -q -b main && $g add -A && $g commit -qm init && git tag v0.4.2")
+        sh(dir, "git checkout -q -b fix && echo '# fix' >> src/Pkg.jl && $g commit -qam fix && git checkout -q main && $g merge -q --no-ff fix -m 'Merge pull request #10 from o/fix' -m 'fix: a fix'")
+        write(joinpath(dir, "CHANGELOG.md"), replace(read(joinpath(dir, "CHANGELOG.md"), String), "## [Unreleased]\n\n" =>
+              "## [Unreleased]\n\n### 🐛 Bug Fixes\n\n- a fix ([#10](https://x/pull/10)).\n\n### ✅ Compatibility\n\n- nothing to do.\n\n"))
+        write(joinpath(dir, "BREAKING.md"), "# Breaking\n\n## Non-breaking note (Unreleased)\n\n- none.\n\n## Non-breaking note (0.4.2)\n\n- none.\n")
+        sh(dir, "$g commit -qam 'docs: changelog'")
+        sh(root, "git clone -q --bare agent origin.git")
+        sh(dir, "git remote add origin $origin && git fetch -q origin")
+        base = strip(read(`git -C $origin rev-parse main`, String))
+
+        st = Dict{Symbol,Any}(:issues => Dict{Int,String}(), :comments => Dict{Int,Vector{String}}(), :prs => Dict{Int,Vector{String}}(),
+                              :next => 7, :log => String[], :dispatched => String[], :main => "in_progress", :head_runs => "in_progress")
+        role(login) = login == "ocots" ? "admin\n" : login == "writer" ? "write\n" : nothing
+        b64(s) = base64encode(s)
+        file_arg(args, flag) = (i = findfirst(==(flag), args); read(replace(args[i + 1], r"^body=@" => ""), String))
+        function fake(args)
+            a = join(args, " ")
+            if contains(a, "workflow run Release.yml")
+                push!(st[:dispatched], a); return ""
+            end
+            contains(a, "contents/Project.toml?ref=main") && return read(`git -C $origin show main:Project.toml`, String)
+            contains(a, "commits/main") && return strip(read(`git -C $origin rev-parse main`, String)) * "\n"
+            contains(a, "commits/v") && return nothing                                  # no tag v0.4.3
+            contains(a, "release view") && return nothing
+            if contains(a, "issue list")
+                contains(a, "--state open") && return join(("$t\n" for (_, t) in st[:issues]))
+                return join(("$n OPEN\n" for (n, _) in st[:issues]))
+            end
+            contains(a, "issue view") && contains(a, "body,comments") && return "0\n"
+            contains(a, "issue view") && return ""
+            contains(a, "pr list -R JuliaRegistries/General") && return ""
+            if contains(a, "pr list -R o/Pkg")
+                contains(a, "--head") && return join(("$n OPEN - false\n" for (n, _) in st[:prs]))
+                return join(("release/v0.4.3\n" for _ in st[:prs]))
+            end
+            m = match(r"collaborators/([^/]+)/permission", a); m !== nothing && return role(m[1])
+            contains(a, "closingIssuesReferences") && return ""
+            contains(a, "actions/runners") && return "0\n"
+            # issues
+            if length(args) >= 2 && args[2] == "repos/o/Pkg/issues" && "-f" in args
+                n = st[:next]; st[:next] += 1
+                st[:issues][n] = replace(args[findfirst(startswith("title="), args)], "title=" => "")
+                st[:comments][n] = String[]
+                push!(st[:log], "issue $n"); return "$n\n"
+            end
+            m = match(r"repos/o/Pkg/issues/(\d+)/comments", a)
+            if m !== nothing
+                n = parse(Int, m[1])
+                if "-F" in args
+                    push!(st[:comments][n], file_arg(args, "-F")); return "https://x/issues/$n#c$(length(st[:comments][n]))\n"
+                end
+                return join(("b\tt\t$(b64(c))\n" for c in st[:comments][n]))
+            end
+            # pull requests
+            if length(args) >= 2 && args[2] == "repos/o/Pkg/pulls"
+                n = st[:next]; st[:next] += 1
+                st[:prs][n] = String[]; push!(st[:log], "pr $n"); return "$n\n"
+            end
+            m = match(r"--method PATCH repos/o/Pkg/pulls/(\d+) -f state=(\w+)", a)
+            m !== nothing && (push!(st[:log], "pr $(m[1]) $(m[2])"); return "")
+            m = match(r"repos/o/Pkg/issues/(\d+)/labels", a)
+            if m !== nothing
+                ls = [replace(x, "labels[]=" => "") for x in args if startswith(x, "labels[]=")]
+                append!(st[:prs][parse(Int, m[1])], ls); push!(st[:log], "labels $(join(ls, ","))"); return ""
+            end
+            m = match(r"pr view (\d+)", a)
+            if m !== nothing
+                ls = join(st[:prs][parse(Int, m[1])], ",")
+                contains(a, "isCrossRepository") && return "false\trelease/v0.4.3\t$ls\n"
+                contains(a, "state,isDraft") && return "OPEN\tfalse\tH\trelease/v0.4.3\tMERGEABLE\t$ls\n"
+                contains(a, "--json labels") && return "$ls\n"
+            end
+            contains(a, "/events") && return "$RELEASE_BOT\n"
+            # the CI of main, at the base of the request; the checks of the PR, at its head
+            contains(a, "actions/runs?head_sha=$base") && return "1\t.github/workflows/CI.yml\t$(st[:main])\t$(st[:main] == "completed" ? "success" : "null")\n"
+            contains(a, "compare/main...H") && return "0\n"
+            contains(a, "contents/.github/workflows?ref=H") && return "CI.yml\nReleaseGate.yml\n"
+            contains(a, "contents/.github/workflows/") && return "jobs:\n  call:\n    uses: x\n"
+            contains(a, "actions/runs?head_sha=H") && return ".github/workflows/ReleaseGate.yml\t5\t.github/workflows/ReleaseGate.yml\t$(st[:head_runs])\tnull\n"
+            return nothing
+        end
+        comments() = only(values(st[:comments]))
+        phases() = [m.phase for m in markers([(; author="b", time="t", body=c) for c in comments()])]
+        withenv("GIT_AUTHOR_NAME" => "t", "GIT_AUTHOR_EMAIL" => "t@t", "GIT_COMMITTER_NAME" => "t", "GIT_COMMITTER_EMAIL" => "t@t") do
+        with_registries(Dict("General" => Dict("Pkg" => ["0.4.2"]))) do
+        with_gh(fake) do
+            # phases 0 and 1, the agent: the facts, the review, the request
+            f = release_facts(dir, "o/Pkg"; kind=:stable, resolution=false)
+            @test f.expected == v"0.4.3" && isempty(f.candidates)
+            toml, md = request_paths(f.expected)
+            mkpath(joinpath(dir, ".releases"))
+            write(joinpath(dir, toml), replace(request_skeleton(f), "mode = \"\"" => "mode = \"supervised\"", "requested_by = \"\"" => "requested_by = \"ocots\""))
+            write(joinpath(dir, md), "## Release proposal — Pkg v0.4.3 (stable)\n")
+            ok, msg = request_release(dir, toml; repo="o/Pkg")
+            @test !ok && contains(msg, "`release/v0.4.3`")                                  # not on the release branch
+            sh(dir, "git checkout -q -b release/v0.4.3")
+            ok, msg = request_release(dir, toml; repo="o/Pkg")
+            @test ok && only(st[:dispatched]) == "workflow run Release.yml -R o/Pkg --ref main -f version=0.4.3"
+            pushed = strip(read(`git -C $origin rev-parse release/v0.4.3`, String))
+            @test occursin(toml, read(`git -C $origin show --name-only --format= $pushed`, String))
+            ok, _ = request_release(dir, toml; repo="o/Pkg")                                  # again: nothing new committed
+            @test ok && strip(read(`git -C $origin rev-parse release/v0.4.3`, String)) == pushed
+
+            # phase 2, the run started with the version: only a release manager starts a release
+            wf = joinpath(root, "workflow")
+            sh(root, "git clone -q $origin workflow && git -C workflow checkout -q release/v0.4.3")
+            for who in ("mallory", "writer")
+                r = finish("o/Pkg"; managers="ocots,writer", version="0.4.3", actor=who, dir=wf)
+                @test !r.ok && r.action === :none && isempty(st[:issues])
+            end
+            r = finish("o/Pkg"; managers="ocots", version="0.4.3", actor="ocots", dir=wf)
+            @test r.ok && length(st[:issues]) == 1 && only(values(st[:issues])) == "[RELEASE] v0.4.3"
+            two = only(markers([(; author="b", time="t", body=c) for c in comments()]))
+            @test two.phase == 2 && two.by == "ocots" && two.base == base && two.mode == "supervised"
+            @test r.action === :none && contains(r.report, "waiting for the CI of `main`")     # main still running
+            # started twice: no second issue, no second comment
+            r = finish("o/Pkg"; managers="ocots", version="0.4.3", actor="ocots", dir=wf)
+            @test r.ok && length(st[:issues]) == 1 && length(comments()) == 1
+
+            # phase 3: once main is green, the job of the environment opens the PR
+            st[:main] = "completed"
+            r = finish("o/Pkg"; managers="ocots")
+            @test r.action === :start && r.mode === :supervised && r.version == v"0.4.3"
+            r = finish("o/Pkg"; managers="ocots", act=:start, dir=wf)
+            @test r.ok
+            head = strip(read(`git -C $origin rev-parse release/v0.4.3`, String))
+            @test head != pushed && contains(read(`git -C $origin show $head:Project.toml`, String), "version = \"0.4.3\"")
+            @test contains(read(`git -C $origin show $head:CHANGELOG.md`, String), "## [Unreleased]\n\n## [0.4.3] - ")
+            pr = only(keys(st[:prs]))
+            # the PR opened, closed, labelled, reopened: one run per workflow; then the label of the mode
+            @test st[:log][2:end] == ["pr $pr", "pr $pr closed", "labels run ci github-runner", "pr $pr open", "labels release: supervised"]
+            @test phases() == [2, 3] && !any(c -> contains(c, MENTION), comments())
+            # again: nothing more — no commit, no PR, no comment, no label
+            log = copy(st[:log])
+            @test finish("o/Pkg"; managers="ocots", act=:start, dir=wf).action === :none
+            @test first(start("o/Pkg", wf; version="0.4.3"))
+            @test st[:log] == log && phases() == [2, 3] && strip(read(`git -C $origin rev-parse release/v0.4.3`, String)) == head
+
+            # phase 4: the label of the App is the opt-in; the checks run, nothing to do yet
+            r = finish("o/Pkg"; managers="ocots")
+            @test r.ok && r.action === :none && contains(r.report, "waiting for the checks") && phases() == [2, 3]
+            st[:head_runs] = "completed"
+            r = finish("o/Pkg"; managers="ocots")
+            # the checks green: the comment of phase 4, and the merge is the job of the environment's
+            @test r.action === :merge && phases() == [2, 3, 4] && contains(last(comments()), "Review deployments")
+            @test finish("o/Pkg"; managers="ocots").action === :merge && phases() == [2, 3, 4]   # asked again, posted once
+        end
+        end
+        end
+    end
+    end
+
+    @testset "the format of [Unreleased]: what the version is read from" begin
+        cl(body; rest="## [0.4.2] - 2026-10-18\n\n### 🐛 Bug Fixes\n\n- old.\n") = "# Changelog\n\n## [Unreleased]\n\n$body\n$rest"
+        good = cl("### 💥 Breaking Changes\n\n- `f` removed.\n\n### 🐛 Bug Fixes\n\n- x.\n\n### ✅ Compatibility\n\n- **Breaking**: see BREAKING.md.\n")
+        breaking = "# Breaking\n\n## Unreleased\n\n- `f` removed.\n"
+        @test isempty(unreleased_format(good, breaking))
+        @test isempty(unreleased_format(cl("### 🐛 Bug Fixes\n\n- x.\n\n### ✅ Compatibility\n\n- No breaking changes.\n"),
+                                        "# Breaking\n\n## Non-breaking note (Unreleased)\n\n- none.\n"))
+        has(text, br, pattern) = any(contains(pattern), unreleased_format(text, br))
+        # a breaking section not named as CHG2 says: the version would be read as not breaking
+        bad = replace(good, "### 💥 Breaking Changes" => "### Breaking")
+        @test has(bad, breaking, "`### Breaking` is not a section of CHG2")
+        @test !changes_since(bad, v"0.4.2").breaking                    # what it would have cost
+        @test has(replace(good, "## [Unreleased]" => "## Unreleased"), breaking, "`## [Unreleased]`")
+        @test isempty(unreleased_format(cl(""), "# Breaking\n"))                 # empty, as after a release
+        @test has(cl("- loose.\n"), breaking, "no `###` subsection")
+        @test has(cl("### 🐛 Bug Fixes\n\n- x.\n\n### 💥 Breaking Changes\n\n- y.\n\n### ✅ Compatibility\n\n- b.\n"), breaking, "not in the order")
+        @test has(cl("### 🐛 Bug Fixes\n\n- x.\n"), breaking, "`### ✅ Compatibility` is not the last")
+        @test has(cl("- loose.\n\n### 🐛 Bug Fixes\n\n- x.\n\n### ✅ Compatibility\n\n- c.\n"), breaking, "text before the first `###`")
+        @test has(cl("### 🐛 Bug Fixes\n\n- x.\n\n### 🐛 Bug Fixes\n\n- y.\n\n### ✅ Compatibility\n\n- c.\n"), breaking, "appears twice")
+        @test has(replace(good, "- **Breaking**: see BREAKING.md." => "- No breaking changes."), breaking, "says no breaking change")
+        @test has(good, "# Breaking\n\n## [0.4.2]\n", "no `## Unreleased` entry")       # CHG3
+        @test has(good, nothing, "no `BREAKING.md`")
+        @test has(cl("### 🐛 Bug Fixes\n\n- x.\n\n### ✅ Compatibility\n\n- c.\n"), "# Breaking\n", "neither `## Unreleased` nor")   # CHG4
+        @test isempty(unreleased_format(good, replace(breaking, "## Unreleased" => "## [Unreleased]")))
+        # an older entry is not checked (it is never edited), but a heading the tool cannot read
+        # right below [Unreleased] would merge that entry into it: said, and only that
+        p = unreleased_format(cl("### 🐛 Bug Fixes\n\n- x.\n\n### ✅ Compatibility\n\n- c.\n"; rest="## 0.4.2\n\n### Fixed\n\n- old.\n"),
+                              "# Breaking\n\n## Non-breaking note (Unreleased)\n")
+        @test only(p) == "the heading after `## [Unreleased]`, `## 0.4.2`, is not `## [X.Y.Z] - YYYY-MM-DD`: its entries would be read as unreleased"
+        @test isempty(unreleased_format(cl("### 🐛 Bug Fixes\n\n- x.\n\n### ✅ Compatibility\n\n- c.\n"; rest="## [0.4.2]\n\n### Fixed\n\n- old.\n"),
+                                        "# Breaking\n\n## Non-breaking note (Unreleased)\n"))
+        # the linter, alone and in the gate of a PR that is not a release
+        dir, base = package_repo()
+        sh(dir, "git checkout -q main")
+        @test isempty(changelog_lint(dir))
+        write(joinpath(dir, "CHANGELOG.md"), replace(read(joinpath(dir, "CHANGELOG.md"), String), "## [Unreleased]\n\n" => "## [Unreleased]\n\n### Fixed\n\n- x.\n\n"))
+        @test any(contains("`### Fixed`"), changelog_lint(dir))
+        code, out = command("lint-changelog", dir)
+        @test code == 1 && contains(out, "`### Fixed` is not a section of CHG2")
+        sh(dir, "git -c user.name=t -c user.email=t@t commit -qam 'docs: an entry'")
+        r = gate(dir, base; labels=String[], resolution=false)
+        @test any(x -> x.status === :info && x.rule == "CHG2" && contains(x.message, "`### Fixed`"), r)
+        @test !any(x -> x.status === :fail, r)                          # information only: not a release
+        @test first(command("lint-changelog", mktempdir())) == 0          # no changelog: nothing to say
+        # the words of a break, filed elsewhere: candidates, never under 💥, 🧪 or ✅
+        w = wording_candidates(cl("### 💥 Breaking Changes\n\n- `f` removed.\n\n### 🐛 Bug Fixes\n\n- `g` is no longer exported.\n- fine.\n\n" *
+                                  "### 🔄 Refactoring\n\n- `h` renamed `k`.\n\n### 🧪 Testing\n\n- a test removed.\n\n### ✅ Compatibility\n\n- breaking.\n"))
+        @test length(w) == 2 && all(x -> occursin(r"^wording-[0-9a-f]{8}$", x.id), w)
+        @test contains(w[1].what, "`### 🐛 Bug Fixes`, “no longer”") && contains(w[2].what, "“renamed”")
+        # stable ids: an entry added elsewhere does not change them
+        w2 = wording_candidates(cl("### 💥 Breaking Changes\n\n- `f` removed.\n\n### 🐛 Bug Fixes\n\n- new one.\n- `g` is no longer exported.\n- fine.\n\n" *
+                                   "### 🔄 Refactoring\n\n- `h` renamed `k`.\n\n### ✅ Compatibility\n\n- breaking.\n"))
+        @test [x.id for x in w2] == [x.id for x in w]
     end
 
     @testset "command line" begin

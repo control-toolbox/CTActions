@@ -29,19 +29,21 @@ end
     main_state(repo, sha) -> (; state, failed)
 
 Whether the CI of `main` at `sha` (the base of a request) is `:green`, `:waiting` (a run in
-progress) or `:red` (`failed`: the workflows whose latest run did not pass). The runs of the
-release workflow itself are left out.
+progress, or no run yet: the runs of a push appear seconds after it) or `:red` (`failed`:
+the workflows whose latest run did not pass). The runs of the release workflow itself are
+left out.
 """
 function main_state(repo::AbstractString, sha::AbstractString)
     out = something(gh("api", "repos/$repo/actions/runs?head_sha=$sha&per_page=100", "--jq",
-                       ".workflow_runs[] | select(.path | contains(\"$RELEASE_WORKFLOW\") | not) | \"\\(.id)\\t\\(.path)\\t\\(.status)\\t\\(.conclusion)\""), "")
+                       ".workflow_runs[] | \"\\(.id)\\t\\(.path)\\t\\(.status)\\t\\(.conclusion)\""), "")
     latest = Dict{String,Tuple{Int,String,String}}()
     for l in split(out, '\n'; keepempty=false)
         id, path, status, conclusion = split(l, '\t')
+        is_release_workflow(path) && continue
         w = basename(first(split(path, '@')))
         (!haskey(latest, w) || first(latest[w]) < parse(Int, id)) && (latest[w] = (parse(Int, id), status, conclusion))
     end
-    any(x -> x[2] != "completed", values(latest)) && return (; state=:waiting, failed=String[])
+    (isempty(latest) || any(x -> x[2] != "completed", values(latest))) && return (; state=:waiting, failed=String[])
     failed = sort!([w for (w, x) in latest if !(x[3] in ("success", "skipped", "neutral"))])
     return (; state=isempty(failed) ? :green : :red, failed)
 end

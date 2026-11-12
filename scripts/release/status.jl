@@ -32,11 +32,18 @@ runs of `RELEASE_WORKFLOW` are left out: it is not a check of the PR, it is what
 them, and its own run would always be in progress when it reads the others.
 """
 function pr_runs(repo, head, branch, fields)
-    sel = ".workflow_runs[] | select(.event == \"pull_request\" or (.event == \"workflow_dispatch\" and .head_branch == \"$branch\"))" *
-          " | select(.path | contains(\"$RELEASE_WORKFLOW\") | not)"
-    return gh("api", "repos/$repo/actions/runs?head_sha=$head&per_page=100",
-              "--jq", "$sel | \"" * join(("\\(" * f * ")" for f in fields), "\t") * "\"")
+    sel = ".workflow_runs[] | select(.event == \"pull_request\" or (.event == \"workflow_dispatch\" and .head_branch == \"$branch\"))"
+    out = gh("api", "repos/$repo/actions/runs?head_sha=$head&per_page=100",
+             "--jq", "$sel | \"" * join(("\\(" * f * ")" for f in (".path", fields...)), "\t") * "\"")
+    out === nothing && return nothing
+    # here rather than in the jq filter, so that the tests see it
+    keep = [last(split(l, '\t'; limit=2)) for l in split(out, '\n'; keepempty=false)
+            if !is_release_workflow(first(split(l, '\t'; limit=2)))]
+    return isempty(keep) ? "" : join(keep, '\n') * "\n"
 end
+
+"Whether the workflow `path` of a run is the release workflow, which waits for the checks and is not one."
+is_release_workflow(path) = basename(first(split(path, '@'))) == RELEASE_WORKFLOW
 
 """
     facts(repo; version=nothing) -> NamedTuple

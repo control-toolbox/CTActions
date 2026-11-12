@@ -63,7 +63,10 @@ A few workflows are not called by packages: they run in `CTActions` itself, on a
 schedule, for the whole organization (the self-hosted runners, the `[compat]` prune).
 When one of them must write to other repositories, it does so as the organization's
 GitHub App, [`ct-prune-compat`](conventions/github-app.md), never with a personal
-token.
+token. A release acts as a second App,
+[`ct-release`](conventions/github-app.md#ct-release-the-app-of-the-releases), whose key
+lives in the environments of the packages: only the jobs a person approves (in supervised
+mode) can use it.
 
 ## The workflows
 

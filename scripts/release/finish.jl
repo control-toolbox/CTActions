@@ -185,7 +185,8 @@ function finish_plan(f, p, ms, r; mode::Symbol, main=nothing, requester=nothing)
     reached = Dict(4 => merged || (r !== nothing && r.ready),
                    5 => merged,
                    6 => p.phase >= 7 && !(p.phase == 8 && p.state === :blocked),
-                   7 => f.registered !== nothing && p.state !== :blocked)
+                   # registered is not enough: the GitHub release of the tag may still lack (phase 6)
+                   7 => f.registered !== nothing && p.phase == 8 && p.state !== :blocked)
     for n in 4:7
         reached[n] && !has(n) || continue
         body = n == 4 ? phase_comment(f, mode, 4, "Checks of $pr";

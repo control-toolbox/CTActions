@@ -73,6 +73,9 @@ ship; `closing(n)` gives the issues PR `n` closes (from GitHub).
 - `export-NAME`: a name exported or declared `public` at `reference` and no longer;
 - `dep-NAME`: a dependency added, removed, or moved between `[deps]` and `[weakdeps]`;
 - `compat-NAME`: a `[compat]` bound of a dependency (or of `julia`) that changed.
+
+`release_facts` adds the `wording-N` candidates (`wording_candidates`): entries of
+`[Unreleased]` outside `💥` whose words often say a break.
 """
 function candidates(dir, reference::AbstractString, base::AbstractString, changelog::AbstractString;
                     closing=n -> Int[])
@@ -161,8 +164,9 @@ end
 The facts of a release of `kind` (`:stable` or `:beta`) of `repo`, whose clone is `dir`, from
 the commit `base`: the version, the reference and the expected version (the rules of the
 gate, REL1-REL3), REL4 (a stable resolves from General alone; `resolution=false` skips it),
-REL7, the run labels, and the `candidates` to review. The changelog read is the one of the
-working tree: the agent's additions count.
+REL7, the run labels, the `format` problems of `[Unreleased]` (`unreleased_format`: they
+block the request, since the version is read from the changelog), and the `candidates` to
+review. The changelog read is the one of the working tree: the agent's corrections count.
 """
 function release_facts(dir, repo; kind::Symbol, base="origin/main", resolution::Bool=true)
     base_sha = strip(something(git(dir, "rev-parse", base), ""))
@@ -193,10 +197,13 @@ function release_facts(dir, repo; kind::Symbol, base="origin/main", resolution::
     isfile(joinpath(workflows, "Documentation.yml")) && push!(labels, PREVIEW_LABEL)
     c = ref_tag === nothing ? (; review=NamedTuple[], unshipped=NamedTuple[]) :
         candidates(dir, ref_tag, base_sha, changelog; closing=n -> closing_issues(repo, n))
+    bpath = joinpath(dir, "BREAKING.md")
+    format = unreleased_format(changelog, isfile(bpath) ? read(bpath, String) : nothing)
     last_general = isempty(general) ? nothing : maximum(keys(general))
     j = kind === :beta || expected === nothing ? :none : jump(last_general, expected, collect(keys(ct)))
     return (; repo, name, kind, base=String(base_sha), reference, expected, breaking=changed.breaking,
-            feature=changed.feature, rel4, rel7, labels, jump=j, candidates=c.review, unshipped=c.unshipped,
+            feature=changed.feature, rel4, rel7, labels, jump=j, format,
+            candidates=vcat(c.review, wording_candidates(changelog)), unshipped=c.unshipped,
             versions=applied_versions(dir))
 end
 
@@ -245,6 +252,13 @@ function facts_report(f; status=nothing)
     println(io, "| something to release (REL7) | $(isempty(f.rel7) ? "❌ nothing" : "✅ $(length(f.rel7)) change(s)") |")
     println(io, "| run labels | $(join(("`$l`" for l in f.labels), ", ")) |")
     println(io, "| versions applied | ct-agents `$(f.versions.ct_agents)`, ct-conventions `$(f.versions.ct_conventions)`, CTActions `$(f.versions.ctactions)` |")
+    if !isempty(f.format)
+        println(io, "\n### To fix first: the format of `[Unreleased]` ($(length(f.format)))\n")
+        println(io, "The version is read from the changelog: it is right only if the format is. Fix these (the entries of `[Unreleased]` and `BREAKING.md` only, never an older entry), then run `facts` again. `request` refuses until none is left.\n")
+        for p in f.format
+            println(io, "- ❌ ", p)
+        end
+    end
     println(io, "\n### To review ($(length(f.candidates)))\n")
     println(io, "Give each one a verdict in the request (`covered`, `added`: you added the entry, `not-user-facing`) and a note.\n")
     isempty(f.candidates) && println(io, "Nothing.")
@@ -294,6 +308,7 @@ function check_request(dir, path; repo, base="origin/main", resolution::Bool=fal
     f = release_facts(dir, repo; kind=Symbol(kind), base, resolution)
     f.base == get(rel, "base", "") ||
         push!(problems, "`main` moved: the request was made on `$(get(rel, "base", ""))`, `$base` is now `$(f.base)`; run `release.jl facts` again")
+    append!(problems, ("format of `[Unreleased]`: $p" for p in f.format))
     f.expected == v || push!(problems, "the expected version is `$(something(f.expected, "none"))`, not `$v` (REL1, REL2)")
     reviews = Dict(get(x, "id", "") => x for x in get(r, "review", []))
     for c in f.candidates
