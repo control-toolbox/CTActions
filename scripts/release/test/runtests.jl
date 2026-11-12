@@ -854,6 +854,14 @@ failures(results) = [r.message for r in results if r.status === :fail]
         with_gh(() -> @test(let r = ready("o/P", 2); r.ready && any(l -> contains(l.message, "`CI.yml`, runs 2, 9"), r.lines) end), fake)
         fake, _ = fake_github(runs=vcat(good_runs(), [(9, "CI.yml", "completed", "failure")]), jobs=split_jobs("failure"))
         with_gh(() -> @test(notready(ready("o/P", 2), "`CI.yml`, run 9: `test-gpu-kkt / test` did not pass")), fake)
+        # a run cancelled by the concurrency group, superseded by a green one (CTParser 0.9.6, Documentation)
+        fake, _ = fake_github(runs=vcat(good_runs(), [(0, "Documentation.yml", "completed", "cancelled")]),
+                              jobs=merge(good_jobs(), Dict(0 => [("call / build", "cancelled"), ("call / build-gpu", "cancelled")])))
+        with_gh(() -> @test(ready("o/P", 2).ready), fake)
+        # cancelled and nothing after it: not a verdict, it blocks
+        fake, _ = fake_github(runs=[r for r in good_runs() if r[1] != 3] ∪ [(3, "Documentation.yml", "completed", "cancelled")],
+                              jobs=merge(good_jobs(), Dict(3 => [("call / build", "cancelled"), ("call / build-gpu", "skipped")])))
+        with_gh(() -> @test(notready(ready("o/P", 2), "`call / build` did not pass")), fake)
         # GPU: occidata as the fallback is enough; no GPU label is not
         jobs = good_jobs(); jobs[2] = [("test-cpu-github / test", "success"), ("test-gpu-kkt", "skipped"),
                                        ("test-gpu-occidata / test", "success"), ("smoke", "success")]

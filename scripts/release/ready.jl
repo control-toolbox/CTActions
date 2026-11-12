@@ -120,6 +120,9 @@ function ready(repo::AbstractString, pr::Integer)
         # other runner's job skipped): the outcome of a job is its latest one where it ran, in any run
         latest = Dict{String,Tuple{Int,String}}()
         for run in executed
+            # a run cancelled by the concurrency group (two labels in a row) is superseded by the
+            # next run that executed: it is no verdict, and stands only when none came after it
+            run.conclusion == "cancelled" || filter!(kv -> last(kv)[2] != "cancelled", latest)
             jobs_out = something(gh("api", "repos/$repo/actions/runs/$(run.id)/jobs?per_page=100",
                                     "--jq", ".jobs[] | \"\\(.name)\\t\\(.conclusion)\""), "")
             for l in split(jobs_out, '\n'; keepempty=false)
