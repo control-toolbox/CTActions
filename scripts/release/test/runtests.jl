@@ -1355,6 +1355,13 @@ failures(results) = [r.message for r in results if r.status === :fail]
         @test is_release_workflow(".github/workflows/Release.yml@refs/heads/main") && !is_release_workflow(".github/workflows/ReleaseGate.yml")
         # no run on `main` yet (seconds after a push) is not green
         @test with_gh(() -> main_state("o/P", "S"), args -> "").state === :waiting
+        # the base of the CI of `main` is the request's, not the phase-2 comment's: a request
+        # updated after `main` moved has a new base whose CI may still run (CTParser 0.9.6)
+        req(body) = args -> (a = join(args, " "); contains(a, "contents/.releases/v0.9.6.toml?ref=release/v0.9.6") ? body : nothing)
+        @test with_gh(() -> request_base("o/P", v"0.9.6"), req("[release]\nbase = \"S2\"\n")) == "S2"
+        @test with_gh(() -> request_base("o/P", v"0.9.6"), req("[release]\nversion = \"0.9.6\"\n")) === nothing
+        @test with_gh(() -> request_base("o/P", v"0.9.6"), req("not = toml = at all")) === nothing
+        @test with_gh(() -> request_base("o/P", v"0.9.6"), args -> nothing) === nothing
         # a stable after breaking betas: the triple after the betas, never a bump of the last beta (CTParser 0.9.6, not 0.10.0)
         released = [v"0.8.15", v"0.9.0-beta", v"0.9.1-beta", v"0.9.5-beta"]
         @test expected_version(:stable, released; breaking=true, feature=true) == v"0.9.6"
@@ -1520,6 +1527,8 @@ failures(results) = [r.message for r in results if r.status === :fail]
                 contains(a, "--json labels") && return "$ls\n"
             end
             contains(a, "/events") && return "$RELEASE_BOT\n"
+            # the request, on its branch: the base whose CI the release PR waits for
+            contains(a, "contents/.releases/v0.4.3.toml?ref=release/v0.4.3") && return read(joinpath(dir, ".releases", "v0.4.3.toml"), String)
             # the CI of main, at the base of the request; the checks of the PR, at its head
             contains(a, "actions/runs?head_sha=$base") && return "1\t.github/workflows/CI.yml\t$(st[:main])\t$(st[:main] == "completed" ? "success" : "null")\n"
             contains(a, "compare/main...H") && return "0\n"

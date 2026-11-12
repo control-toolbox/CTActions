@@ -49,6 +49,22 @@ function main_state(repo::AbstractString, sha::AbstractString)
 end
 
 """
+    request_base(repo, version) -> Union{Nothing,String}
+
+The base of the request of `version`, read on its branch `release/v<version>`: the commit of
+`main` whose CI the release PR waits for. Not the base of the phase-2 comment: a request
+updated after `main` moved keeps its issue, and its comment, but has a new base (seen on
+CTParser 0.9.6: the old base was green, the new one still running).
+"""
+function request_base(repo::AbstractString, version)
+    out = gh("api", "-H", "Accept: application/vnd.github.raw",
+             "repos/$repo/contents/$(request_paths(version)[1])?ref=release/v$version")
+    out === nothing && return nothing
+    base = try get(get(TOML.parse(out), "release", Dict()), "base", nothing) catch; nothing end
+    return base isa String && !isempty(base) ? base : nothing
+end
+
+"""
     issue_by_title(repo, title) -> Union{Nothing,Int}
 
 The issue of `repo` labelled `release` whose title is `title`, from the REST list: the

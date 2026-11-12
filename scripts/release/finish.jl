@@ -213,7 +213,7 @@ function finish_plan(f, p, ms, r; mode::Symbol, main=nothing, requester=nothing)
     p.state === :blocked && return stop!(p.phase, join(p.blockers, "; "))
     if p.phase == 3 && f.pr === nothing && has(2)
         requester === nothing || return stop!(3, "the release was started by someone who may not: $requester")
-        main === nothing && return (; comments, action=:none, summary="phase 3: cannot read the CI of `main`")
+        main === nothing && return (; comments, action=:none, summary="phase 3: cannot read the request or the CI of `main`")
         main.state === :waiting && return (; comments, action=:none, summary="phase 3: waiting for the CI of `main`")
         main.state === :red &&
             return stop!(3, "the CI of `main` is not green at the base of the request: $(join(("`$w`" for w in main.failed), ", ")) did not pass")
@@ -314,7 +314,9 @@ function finish(repo::AbstractString; managers::AbstractString, act::Symbol=:ste
         started === nothing && return nothing_to_do("v$(f.version): no release PR yet, and the release was not started by the workflow; phases 0 to 3 are the agent's or the human's")
         o = (; mode=Symbol(ms[started].mode), actor=ms[started].by, reason="")
         requester = authorized(repo, o.actor, managers)
-        main = main_state(repo, ms[started].base)
+        # the base of the request, which `start` checks: the comment's is the first one only
+        base = request_base(repo, f.version)
+        main = base === nothing ? nothing : main_state(repo, base)
         r = nothing
     else
         o = optin(repo, f.pr.number, managers)
