@@ -1058,6 +1058,16 @@ failures(results) = [r.message for r in results if r.status === :fail]
         end
     end
 
+    @testset "finish: where the human approves" begin
+        f = (; repo="o/P", name="P", version=v"0.9.6", kind=:stable, main_version=v"0.8.17-beta", main_sha="M",
+             issue=(; number=1, state="OPEN"), issues=1, mentions=0, bot_error=nothing, pr=(; number=2, state="OPEN", merge=nothing),
+             tag=nothing, tag_tree=nothing, release=nothing, registry="General", registered=nothing, general_pr=nothing, jump=:betas)
+        r = (; ready=true, head="H", branch="release/v0.9.6", lines=[(; status=:pass, message="ok")])
+        body(run) = join((c.body for c in finish_plan(f, phase(f), NamedTuple[], r; mode=:supervised, run).comments), "\n")
+        @test contains(body("https://github.com/o/P/actions/runs/7"), "[this run](https://github.com/o/P/actions/runs/7)")
+        @test contains(body(""), "actions/workflows/Release.yml?query=status%3Awaiting") && contains(body(""), "*Approve and deploy*")
+    end
+
     @testset "finish: the opt-in" begin
         function fake(; cross=false, branch="release/v0.4.3", labels="run ci github-runner,release: supervised", actor="ocots", role="admin")
             return function (args)

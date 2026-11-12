@@ -162,7 +162,7 @@ marker): `requester` is `nothing` when the person who started it may, else why n
 is the state of the CI of `main` at the base of the request (`main_state`): the release PR
 is opened once it is green.
 """
-function finish_plan(f, p, ms, r; mode::Symbol, main=nothing, requester=nothing)
+function finish_plan(f, p, ms, r; mode::Symbol, main=nothing, requester=nothing, run="")
     comments = NamedTuple[]
     has(n) = any(m -> m.phase == n && m.state == "done", ms)
     last_m = isempty(ms) ? nothing : last(ms)
@@ -175,11 +175,15 @@ function finish_plan(f, p, ms, r; mode::Symbol, main=nothing, requester=nothing)
     links = progress_links(f)
     pr = f.pr === nothing ? "" : "#$(f.pr.number)"
     merged = f.pr !== nothing && f.pr.state == "MERGED"
-    who = mode === :supervised ? "the merge job waits for an approval of the environment `release` (*Review deployments* on the run of `Release.yml`), then merges with `release.jl merge`" :
+    # where the human approves: the run that posts the comment is the one whose job waits; the
+    # list of the waiting runs when it is not known (a run that found an approval already asked)
+    where = isempty(run) ? "[the waiting run of `Release.yml`](https://github.com/$(f.repo)/actions/workflows/Release.yml?query=status%3Awaiting)" : "[this run]($run)"
+    approve = "open $where, *Review deployments*, tick `release`, *Approve and deploy*"
+    who = mode === :supervised ? "the merge job waits for your approval: $approve; it then merges with `release.jl merge`" :
                                  "the merge, by `release.jl merge`, which checks again what ran on the head commit"
     reg = f.kind === :stable ?
-        (mode === :supervised ? "the registration comment, once, after an approval of the environment `release`" : "the registration comment, once, by `release.jl register --post`") :
-        (mode === :supervised ? "the registration in ct-registry, after an approval of the environment `release`" : "the registration in ct-registry, by `release.jl register-beta`")
+        (mode === :supervised ? "the registration comment, once, after your approval: $approve" : "the registration comment, once, by `release.jl register --post`") :
+        (mode === :supervised ? "the registration in ct-registry, after your approval: $approve" : "the registration in ct-registry, by `release.jl register-beta`")
 
     # the phase comments the issue lacks, in order: the trail, whoever did the step
     reached = Dict(4 => merged || (r !== nothing && r.ready),
@@ -324,7 +328,9 @@ function finish(repo::AbstractString; managers::AbstractString, act::Symbol=:ste
         requester = main = nothing
         r = f.pr.state == "OPEN" ? ready(repo, f.pr.number) : nothing
     end
-    plan = finish_plan(f, p, ms, r; mode=o.mode, main, requester)
+    run = haskey(ENV, "GITHUB_RUN_ID") ?
+        "$(get(ENV, "GITHUB_SERVER_URL", "https://github.com"))/$repo/actions/runs/$(ENV["GITHUB_RUN_ID"])" : ""
+    plan = finish_plan(f, p, ms, r; mode=o.mode, main, requester, run)
     io = IOBuffer()
     done(ok, action) = (; ok, action, mode=o.mode, version=f.version, report=String(take!(io)))
     print(io, opened)
