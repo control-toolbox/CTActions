@@ -9,11 +9,13 @@ on:
     paths:
       - 'scripts/release/**'
       - '.github/workflows/release-*.yml'
+      - '.github/workflows/release.yml'
   push:
     branches: [main]
     paths:
       - 'scripts/release/**'
       - '.github/workflows/release-*.yml'
+      - '.github/workflows/release.yml'
   workflow_dispatch:
 
 concurrency:
