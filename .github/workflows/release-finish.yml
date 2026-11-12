@@ -109,12 +109,12 @@ jobs:
         if: steps.finish.outputs.action != '' && steps.finish.outputs.action != 'none'
         env:
           GH_TOKEN: ${{ github.token }}
-          ACTION: ${{ steps.finish.outputs.action }}
+          NEXT: ${{ steps.finish.outputs.action }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
           wf=${WORKFLOW_REF%@*}; wf=${wf#*/*/}
-          job=$([ "$ACTION" = merge ] && echo merge || echo register)
-          action=$ACTION
+          job=$([ "$NEXT" = merge ] && echo merge || echo register)
+          action=$NEXT
           for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/runs?status=waiting&per_page=100" \
                          --jq ".workflow_runs[] | select(.path == \"$wf\") | .id"); do
             [ "$run" = "$GITHUB_RUN_ID" ] && continue
