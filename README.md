@@ -12,8 +12,10 @@ Centralized GitHub Actions workflows, issue templates and configuration for the
 - **Workflows for the whole organization**, run here on a schedule: the monthly
   [`[compat]` prune](docs/workflows/compat-prune.md) of every CT\* package, the
   maintenance and watchdog of the `occidata` self-hosted runner.
-- The organization's **GitHub App**, [`ct-prune-compat`](docs/conventions/github-app.md),
-  used by the workflows that write to other repositories.
+- The organization's **GitHub Apps**, [`ct-prune-compat`](docs/conventions/github-app.md),
+  used by the workflows that write to other repositories, and
+  [`ct-release`](docs/conventions/github-app.md#ct-release-the-app-of-the-releases), which
+  finishes releases.
 - Issue templates and the Dependabot configuration.
 
 ## Documentation
@@ -26,7 +28,7 @@ labels), the catalog of every workflow with its page, and the conventions:
 | [Labels](docs/conventions/labels.md) | Opt-in triggers on pull requests, and their vocabulary |
 | [Runners](docs/conventions/runners.md) | GitHub-hosted and self-hosted (GPU) runners, split CI |
 | [Secrets and registries](docs/conventions/secrets.md) | Every secret, `ct-registry` |
-| [GitHub App](docs/conventions/github-app.md) | `ct-prune-compat`, and how to use it for something new |
+| [GitHub Apps](docs/conventions/github-app.md) | `ct-prune-compat`, `ct-release`, and how to use one for something new |
 | [Repositories](docs/repositories.md) | Which repository has which workflow, and why |
 | [Recipes](docs/recipes.md) | A new repository, a change across the organization |
 

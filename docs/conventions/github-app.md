@@ -1,4 +1,4 @@
-# The organization's GitHub App: `ct-prune-compat`
+# The organization's GitHub Apps: `ct-prune-compat`, `ct-release`
 
 [← Workflows of control-toolbox](../README.md)
 
@@ -153,3 +153,27 @@ current permissions, or their key is to live outside GitHub Actions; both are li
 remote agents. Sharing `ct-prune-compat` remains reasonable for agents running in
 GitHub Actions with exactly its permissions. Either way the same rules hold: narrowed
 tokens, never on untrusted code, a human merges.
+
+## `ct-release`: the App of the releases
+
+A second App, for [`release-finish.yml`](../workflows/release-finish.md) alone: it merges
+release PRs, posts the registration comment of a stable, pushes betas to ct-registry. Not
+`ct-prune-compat`, for the reasons of the table above: it needs a permission the prune does
+not (*Actions: read*, to read the runs before a merge), its key lives in the environments
+of the packages rather than in CTActions, and a leak of one key does not touch the other
+App.
+
+| Item | Value |
+| --- | --- |
+| Owner | control-toolbox, created by an organization owner (*Settings → Developer settings → GitHub Apps → New*) |
+| Webhook | none (uncheck *Active*) |
+| Repository permissions | Contents: read and write · Pull requests: read and write · Issues: read and write · Actions: read · Checks: read · Metadata: read |
+| Where can it be installed | only on this account |
+| Installation | control-toolbox, **selected repositories**: the packages released with `release-finish.yml`, and **ct-registry** (the betas) |
+| Secrets | `CT_RELEASE_CLIENT_ID` and `CT_RELEASE_PRIVATE_KEY`, **environment** secrets of `release` (and `release-autonomous`) in each package: only the privileged jobs see them, after the environment's approval |
+
+No *Workflows* permission: a release PR changes `Project.toml`, `CHANGELOG.md` and
+`BREAKING.md` only. Who may use it is not decided by the App (an App does not know who
+started a run) but by the workflow: the label of a release manager
+(`CT_RELEASE_MANAGERS`, with the `admin` or `maintain` role), and, in supervised mode, the
+required reviewers of the environment `release`.
