@@ -9,6 +9,10 @@ registers, closes. An agent or a human does phases 0 to 3 of the
 `ReleaseFinish.yml`. Why: a local agent waiting through tens of minutes of CI is a session
 burning context for nothing (CTModels.jl#512); the value of the agent is in phases 0 to 3.
 
+> **Who does what** (the agent, the workflow, you), mode by mode, is in the
+> [release guide](https://github.com/control-toolbox/ct-agents/blob/main/guides/release.md#who-does-what)
+> of ct-agents. This page is about the workflow itself.
+
 ## How it works
 
 Each run reads where the release stands, does the **one** next thing, and stops. Nothing
