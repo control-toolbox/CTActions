@@ -16,8 +16,9 @@ check(status, area, message) = (; status, area, message)
 """
     markers(comments) -> Vector{NamedTuple}
 
-The state markers (`<!-- ct-release phase=N kind=… version=… mode=… state=… -->`) of the
-comments `(author, time, body)`, in order, each with its comment.
+The state markers (`<!-- ct-release phase=N kind=… version=… mode=… state=… [why=…] -->`)
+of the comments `(author, time, body)`, in order, each with its comment; `why` is the digest
+of the reason of a stop or a wait (release-finish posts one stop per reason).
 """
 function markers(comments)
     out = NamedTuple[]
@@ -28,7 +29,7 @@ function markers(comments)
         phase = tryparse(Int, get(kv, "phase", ""))
         phase === nothing && continue
         push!(out, (; phase, kind=get(kv, "kind", ""), version=get(kv, "version", ""),
-                    state=get(kv, "state", ""), time=c.time, body=c.body))
+                    state=get(kv, "state", ""), why=get(kv, "why", ""), time=c.time, body=c.body))
     end
     return out
 end

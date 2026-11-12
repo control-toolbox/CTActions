@@ -956,6 +956,245 @@ failures(results) = [r.message for r in results if r.status === :fail]
         end
     end
 
+    @testset "finish: the plan" begin
+        zero = repeat('0', 40)
+        base = (; repo="o/P", name="P", version=v"0.4.3", kind=:stable, main_version=v"0.4.3", main_sha="M",
+                issue=(; number=1, state="OPEN"), issues=1, mentions=0, bot_error=nothing,
+                pr=(; number=2, state="OPEN", merge=nothing, auto=false), tag=nothing, tag_tree=nothing,
+                release=nothing, registry="General", registered=nothing, general_pr=nothing, jump=:none)
+        at(; kw...) = merge(base, (; kw...))
+        merged = (; number=2, state="MERGED", merge="M", auto=false)
+        green = (; ready=true, head="H", branch="release/v0.4.3", lines=[(; status=:pass, message="`CI.yml`, run 1: 3 job(s) passed")])
+        waiting = (; ready=false, head="H", branch="release/v0.4.3", lines=[(; status=:wait, message="`CI.yml`: a run is in progress")])
+        red = (; ready=false, head="H", branch="release/v0.4.3", lines=[(; status=:fail, message="`CI.yml`, run 1: `test` did not pass")])
+        plan(f, r=nothing; ms=NamedTuple[], mode=:supervised) = finish_plan(f, phase(f), ms, r; mode)
+        "The markers the comments of `p` leave, after `ms`."
+        after(p, ms=NamedTuple[]) = vcat(ms, markers([(; author="b", time="t", body=c.body) for c in p.comments]))
+        phases(p) = [c.phase for c in p.comments]
+
+        # phase 4: ready → the phase comment, then the merge; supervised says where to approve
+        p = plan(at(), green)
+        @test p.action === :merge && phases(p) == [4]
+        @test contains(only(p.comments).body, "Review deployments") && contains(only(p.comments).body, "phase=4 kind=stable version=0.4.3 mode=supervised pr=2 merge=- state=done")
+        @test !contains(plan(at(), green; mode=:autonomous).comments[1].body, "Review deployments")
+        # posted once: the next wake-up only merges
+        p2 = plan(at(), green; ms=after(p))
+        @test p2.action === :merge && isempty(p2.comments)
+        # a run in progress: nothing, said nowhere
+        p = plan(at(), waiting)
+        @test p.action === :none && isempty(p.comments)
+        # red: one stop comment, not repeated for the same reason, repeated for another
+        p = plan(at(), red)
+        @test p.action === :none && phases(p) == [4] && p.comments[1].state == "stopped"
+        @test contains(p.comments[1].body, "❌ Checks green") && contains(p.comments[1].body, "`test` did not pass")
+        @test isempty(plan(at(), red; ms=after(p)).comments)
+        red2 = merge(red, (; head="H2"))
+        @test phases(plan(at(), red2; ms=after(p))) == [4]
+        # once green after a stop, the phase comment comes
+        @test phases(plan(at(), green; ms=after(p))) == [4]
+        # merged by a human, not tagged yet: the comments of 4 and 5, then wait for the tag
+        p = plan(at(pr=merged))
+        @test p.action === :none && phases(p) == [4, 5] && contains(p.comments[1].body, "merged before the workflow saw")
+        # tagged and released: 4 to 6, then the registration comment (stable)
+        f7 = at(pr=merged, tag="M", tag_tree=zero, release=false)
+        p = plan(f7)
+        @test p.action === :register && phases(p) == [4, 5, 6]
+        @test isempty(plan(f7; ms=after(p)).comments)
+        # `main` moved: never automatic, a person is asked, once
+        p = plan(at(pr=merged, tag="M", tag_tree=zero, release=false, main_sha="N"))
+        @test p.action === :none && phases(p) == [4, 5, 6, 7] && p.comments[end].state == "waiting"
+        @test contains(p.comments[end].body, "--on-commit")
+        @test isempty(plan(at(pr=merged, tag="M", tag_tree=zero, release=false, main_sha="N"); ms=after(p)).comments)
+        # posted, waiting for the bot or General: nothing
+        p = plan(at(pr=merged, tag="M", tag_tree=zero, release=false, mentions=1); ms=after(plan(f7)))
+        @test p.action === :none && isempty(p.comments)
+        # a jump over betas: `[merge approved]` is asked of a person, never posted
+        p = plan(at(pr=merged, tag="M", tag_tree=zero, release=false, mentions=1, general_pr=(; number=9, state="OPEN"), jump=:betas))
+        @test p.action === :none && p.comments[end].state == "waiting" && contains(p.comments[end].body, "[merge approved]")
+        # a beta: ct-registry
+        b = at(version=v"0.4.3-beta", kind=:beta, registry="ct-registry", pr=merged, tag="M", tag_tree=zero, release=true)
+        p = plan(b)
+        @test p.action === :register_beta && phases(p) == [4, 5, 6] && !contains(p.comments[1].body, "REL4")
+        # registered: 4 to 7, the final comment, the close; the markers in the order the audit checks
+        f8 = at(pr=merged, tag="M", tag_tree=zero, release=false, mentions=1, registered=zero,
+                general_pr=(; number=9, state="MERGED"))
+        p = plan(f8; mode=:autonomous)
+        @test p.action === :close && phases(p) == [4, 5, 6, 7, 8]
+        ms = after(p)
+        @test [m.phase for m in ms] == [4, 5, 6, 7, 8] && last(ms).state == "done"
+        final = p.comments[end].body
+        @test !contains(final, "❌") && count("✅", final) == 8 && contains(final, "JuliaRegistries/General#9, merged")
+        @test !contains(final, MENTION)
+        # the final comment posted, the close failed: the next wake-up closes, without a second comment
+        p = plan(f8; ms)
+        @test p.action === :close && isempty(p.comments)
+        @test plan(at(pr=merged, tag="M", tag_tree=zero, release=false, registered=zero, issue=(; number=1, state="CLOSED"))).action === :none
+        # blocked: a stop, at the phase status names
+        p = plan(at(pr=merged, tag="M", tag_tree=zero, release=false, registered="U"))
+        @test p.action === :none && p.comments[end].state == "stopped" && p.comments[end].phase == 8
+        @test plan(at(pr=(; number=2, state="CLOSED", merge=nothing, auto=false))).comments[end].phase == 3
+        # phases 0 to 3 are not the workflow's
+        @test plan(at(pr=nothing)).action === :none && isempty(plan(at(pr=nothing)).comments)
+        # REL6: no text of the workflow mentions the bot
+        for f in (at(), f7, b, f8), r in (green, red, nothing), mode in (:supervised, :autonomous)
+            @test all(c -> !contains(c.body, MENTION), plan(f, f.pr.state == "OPEN" ? r : nothing; mode).comments)
+        end
+    end
+
+    @testset "finish: the opt-in" begin
+        function fake(; cross=false, branch="release/v0.4.3", labels="run ci github-runner,release: supervised", actor="ocots", role="admin")
+            return function (args)
+                a = join(args, " ")
+                contains(a, "pr view 2") && return "$cross\t$branch\t$labels\n"
+                contains(a, "issues/2/events") && return actor === nothing ? "" : "someone\n$actor\n"
+                contains(a, "collaborators/") && return role === nothing ? nothing : "$role\n"
+                return nothing
+            end
+        end
+        opt(managers="ocots"; kw...) = with_gh(() -> optin("o/P", 2, managers), fake(; kw...))
+        @test opt() == (; mode=:supervised, actor="ocots", reason="")
+        @test opt(labels="release: autonomous").mode === :autonomous
+        @test opt("alice, OCots").mode === :supervised                # several managers, case-insensitive
+        @test opt(role="maintain").mode === :supervised
+        @test contains(opt(cross=true).reason, "fork")
+        @test contains(opt(branch="feat/x").reason, "release/v")
+        @test contains(opt(labels="run ci github-runner").reason, "no label")
+        @test contains(opt(labels="release: supervised,release: autonomous").reason, "both")
+        @test contains(opt(actor="mallory").reason, "not a release manager")
+        @test contains(opt(actor=nothing).reason, "cannot tell")
+        @test contains(opt(role="write").reason, "not admin or maintain")
+        @test contains(opt(role=nothing).reason, "unknown")
+        @test contains(opt("").reason, "CT_RELEASE_MANAGERS")
+        @test managers_list(" a,B  c ") == ["a", "b", "c"]
+    end
+
+    @testset "finish: a wake-up, on a fake GitHub" begin
+        zero = repeat('0', 40)
+        "A GitHub where P v0.4.3 is registered in General, its issue #7 still open: the close is left."
+        function github(; labels="release: autonomous", pr_state="MERGED")
+            st = Dict{Symbol,Any}(:comments => String[], :open => true, :deleted => false)
+            fake = function (args)
+                a = join(args, " ")
+                contains(a, "contents/Project.toml") && return "name = \"P\"\nversion = \"0.4.3\"\n"
+                contains(a, "commits/main") && return "M\n"
+                contains(a, "issue list") && contains(a, "--state open") && return st[:open] ? "[RELEASE] v0.4.3\n" : ""
+                contains(a, "issue list") && return st[:open] ? "7 OPEN\n" : "7 CLOSED\n"
+                contains(a, "issue view") && contains(a, "body,comments") && return "1\n"
+                contains(a, "issue view") && contains(a, "JuliaRegistrator") &&
+                    return "Registration pull request created: [JuliaRegistries/General/9](https://github.com/JuliaRegistries/General/pull/9)\n"
+                contains(a, "pr list -R o/P") && return "2 $pr_state M false\n"
+                contains(a, "pr view 9 -R JuliaRegistries/General") && return "MERGED\n"
+                contains(a, "pr view 2") && contains(a, "isCrossRepository") && return "false\trelease/v0.4.3\t$labels\n"
+                contains(a, "issues/2/events") && return "ocots\n"
+                contains(a, "collaborators/ocots/permission") && return "admin\n"
+                contains(a, "commits/v") && contains(a, "tree") && return "$zero\n"
+                contains(a, "commits/v") && return "M\n"
+                contains(a, "release view") && contains(a, "isPrerelease") && return "false\n"
+                if contains(a, "issues/7/comments")
+                    if "-F" in args
+                        push!(st[:comments], read(replace(args[findfirst(==("-F"), args) + 1], "body=@" => ""), String))
+                        return "https://github.com/o/P/issues/7#issuecomment-$(length(st[:comments]))\n"
+                    end
+                    return join(("b\tt\t$(base64encode(c))\n" for c in st[:comments]))
+                end
+                contains(a, "--method DELETE") && contains(a, "heads/release/v0.4.3") && (st[:deleted] = true; return "")
+                contains(a, "--method PATCH") && contains(a, "issues/7") && (st[:open] = false; return "closed\n")
+                return nothing
+            end
+            return fake, st
+        end
+        with_registries(Dict("General" => Dict("P" => ["0.4.2", "0.4.3"]))) do
+            fake, st = github()
+            with_gh(fake) do
+                # the job of the environment does nothing that is not the next action
+                r = finish("o/P"; managers="ocots", act=:merge)
+                @test r.ok && r.action === :none && isempty(st[:comments]) && contains(r.report, "now `close`")
+                r = finish("o/P"; managers="ocots")
+                @test r.mode === :autonomous && r.action === :none && !st[:open] && st[:deleted]
+                ms = markers([(; author="b", time="t", body=c) for c in st[:comments]])
+                @test [m.phase for m in ms] == [4, 5, 6, 7, 8]
+                # the phases 2 and 3 were not the workflow's, and this fake shows the audit no trail: it fails, said on the issue
+                @test !r.ok && contains(r.report, "Release audit") && contains(last(st[:comments]), "## Release audit")
+                @test !contains(last(st[:comments]), "<!-- ct-release")         # not a phase comment: the final one stays the last
+                n = length(st[:comments])
+                # closed: the next wake-up does nothing
+                r = finish("o/P"; managers="ocots")
+                @test r.ok && r.action === :none && length(st[:comments]) == n && contains(r.report, "no release in progress")
+            end
+            # no opt-in, or by someone else: nothing, nothing posted
+            for (labels, managers) in (("run ci github-runner", "ocots"), ("release: supervised", "alice"))
+                fake, st = github(; labels)
+                with_gh(fake) do
+                    r = finish("o/P"; managers)
+                    @test r.ok && r.action === :none && isempty(st[:comments]) && st[:open]
+                end
+            end
+        end
+    end
+
+    @testset "register-beta, on a fake GitHub" begin
+        zero = repeat('0', 40)
+        regs = Dict("ct-registry" => Dict("P" => ["0.4.2-beta"]))
+        fake = function (args)
+            a = join(args, " ")
+            contains(a, "contents/Project.toml") && return "name = \"P\"\nversion = \"0.4.3-beta\"\n"
+            contains(a, "commits/main") && return "M\n"
+            contains(a, "issue list") && return "7 OPEN\n"
+            contains(a, "issue view") && contains(a, "body,comments") && return "0\n"
+            contains(a, "issue view") && return ""
+            contains(a, "pr list -R o/P") && return "2 MERGED M false\n"
+            contains(a, "commits/v") && contains(a, "tree") && return "$zero\n"
+            contains(a, "commits/v") && return "M\n"
+            contains(a, "release view") && contains(a, "isPrerelease") && return "true\n"
+            contains(a, "commits/M/comments") && return contains(a, "length") ? "0\n" : ""
+            return nothing
+        end
+        ran = Cmd[]
+        real = RUN[]
+        RUN[] = function (cmd)
+            push!(ran, cmd)
+            # LocalRegistry pushed: ct-registry now holds the beta, at the tree of the tag
+            "--startup-file=no" in cmd.exec && push!(regs["ct-registry"]["P"], "0.4.3-beta")
+            return true
+        end
+        try
+            with_registries(regs) do
+                with_gh(fake) do
+                    ok, msg = register_beta("o/P", v"0.4.3")
+                    @test !ok && contains(msg, "stable")
+                    ok, msg = register_beta("o/P", v"0.4.3-beta")                   # dry run
+                    @test ok && isempty(ran) && contains(msg, "Dry run")
+                    ok, msg = register_beta("o/P", v"0.4.3-beta"; confirm=true, pause=0)
+                    @test ok && length(ran) == 4 && contains(msg, "at the tree of the tag")
+                    @test "M" in ran[2].exec && any(contains("ct-registry"), ran[3].exec)
+                    @test any(contains("LocalRegistry"), ran[4].exec)
+                    # ensure: registered, nothing is run again
+                    ok, msg = register_beta("o/P", v"0.4.3-beta"; confirm=true, pause=0)
+                    @test ok && length(ran) == 4 && contains(msg, "nothing to do")
+                end
+            end
+            # a step fails: reported, nothing checked
+            empty!(ran); regs["ct-registry"]["P"] = ["0.4.2-beta"]
+            RUN[] = cmd -> (push!(ran, cmd); length(ran) < 3)
+            with_registries(regs) do
+                with_gh(fake) do
+                    ok, msg = register_beta("o/P", v"0.4.3-beta"; confirm=true, pause=0)
+                    @test !ok && length(ran) == 3 && contains(msg, "failed")
+                end
+            end
+            # pushed, but the registry never shows it
+            RUN[] = cmd -> true
+            with_registries(regs) do
+                with_gh(fake) do
+                    ok, msg = register_beta("o/P", v"0.4.3-beta"; confirm=true, tries=2, pause=0)
+                    @test !ok && contains(msg, "after 2 reads")
+                end
+            end
+        finally
+            RUN[] = real
+        end
+    end
+
     @testset "command line" begin
         @test command()[1] == 2
         @test command("nope")[1] == 2

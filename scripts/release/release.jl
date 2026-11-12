@@ -20,10 +20,19 @@
 #       --post; refused unless `status` says phase 7, todo; on the merge commit instead of
 #       the issue (--on-commit) only when `main` has moved past it
 #
+#   julia release.jl register-beta --repo OWNER/REPO --version V [--confirm]
+#       the registration of a beta in ct-registry, from the merge commit, with LocalRegistry;
+#       refused unless `status` says phase 7, todo; checked afterwards (a dry run without
+#       --confirm)
 #   julia release.jl audit --repo OWNER/REPO --version V
 #       whether a finished release left the trail the recipe asks for (the comments of the
 #       tracking issue, one registration mention, the PR, the tag, the registry, the clean-up);
 #       read only; exits 1 when a check fails
+#   julia release.jl finish --repo OWNER/REPO --managers "a,b" [--act merge|register|register-beta]
+#       one wake-up of the release-finish workflow on the release in progress: the phase
+#       comments, a stop, the close; or, with --act, the privileged action if it is still
+#       the next one. Writes `action=<merge|register|register-beta|none>` and `mode=` to
+#       $GITHUB_OUTPUT (to standard output when unset)
 #
 # The Markdown report goes to standard output, and to $GITHUB_STEP_SUMMARY when set. Exit
 # code: 0 ready (or nothing to do), 1 blocked, 2 usage error; `status` exits 1 when the
@@ -34,6 +43,8 @@ include(joinpath(@__DIR__, "status.jl"))
 include(joinpath(@__DIR__, "register.jl"))
 include(joinpath(@__DIR__, "ready.jl"))
 include(joinpath(@__DIR__, "audit.jl"))
+include(joinpath(@__DIR__, "register_beta.jl"))
+include(joinpath(@__DIR__, "finish.jl"))
 
 "The value of the option `--name` in `args`, removed from it, or `default`."
 function option!(args, name, default=nothing)
@@ -60,7 +71,9 @@ const USAGE = """
            julia release.jl ready --repo OWNER/REPO --pr N
            julia release.jl merge --repo OWNER/REPO --pr N [--confirm]
            julia release.jl register --repo OWNER/REPO --version V [--post] [--on-commit]
-           julia release.jl audit --repo OWNER/REPO --version V"""
+           julia release.jl register-beta --repo OWNER/REPO --version V [--confirm]
+           julia release.jl audit --repo OWNER/REPO --version V
+           julia release.jl finish --repo OWNER/REPO --managers "a,b" [--act merge|register|register-beta]"""
 
 function release_main(args)
     isempty(args) && (println(stderr, USAGE); return 2)
@@ -109,6 +122,27 @@ function release_main(args)
             ok, message = register(repo, VersionNumber(version); post, on_commit)
             println(message)
             return ok ? 0 : 1
+        elseif command == "register-beta"
+            repo = option!(args, "repo")
+            version = option!(args, "version")
+            (repo === nothing || version === nothing) && throw(ArgumentError("--repo and --version are required"))
+            ok, message = register_beta(repo, VersionNumber(version); confirm="--confirm" in args)
+            println(message)
+            return ok ? 0 : 1
+        elseif command == "finish"
+            repo = option!(args, "repo")
+            repo === nothing && throw(ArgumentError("--repo is required"))
+            managers = option!(args, "managers", "")
+            act = option!(args, "act", "step")
+            act in ("step", "merge", "register", "register-beta") ||
+                throw(ArgumentError("--act is merge, register or register-beta"))
+            r = finish(repo; managers, act=Symbol(replace(act, "-" => "_")))
+            emit(r.report)
+            # for the jobs of the environment: what to do, and in which environment
+            outputs = "action=$(replace(string(r.action), "_" => "-"))\nmode=$(something(r.mode, ""))\n"
+            out = get(ENV, "GITHUB_OUTPUT", "")
+            isempty(out) ? print(outputs) : open(io -> print(io, outputs), out, "a")
+            return r.ok ? 0 : 1
         elseif command == "audit"
             repo = option!(args, "repo")
             version = option!(args, "version")

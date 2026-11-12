@@ -15,6 +15,9 @@ using TOML
 end)
 
 gh(args...) = GH[](collect(String, args))
+
+"The caller of release-finish.yml in a package (docs/workflows/release-finish.md)."
+const FINISH_WORKFLOW = "ReleaseFinish.yml"
 gh_strip(args...) = (out = gh(args...); out === nothing ? nothing : strip(out))
 
 """
@@ -24,10 +27,13 @@ The runs on the head commit `head` of a pull request whose branch is `branch`, o
 run, `fields` (jq expressions) separated by tabs: the runs of its own events
 (`pull_request`) and the ones label-dispatch.yml dispatched on its branch
 (`workflow_dispatch`; docs/workflows/label-dispatch.md). The list of runs does not say which
-pull request a dispatched run belongs to (`pull_requests` is empty): the branch does.
+pull request a dispatched run belongs to (`pull_requests` is empty): the branch does. The
+runs of `FINISH_WORKFLOW` are left out: it is not a check of the PR, it is what waits for
+them, and its own run would always be in progress when it reads the others.
 """
 function pr_runs(repo, head, branch, fields)
-    sel = ".workflow_runs[] | select(.event == \"pull_request\" or (.event == \"workflow_dispatch\" and .head_branch == \"$branch\"))"
+    sel = ".workflow_runs[] | select(.event == \"pull_request\" or (.event == \"workflow_dispatch\" and .head_branch == \"$branch\"))" *
+          " | select(.path | contains(\"$FINISH_WORKFLOW\") | not)"
     return gh("api", "repos/$repo/actions/runs?head_sha=$head&per_page=100",
               "--jq", "$sel | \"" * join(("\\(" * f * ")" for f in fields), "\t") * "\"")
 end
