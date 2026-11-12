@@ -1,0 +1,267 @@
+name: Release finish
+
+# Phases 4 to 8 of a release (ct-agents recipes/release.md) without an agent: the checks,
+# the merge, the tag, the registration, the close. An agent or a human does phases 0 to 3
+# (proposal, tracking issue, release PR) and hands the rest over with a label on the release
+# PR, `release: supervised` or `release: autonomous`, added by a release manager (the
+# organization variable CT_RELEASE_MANAGERS) with the admin or maintain role.
+#
+# Woken by events (the label, the end of the checks, the tag), by hand, and hourly. Each run
+# reads where the release stands (`release.jl finish`, from the facts only), does the one
+# next thing and stops: nothing is remembered between two runs, and every action is
+# "ensure", so a run that comes twice or late does nothing wrong.
+#
+# - `step` holds no secret: with GITHUB_TOKEN it posts the phase comments on the tracking
+#   issue, a stop and its reason, the final comment; it closes the issue, deletes the
+#   release branch and runs the audit.
+# - `merge` and `register` are the only jobs with powers: they run in a GitHub Environment
+#   (`release`, with a required reviewer, in supervised mode: the checkpoints of the recipe
+#   become *Review deployments*; `release-autonomous` in autonomous mode), whose secrets
+#   hold the key of the App ct-release. Each computes the facts again before acting.
+#
+# See docs/workflows/release-finish.md.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'The environment of the privileged jobs in supervised mode (a required reviewer)'
+        required: false
+        type: string
+        default: release
+      autonomous_environment:
+        description: 'The environment of the privileged jobs in autonomous mode (no reviewer)'
+        required: false
+        type: string
+        default: release-autonomous
+      ctactions_ref:
+        description: 'Ref of CTActions the script is checked out from'
+        required: false
+        type: string
+        default: main
+    secrets:
+      # secrets of the environments above, read by the jobs that declare them; the caller
+      # passes nothing
+      CT_RELEASE_CLIENT_ID:
+        required: false
+      CT_RELEASE_PRIVATE_KEY:
+        required: false
+      CT_RELEASE_REGISTRATION_TOKEN:
+        required: false
+
+jobs:
+  step:
+    # the opt-in label, or another event; never a pull request from a fork
+    if: >
+      github.event_name != 'pull_request' ||
+      (github.event.pull_request.head.repo.full_name == github.repository &&
+       startsWith(github.event.label.name, 'release: '))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write         # delete the release branch at the close
+      issues: write           # the comments, the close
+      pull-requests: read
+      actions: write          # read the runs (ready); cancel a stale approval
+      checks: read
+    concurrency:
+      group: release-finish-step-${{ github.repository }}
+      cancel-in-progress: false
+    outputs:
+      action: ${{ steps.pending.outputs.action }}
+      mode: ${{ steps.finish.outputs.mode }}
+    steps:
+      # most runs end here, in seconds: no release in progress
+      - name: A release in progress?
+        id: open
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh issue list -R "$GITHUB_REPOSITORY" --label release --state open --json title \
+                --jq '[.[] | select(.title | startswith("[RELEASE] v"))] | length')
+          echo "open=$n" >> "$GITHUB_OUTPUT"
+          [ "$n" != 0 ] || echo "## Release finish — nothing to do: no open \`[RELEASE]\` issue" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/checkout@v7
+        if: steps.open.outputs.open != '0'
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      - uses: julia-actions/setup-julia@v2
+        if: steps.open.outputs.open != '0'
+        with:
+          version: '1'
+
+      - name: Finish
+        id: finish
+        if: steps.open.outputs.open != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANAGERS: ${{ vars.CT_RELEASE_MANAGERS }}
+        run: julia --startup-file=no .ctactions/scripts/release/release.jl finish --repo "$GITHUB_REPOSITORY" --managers "$MANAGERS"
+
+      # one approval at a time: an approval already asked for the same action is not asked
+      # again; one asked for another action is stale (the step was done by hand): cancelled
+      - name: Pending approvals
+        id: pending
+        if: steps.finish.outputs.action != '' && steps.finish.outputs.action != 'none'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTION: ${{ steps.finish.outputs.action }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: |
+          wf=${WORKFLOW_REF%@*}; wf=${wf#*/*/}
+          job=$([ "$ACTION" = merge ] && echo merge || echo register)
+          action=$ACTION
+          for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/runs?status=waiting&per_page=100" \
+                         --jq ".workflow_runs[] | select(.path == \"$wf\") | .id"); do
+            [ "$run" = "$GITHUB_RUN_ID" ] && continue
+            waiting=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs" --jq '.jobs[] | select(.status == "waiting") | .name')
+            if grep -qE "(^|/ )$job\$" <<< "$waiting"; then
+              action=none
+              echo "An approval of \`$job\` is already asked in run $run: not asked again." >> "$GITHUB_STEP_SUMMARY"
+            else
+              gh run cancel "$run" -R "$GITHUB_REPOSITORY" || true
+              echo "Run $run waited for an approval that is no longer the next action: cancelled." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done
+          echo "action=$action" >> "$GITHUB_OUTPUT"
+
+  merge:
+    needs: step
+    if: needs.step.outputs.action == 'merge'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ needs.step.outputs.mode == 'autonomous' && inputs.autonomous_environment || inputs.environment }}
+    permissions:
+      contents: read
+      actions: write          # wake the workflow up again
+    concurrency:
+      group: release-finish-act-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - name: Repository name
+        id: repo
+        run: echo "name=${GITHUB_REPOSITORY#*/}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/create-github-app-token@v3.3.0
+        id: app
+        with:
+          client-id: ${{ secrets.CT_RELEASE_CLIENT_ID }}
+          private-key: ${{ secrets.CT_RELEASE_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.repo.outputs.name }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: read
+          permission-actions: read
+          permission-checks: read
+
+      - uses: actions/checkout@v7
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+
+      # the merge as the App: a push of GITHUB_TOKEN would not start `Release tag`
+      - name: Merge
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          MANAGERS: ${{ vars.CT_RELEASE_MANAGERS }}
+        run: julia --startup-file=no .ctactions/scripts/release/release.jl finish --repo "$GITHUB_REPOSITORY" --managers "$MANAGERS" --act merge
+
+      - name: Wake up again
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          BRANCH: ${{ github.event.repository.default_branch || 'main' }}
+        run: |
+          wf=${WORKFLOW_REF%@*}
+          gh workflow run "${wf##*/}" -R "$GITHUB_REPOSITORY" --ref "$BRANCH"
+
+  register:
+    needs: step
+    if: needs.step.outputs.action == 'register' || needs.step.outputs.action == 'register-beta'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ needs.step.outputs.mode == 'autonomous' && inputs.autonomous_environment || inputs.environment }}
+    permissions:
+      contents: read
+      actions: write          # wake the workflow up again
+    concurrency:
+      group: release-finish-act-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - name: Repositories of the token
+        id: repo
+        env:
+          ACTION: ${{ needs.step.outputs.action }}
+        run: |
+          name=${GITHUB_REPOSITORY#*/}
+          # a beta is pushed to ct-registry
+          [ "$ACTION" = register-beta ] && name="$name,ct-registry"
+          echo "names=$name" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/create-github-app-token@v3.3.0
+        id: app
+        with:
+          client-id: ${{ secrets.CT_RELEASE_CLIENT_ID }}
+          private-key: ${{ secrets.CT_RELEASE_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ steps.repo.outputs.names }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: read
+          permission-actions: read
+          permission-checks: read
+
+      - uses: actions/checkout@v7
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+
+      # stable: the registration comment, as the App, or as the person of
+      # CT_RELEASE_REGISTRATION_TOKEN when the environment has it (in case the registration
+      # bot does not take a comment of an App)
+      - name: Registration comment
+        if: needs.step.outputs.action == 'register'
+        env:
+          GH_TOKEN: ${{ secrets.CT_RELEASE_REGISTRATION_TOKEN || steps.app.outputs.token }}
+          MANAGERS: ${{ vars.CT_RELEASE_MANAGERS }}
+        run: julia --startup-file=no .ctactions/scripts/release/release.jl finish --repo "$GITHUB_REPOSITORY" --managers "$MANAGERS" --act register
+
+      # beta: LocalRegistry pushes to ct-registry over HTTPS, with the App's token
+      - name: Registration in ct-registry
+        if: needs.step.outputs.action == 'register-beta'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          MANAGERS: ${{ vars.CT_RELEASE_MANAGERS }}
+          SLUG: ${{ steps.app.outputs.app-slug }}
+        run: |
+          gh auth setup-git
+          id=$(gh api "/users/${SLUG}%5Bbot%5D" --jq .id)
+          git config --global user.name "${SLUG}[bot]"
+          git config --global user.email "${id}+${SLUG}[bot]@users.noreply.github.com"
+          julia --startup-file=no .ctactions/scripts/release/release.jl finish --repo "$GITHUB_REPOSITORY" --managers "$MANAGERS" --act register-beta
+
+      - name: Wake up again
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WORKFLOW_REF: ${{ github.workflow_ref }}
+          BRANCH: ${{ github.event.repository.default_branch || 'main' }}
+        run: |
+          wf=${WORKFLOW_REF%@*}
+          gh workflow run "${wf##*/}" -R "$GITHUB_REPOSITORY" --ref "$BRANCH"
