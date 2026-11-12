@@ -846,6 +846,14 @@ failures(results) = [r.message for r in results if r.status === :fail]
         jobs = good_jobs(); jobs[2] = [("test-cpu-github / test", "success"), ("test-gpu-kkt", "skipped"), ("smoke", "success")]
         fake, _ = fake_github(jobs=jobs)
         with_gh(() -> @test(notready(ready("o/P", 2), "`test-gpu-kkt` did not run")), fake)
+        # one run per runner label (CTParser 0.9.6): each skips the other runner's job; the latest
+        # outcome of each job counts, so a fixed kkt run is enough and a failed one still blocks
+        split_jobs(kkt) = merge(good_jobs(), Dict(2 => [("test-cpu-github / test", "success"), ("test-gpu-kkt", "skipped"), ("smoke", "success")],
+                                                  9 => [("test-cpu-github", "skipped"), ("test-gpu-kkt / test", kkt), ("smoke", "success")]))
+        fake, _ = fake_github(runs=vcat(good_runs(), [(9, "CI.yml", "completed", "success")]), jobs=split_jobs("success"))
+        with_gh(() -> @test(let r = ready("o/P", 2); r.ready && any(l -> contains(l.message, "`CI.yml`, runs 2, 9"), r.lines) end), fake)
+        fake, _ = fake_github(runs=vcat(good_runs(), [(9, "CI.yml", "completed", "failure")]), jobs=split_jobs("failure"))
+        with_gh(() -> @test(notready(ready("o/P", 2), "`CI.yml`, run 9: `test-gpu-kkt / test` did not pass")), fake)
         # GPU: occidata as the fallback is enough; no GPU label is not
         jobs = good_jobs(); jobs[2] = [("test-cpu-github / test", "success"), ("test-gpu-kkt", "skipped"),
                                        ("test-gpu-occidata / test", "success"), ("smoke", "success")]
