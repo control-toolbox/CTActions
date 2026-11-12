@@ -79,8 +79,10 @@ function ready(repo::AbstractString, pr::Integer)
         push!(lines, verdict_line(:fail, "$behind commit(s) of `main` are missing: update the branch, the checks run again"))
 
     # what the workflows call for, at the head commit
-    files = split(something(gh_strip("api", "repos/$repo/contents/.github/workflows?ref=$head", "--jq", ".[].name"), ""))
-    files = filter(f -> endswith(f, ".yml") || endswith(f, ".yaml"), files)
+    listing = gh_strip("api", "repos/$repo/contents/.github/workflows?ref=$head", "--jq", ".[].name")
+    # unread is not empty: without the list, nothing would be required
+    listing === nothing && push!(lines, verdict_line(:fail, "cannot read the workflows of $(head[1:min(end, 8)])"))
+    files = filter(f -> endswith(f, ".yml") || endswith(f, ".yaml"), split(something(listing, "")))
     jobs = Dict(f => gated_jobs(something(gh("api", "repos/$repo/contents/.github/workflows/$f?ref=$head",
                                              "-H", "Accept: application/vnd.github.raw"), "")) for f in files)
     gpu_present = [l for l in GPU_LABELS if l in labels]
@@ -99,7 +101,8 @@ function ready(repo::AbstractString, pr::Integer)
     end
     foreach(v -> sort!(v; by=r -> r.id), values(runs))
 
-    for f in sort!(unique(vcat(files, collect(keys(runs)))))
+    # the gate is required whatever the listing says: a release is merged only through it
+    for f in sort!(unique(vcat(files, collect(keys(runs)), ["ReleaseGate.yml"])))
         required = [(id, ls) for (id, ls) in get(jobs, f, []) if any(needed, ls)]
         mandatory = !isempty(required) || f == "ReleaseGate.yml"
         rs = get(runs, f, NamedTuple[])

@@ -63,7 +63,10 @@ A few workflows are not called by packages: they run in `CTActions` itself, on a
 schedule, for the whole organization (the self-hosted runners, the `[compat]` prune).
 When one of them must write to other repositories, it does so as the organization's
 GitHub App, [`ct-prune-compat`](conventions/github-app.md), never with a personal
-token.
+token. A release acts as a second App,
+[`ct-release`](conventions/github-app.md#ct-release-the-app-of-the-releases), whose key
+lives in the environments of the packages: only the jobs a person approves (in supervised
+mode) can use it.
 
 ## The workflows
 
@@ -85,6 +88,7 @@ token.
 | [`formatter.yml`](workflows/formatter.md) | `Formatter.yml` | JuliaFormatter (BlueStyle), as an automatic PR | no (nightly) |
 | [`spell-check.yml`](workflows/spell-check.md) | `SpellCheck.yml` | Spell check with `typos` | every PR |
 | [`release-gate.yml`](workflows/release-gate.md) | `ReleaseGate.yml` | The gate of a release PR: `REL1`–`REL7` (number, changelog, diff, something to release, run labels, General alone, REL6 on every PR); required by `release.jl ready` before a release PR is merged | every PR (passes at once when the version does not change) |
+| [`release.yml`](workflows/release.md) | `Release.yml` | A release from its request (`.releases/vX.toml`, by `release.jl facts` and `request`) to its close, without an agent waiting: the tracking issue, the release PR once `main` is green, the checks, the merge (`release.jl merge`), the registration, the close; the privileged jobs in an Environment (approval in supervised mode) with the App `ct-release` | `release.jl request` (a release manager); then the end of the checks, the tag, hourly |
 | [`release-tag.yml`](workflows/release-tag.md) | `ReleaseTag.yml` | Tag the merge commit of a release PR, create its GitHub release, run the documentation on the tag | push to `main` touching `Project.toml` |
 | [`compat-helper.yml`](workflows/compat-helper.md) | `CompatHelper.yml` | PRs widening `[compat]` to new releases | no (daily) |
 | [`update-readme.yml`](workflows/update-readme.md) | `UpdateReadme.yml` | Regenerate `README.md` from a template and the organization's shared texts | no (weekly) |
@@ -118,6 +122,6 @@ benchmarks: see [Workflows defined in a package](workflows/per-repo.md).
 | [Labels](conventions/labels.md) | Label-gated triggers: the `if:` guard, the `types:` list (no `opened`), the label vocabulary |
 | [Runners](conventions/runners.md) | GitHub-hosted and self-hosted runners: `occidata` (GPU on demand), `kkt`, `pinwheel`; the split CI |
 | [Secrets and registries](conventions/secrets.md) | Every secret, who uses it; `ct-registry` and `SSH_KEY` |
-| [GitHub App](conventions/github-app.md) | `ct-prune-compat`: what it is, how to use it in a new workflow, how to extend it |
+| [GitHub Apps](conventions/github-app.md) | `ct-prune-compat`: what it is, how to use it in a new workflow, how to extend it; `ct-release`, the App of [`release.yml`](workflows/release.md) |
 | [Repositories](repositories.md) | Which repository has which workflow, and why |
 | [Recipes](recipes.md) | A new repository, an organization-wide change, the checklist |

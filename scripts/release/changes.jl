@@ -6,6 +6,12 @@ using TOML
 "The files a release PR changes, and nothing else."
 const RELEASE_FILES = ("Project.toml", "CHANGELOG.md", "BREAKING.md")
 
+"""
+The request of the release of `version` (written by `release.jl facts` and `request`): its
+TOML and its proposal (Markdown). A release PR may add them, and they stay at the tag.
+"""
+request_paths(version) = (".releases/v$version.toml", ".releases/v$version.md")
+
 "The paths whose change reaches a user of the package (REL7). `Project.toml` is judged apart."
 const SHIPPED = (r"^src/", r"^ext/", r"^docs/")
 

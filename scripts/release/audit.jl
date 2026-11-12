@@ -7,8 +7,7 @@ using Base64
 
 @isdefined(facts) || include(joinpath(@__DIR__, "status.jl"))
 
-"The files a release PR may change (REL7: nothing else is a release)."
-const RELEASE_FILES = ("Project.toml", "CHANGELOG.md", "BREAKING.md")
+@isdefined(RELEASE_FILES) || include(joinpath(@__DIR__, "changes.jl"))
 
 "One line of the audit: `:pass`, `:fail` or `:info`, the area it belongs to, and the message."
 check(status, area, message) = (; status, area, message)
@@ -16,8 +15,9 @@ check(status, area, message) = (; status, area, message)
 """
     markers(comments) -> Vector{NamedTuple}
 
-The state markers (`<!-- ct-release phase=N kind=… version=… mode=… state=… -->`) of the
-comments `(author, time, body)`, in order, each with its comment.
+The state markers (`<!-- ct-release phase=N kind=… version=… mode=… state=… [why=…] -->`)
+of the comments `(author, time, body)`, in order, each with its comment; `why` is the digest
+of the reason of a stop or a wait (release workflow posts one stop per reason).
 """
 function markers(comments)
     out = NamedTuple[]
@@ -28,7 +28,8 @@ function markers(comments)
         phase = tryparse(Int, get(kv, "phase", ""))
         phase === nothing && continue
         push!(out, (; phase, kind=get(kv, "kind", ""), version=get(kv, "version", ""),
-                    state=get(kv, "state", ""), time=c.time, body=c.body))
+                    state=get(kv, "state", ""), why=get(kv, "why", ""), mode=get(kv, "mode", ""),
+                    by=get(kv, "by", ""), base=get(kv, "base", ""), time=c.time, body=c.body))
     end
     return out
 end
@@ -123,7 +124,7 @@ function audit_checks(f, t)
             add(:fail, "pr", "#$(f.pr.number) is $(lowercase(f.pr.state))")
         t.pr.auto_merge ? add(:fail, "pr", "auto-merge was enabled on #$(f.pr.number): the merge goes through `release.jl merge`, never GitHub's auto-merge") :
             add(:pass, "pr", "auto-merge was never enabled")
-        extra = [x for x in t.pr.files if !(x in RELEASE_FILES)]
+        extra = [x for x in t.pr.files if !(x in RELEASE_FILES) && !(x in request_paths(v))]
         isempty(extra) ? add(:pass, "pr", "only release files changed ($(join(t.pr.files, ", ")))") :
             add(:fail, "pr", "files beyond the release files: $(join(extra, ", ")) (REL7)")
         changed = t.pr.project_changes

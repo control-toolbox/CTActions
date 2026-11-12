@@ -8,7 +8,9 @@ Caller: `ReleaseGate.yml`, in every package. Its result is one of the conditions
 `release.jl ready` checks before a release PR is merged (see [The merge](#the-merge)).
 
 A PR that does not change the `version` of `Project.toml` is not a release: the job passes
-at once, saying so. Cheap and GitHub-hosted: no label.
+at once, saying so, with the format problems of `[Unreleased]` as information (ℹ️ `CHG2`,
+`release.jl lint-changelog`): a changelog written out of format is said in the PR that
+writes it, not at the release. Cheap and GitHub-hosted: no label.
 
 ## What it checks
 
@@ -94,7 +96,15 @@ julia scripts/release/release.jl ready --repo control-toolbox/CTBase.jl --pr 640
 julia scripts/release/release.jl merge --repo control-toolbox/CTBase.jl --pr 640 [--confirm]
 julia scripts/release/release.jl register --repo control-toolbox/CTBase.jl --version 0.30.12 [--post] [--on-commit]
 julia scripts/release/release.jl audit --repo control-toolbox/CTBase.jl --version 0.30.12
+julia scripts/release/release.jl lint-changelog [<clone>]
+julia scripts/release/release.jl facts --repo control-toolbox/CTBase.jl --kind stable|beta [<clone>]
+julia scripts/release/release.jl request --repo control-toolbox/CTBase.jl .releases/v0.30.13.toml [<clone>]
+julia scripts/release/release.jl register-beta --repo control-toolbox/CTBase.jl --version 0.31.0-beta [--confirm]
+julia scripts/release/release.jl finish --repo control-toolbox/CTBase.jl --managers ocots [--version V --actor L --dir D] [--act start|merge|register|register-beta]
 ```
+
+- **`lint-changelog`**, **`facts`**, **`request`**, **`finish`**, **`register-beta`**: the
+  request of a release and the workflow that runs it, see [release.md](release.md).
 
 - **`status`** says where a release stands, from the facts only — the tracking issue and
   its registration mentions, the release PR and its merge commit, the tag and its tree,

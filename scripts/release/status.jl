@@ -15,6 +15,9 @@ using TOML
 end)
 
 gh(args...) = GH[](collect(String, args))
+
+"The caller of release.yml in a package (docs/workflows/release.md)."
+const RELEASE_WORKFLOW = "Release.yml"
 gh_strip(args...) = (out = gh(args...); out === nothing ? nothing : strip(out))
 
 """
@@ -24,20 +27,32 @@ The runs on the head commit `head` of a pull request whose branch is `branch`, o
 run, `fields` (jq expressions) separated by tabs: the runs of its own events
 (`pull_request`) and the ones label-dispatch.yml dispatched on its branch
 (`workflow_dispatch`; docs/workflows/label-dispatch.md). The list of runs does not say which
-pull request a dispatched run belongs to (`pull_requests` is empty): the branch does.
+pull request a dispatched run belongs to (`pull_requests` is empty): the branch does. The
+runs of `RELEASE_WORKFLOW` are left out: it is not a check of the PR, it is what waits for
+them, and its own run would always be in progress when it reads the others.
 """
 function pr_runs(repo, head, branch, fields)
     sel = ".workflow_runs[] | select(.event == \"pull_request\" or (.event == \"workflow_dispatch\" and .head_branch == \"$branch\"))"
-    return gh("api", "repos/$repo/actions/runs?head_sha=$head&per_page=100",
-              "--jq", "$sel | \"" * join(("\\(" * f * ")" for f in fields), "\t") * "\"")
+    out = gh("api", "repos/$repo/actions/runs?head_sha=$head&per_page=100",
+             "--jq", "$sel | \"" * join(("\\(" * f * ")" for f in (".path", fields...)), "\t") * "\"")
+    out === nothing && return nothing
+    # here rather than in the jq filter, so that the tests see it
+    keep = [last(split(l, '\t'; limit=2)) for l in split(out, '\n'; keepempty=false)
+            if !is_release_workflow(first(split(l, '\t'; limit=2)))]
+    return isempty(keep) ? "" : join(keep, '\n') * "\n"
 end
+
+"Whether the workflow `path` of a run is the release workflow, which waits for the checks and is not one."
+is_release_workflow(path) = basename(first(split(path, '@'))) == RELEASE_WORKFLOW
 
 """
     facts(repo; version=nothing) -> NamedTuple
 
 Everything that says where the release of `version` stands. Without `version`: the
 release in progress (an open `[RELEASE] vX` issue, else an open `release/vX` PR), or the
-version on `main`.
+latest release: the version on `main`, or a higher one of the registries when `main` kept
+an older number (a PR that carries code may not change the version: the gate would take
+it for a release PR).
 """
 function facts(repo::AbstractString; version=nothing)
     project = TOML.parse(something(gh("api", "repos/$repo/contents/Project.toml?ref=main",
@@ -54,7 +69,10 @@ function facts(repo::AbstractString; version=nothing)
                          "--jq", ".[].headRefName | select(startswith(\"release/v\"))")
             m = h === nothing || isempty(h) ? nothing : match(r"release/v(\S+)", h)
         end
-        version = m === nothing ? main_version : VersionNumber(m[1])
+        version = m === nothing ?
+            maximum(vcat(main_version, collect(keys(registry_versions("General", name))),
+                         collect(keys(registry_versions("ct-registry", name))))) :
+            VersionNumber(m[1])
     end
     v = VersionNumber(version)
     kind = isbeta(v) ? :beta : :stable

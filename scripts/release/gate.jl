@@ -57,8 +57,12 @@ function gate(dir::AbstractString, base::AbstractString; labels, text::AbstractS
     rel6 = isempty(where_) ? Result[] :
         [fail("REL6", "the registration bot is mentioned in $(join(where_, " and ")): only the registration comment may mention it")]
 
-    get(head, "version", nothing) == get(old, "version", nothing) &&
-        return vcat([info("—", "the version does not change: not a release PR")], rel6)
+    if get(head, "version", nothing) == get(old, "version", nothing)
+        # not a release: the format of what the next one will ship, said now, in the PR that writes it
+        lint = changelog_lint(dir)
+        return vcat([info("—", "the version does not change: not a release PR")], rel6,
+                    [info("CHG2", "`[Unreleased]`: $p (`release.jl lint-changelog`)") for p in lint])
+    end
 
     results = copy(rel6)
     v = VersionNumber(head["version"])
@@ -120,9 +124,10 @@ function gate(dir::AbstractString, base::AbstractString; labels, text::AbstractS
 
     # the diff of the PR: the release files only, and in Project.toml the version only
     files = split(something(git(dir, "diff", "--name-only", "$base...HEAD"), ""))
-    extra = setdiff(files, RELEASE_FILES)
+    allowed = [RELEASE_FILES..., request_paths(v)...]
+    extra = setdiff(files, allowed)
     isempty(extra) ? push!(results, pass("—", "the PR changes $(join(("`$f`" for f in files), ", ")) only")) :
-        push!(results, fail("—", "a release PR changes $(join(("`$f`" for f in RELEASE_FILES), ", ")) only; it also changes $(join(("`$f`" for f in extra), ", "))"))
+        push!(results, fail("—", "a release PR changes $(join(("`$f`" for f in allowed), ", ")) only; it also changes $(join(("`$f`" for f in extra), ", "))"))
     without_version(head) == without_version(old) ? push!(results, pass("—", "`Project.toml`: the version only")) :
         push!(results, fail("—", "`Project.toml` changes more than the version"))
 
@@ -179,6 +184,19 @@ function gate(dir::AbstractString, base::AbstractString; labels, text::AbstractS
         end
     end
     return results
+end
+
+"""
+    changelog_lint(dir) -> Vector{String}
+
+The format problems of `[Unreleased]` in `CHANGELOG.md` and `BREAKING.md` of the clone `dir`
+(`unreleased_format`); empty for a package without a `CHANGELOG.md`.
+"""
+function changelog_lint(dir)
+    c = joinpath(dir, "CHANGELOG.md")
+    isfile(c) || return String[]
+    b = joinpath(dir, "BREAKING.md")
+    return unreleased_format(read(c, String), isfile(b) ? read(b, String) : nothing)
 end
 
 "The Markdown report of the gate."

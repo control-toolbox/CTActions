@@ -6,20 +6,20 @@ Measured on 2026-10-19 (`gh api repos/control-toolbox/<repo>/contents/.github/wo
 The base set is CI, Coverage, Documentation, Formatter, SpellCheck, CompatHelper,
 UpdateReadme and TagBot, in every repository below; the columns are what varies.
 
-| Repository | DocPreviewCleanup | AutoAssign | AddToProject | Breakage | ReleaseGate, ReleaseTag | Extra |
-| --- | :---: | :---: | :---: | :---: | :---: | --- |
-| CTAppTemplate.jl | — | — | — | ✅ | — | `setup-repo` |
-| CTBase.jl | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| CTModels.jl | ✅ | ✅ | ✅ | ✅ | ✅ | — |
-| CTParser.jl | — | ✅ | ✅ | ✅ | ✅ | split CI |
-| CTFlows.jl | ✅ | ✅ | ✅ | ✅ | ✅ | split CI (three ways), `CPUProbe`/`GPUProbe`, `CITargeted`, `CronIntegration` |
-| CTDirect.jl | ✅ | ✅ | ✅ | ✅ | ✅ | split CI; `Formatter.yml.disabled` |
-| CTSolvers.jl | ✅ | ✅ | ✅ | ✅ | ✅ | split CI (three ways), `CPUProbe`/`GPUProbe`; documentation GPU pass on `kkt` |
-| CTLie.jl | ✅ | ✅ | — | ✅ | ✅ | split CI |
-| OptimalControl.jl | ✅ | ✅ | ✅ | ✅ (packages and applications) | ✅ | split CI, `JOSS`; documentation GPU pass on `occidata` |
-| OptimalControlProblems.jl | — | ✅ | ✅ | — | — | — |
-| CTDiffFlow.jl | — | ✅ | — | — | — | — |
-| CTBenchmarks.jl | — | ✅ | ✅ | — | — | `benchmark-*` |
+| Repository | DocPreviewCleanup | AutoAssign | AddToProject | Breakage | ReleaseGate, ReleaseTag | Release | Extra |
+| --- | :---: | :---: | :---: | :---: | :---: | :---: | --- |
+| CTAppTemplate.jl | — | — | — | ✅ | — | — | `setup-repo` |
+| CTBase.jl | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
+| CTModels.jl | ✅ | ✅ | ✅ | ✅ | ✅ | — | — |
+| CTParser.jl | — | ✅ | ✅ | ✅ | ✅ | ✅ (trial, 2026-11-12) | split CI |
+| CTFlows.jl | ✅ | ✅ | ✅ | ✅ | ✅ | — | split CI (three ways), `CPUProbe`/`GPUProbe`, `CITargeted`, `CronIntegration` |
+| CTDirect.jl | ✅ | ✅ | ✅ | ✅ | ✅ | — | split CI; `Formatter.yml.disabled` |
+| CTSolvers.jl | ✅ | ✅ | ✅ | ✅ | ✅ | — | split CI (three ways), `CPUProbe`/`GPUProbe`; documentation GPU pass on `kkt` |
+| CTLie.jl | ✅ | ✅ | — | ✅ | ✅ | — | split CI |
+| OptimalControl.jl | ✅ | ✅ | ✅ | ✅ (packages and applications) | ✅ | — | split CI, `JOSS`; documentation GPU pass on `occidata` |
+| OptimalControlProblems.jl | — | ✅ | ✅ | — | — | — | — |
+| CTDiffFlow.jl | — | ✅ | — | — | — | — | — |
+| CTBenchmarks.jl | — | ✅ | ✅ | — | — | — | `benchmark-*` |
 
 Split CI and the GPU passes: see [Runners](conventions/runners.md#split-ci). CTActions
 itself runs the organization's workflows (the prune, the `occidata` runner): see the
@@ -42,6 +42,12 @@ ships a `Breakage.yml` to fill in or delete.
 release of a merged one ([release-gate.yml](workflows/release-gate.md),
 [release-tag.yml](workflows/release-tag.md)). Their `Documentation.yml` accepts
 `workflow_dispatch`, so that the release can build the docs of the tag it creates.
+
+**Release where a release runs without an agent waiting** ([release.yml](workflows/release.md)):
+the tracking issue, the PR, the checked merge, the registration and the close, from the
+request `release.jl request` writes; it needs the App `ct-release`, the environments and
+the labels of [Setting it up](workflows/release.md#setting-it-up). CTParser is the first,
+on trial.
 
 **AddToProject only for repositories tracked on the board** (the core packages); not for
 peripheral repositories or the template.
