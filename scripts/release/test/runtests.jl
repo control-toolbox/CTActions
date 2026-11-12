@@ -1420,6 +1420,10 @@ failures(results) = [r.message for r in results if r.status === :fail]
             name != "step" && @test(contains(text, "needs.step.outputs.action == '$(name == "register" ? "register" : name)'"))
         end
         @test !contains(wf, "pull_request_target")
+        # the caller documented inherits the secrets: the environments' secrets reach the jobs only so
+        doc = read(joinpath(@__DIR__, "..", "..", "..", "docs", "workflows", "release.md"), String)
+        caller = match(r"# \.github/workflows/Release\.yml\n([\s\S]*?)```", doc)
+        @test caller !== nothing && contains(caller[1], "    secrets: inherit\n")
         @test contains(jobs["step"], "head.repo.full_name == github.repository")          # never from a fork
         # the environment follows the mode, with a reviewer by default
         @test count("inputs.autonomous_environment || inputs.environment", wf) == 3

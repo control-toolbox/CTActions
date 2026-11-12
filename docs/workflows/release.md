@@ -186,7 +186,15 @@ jobs:
     uses: control-toolbox/CTActions/.github/workflows/release.yml@main
     with:
       version: ${{ inputs.version }}
+    secrets: inherit
 ```
+
+**`secrets: inherit` is required**, an exception to [passing secrets one by
+one](../conventions/secrets.md): the App's key is a secret of the environments, and an
+environment's secrets reach a job of a reusable workflow only when the caller inherits. A
+secret passed by name would be read by the caller's job, which runs in no environment: it
+would be empty, and the privileged jobs would fail at the token (the first real run did).
+Only `start`, `merge` and `register` read them, after the environment's approval.
 
 The names under `workflow_run` are the `name:` of the package's workflows. The file must be
 named `Release.yml`: `release.jl ready` leaves its runs out of the checks of the PR, and

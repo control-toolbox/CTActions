@@ -23,7 +23,9 @@ may release is public; changing it needs an organization owner.
 
 **Pass secrets explicitly, one by one** (`secrets: SSH_KEY: ${{ secrets.SSH_KEY }}`). Use
 `secrets: inherit` (as `UpdateReadme.yml` callers do) only when the reusable workflow
-needs the caller's whole set.
+needs the caller's whole set, or the secrets of an environment: those reach a job of a
+reusable workflow only when the caller inherits (`Release.yml`, see
+[release.md](../workflows/release.md#caller)).
 
 > **Note.** A reusable workflow only sees the secrets it declares under
 > `workflow_call.secrets` and that its caller passes, or every secret with

@@ -50,8 +50,10 @@ on:
         type: string
         default: main
     secrets:
-      # secrets of the environments above, read by the jobs that declare them; the caller
-      # passes nothing
+      # secrets of the environments above, read by the jobs that declare them. They reach a
+      # reusable workflow only through `secrets: inherit` in the caller: passed one by one, they
+      # would be read by the caller's job, which has no environment, and be empty (seen on the
+      # first real run)
       CT_RELEASE_CLIENT_ID:
         required: false
       CT_RELEASE_PRIVATE_KEY:
