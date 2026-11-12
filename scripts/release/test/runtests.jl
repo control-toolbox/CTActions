@@ -365,6 +365,19 @@ failures(results) = [r.message for r in results if r.status === :fail]
                 @test phase(f).phase == 3
             end
         end
+        # nothing in progress, `main` kept an older number than the last release: the release is the registry's
+        with_registries(Dict("General" => Dict("P" => ["0.4.2"]), "ct-registry" => Dict("P" => ["0.5.0-beta", "0.5.1-beta"]))) do
+            with_gh(function (args)
+                    a = join(args, " ")
+                    contains(a, "contents/Project.toml") && return "name = \"P\"\nversion = \"0.4.2\"\n"
+                    contains(a, "commits/main") && return "M\n"
+                    contains(a, "issue list") && return ""
+                    contains(a, "pr list -R o/P") && return ""
+                    return nothing
+                end) do
+                @test facts("o/P").version == v"0.5.1-beta"
+            end
+        end
     end
 
     @testset "facts and register, on a fake GitHub" begin

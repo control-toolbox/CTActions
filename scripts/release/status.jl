@@ -37,7 +37,9 @@ end
 
 Everything that says where the release of `version` stands. Without `version`: the
 release in progress (an open `[RELEASE] vX` issue, else an open `release/vX` PR), or the
-version on `main`.
+latest release: the version on `main`, or a higher one of the registries when `main` kept
+an older number (a PR that carries code may not change the version: the gate would take
+it for a release PR).
 """
 function facts(repo::AbstractString; version=nothing)
     project = TOML.parse(something(gh("api", "repos/$repo/contents/Project.toml?ref=main",
@@ -54,7 +56,10 @@ function facts(repo::AbstractString; version=nothing)
                          "--jq", ".[].headRefName | select(startswith(\"release/v\"))")
             m = h === nothing || isempty(h) ? nothing : match(r"release/v(\S+)", h)
         end
-        version = m === nothing ? main_version : VersionNumber(m[1])
+        version = m === nothing ?
+            maximum(vcat(main_version, collect(keys(registry_versions("General", name))),
+                         collect(keys(registry_versions("ct-registry", name))))) :
+            VersionNumber(m[1])
     end
     v = VersionNumber(version)
     kind = isbeta(v) ? :beta : :stable
