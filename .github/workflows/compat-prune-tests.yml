@@ -9,11 +9,13 @@ on:
   pull_request:
     paths:
       - 'scripts/compat-prune/**'
+      - 'scripts/shared/**'
       - '.github/workflows/compat-prune*.yml'
   push:
     branches: [main]
     paths:
       - 'scripts/compat-prune/**'
+      - 'scripts/shared/**'
       - '.github/workflows/compat-prune*.yml'
   workflow_dispatch:
 

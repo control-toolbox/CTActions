@@ -8,12 +8,14 @@ on:
   pull_request:
     paths:
       - 'scripts/release/**'
+      - 'scripts/shared/**'
       - '.github/workflows/release-*.yml'
       - '.github/workflows/release.yml'
   push:
     branches: [main]
     paths:
       - 'scripts/release/**'
+      - 'scripts/shared/**'
       - '.github/workflows/release-*.yml'
       - '.github/workflows/release.yml'
   workflow_dispatch:

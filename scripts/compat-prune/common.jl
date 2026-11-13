@@ -7,18 +7,9 @@ using Pkg, TOML
 # audit therefore sees one registry snapshot from start to end: `audit.jl` updates the
 # registries once, before anything else.
 
-# The command runner behind `gh`: a function of the argument vector returning standard
-# output. Tests replace it with a fake to run without network; a second include keeps it.
-@isdefined(GH) || global GH = Ref{Any}(args -> read(`gh $args`, String))
-
-"Run `gh` with `args` and return its standard output."
-gh(args...) = GH[](collect(String, args))
-
-"`gh api` call returning the raw body (blobs, file contents)."
-gh_raw(path) = gh("api", path, "-H", "Accept: application/vnd.github.raw")
-
-"`gh api` call returning one field extracted with `--jq`."
-gh_jq(path, jq) = strip(gh("api", path, "--jq", jq))
+# `gh!`, `gh_raw`, `gh_jq`, `gh_api`: a failed command is an error. Tests replace `GH` with a
+# fake to run without network; a second include keeps it.
+@isdefined(gh_api) || include(joinpath(@__DIR__, "..", "shared", "github.jl"))
 
 """
     resolve_env(deps, compat) -> Dict

@@ -136,6 +136,7 @@ Across all themes: [Principles](principles.md). Every workflow passes `lint-work
 | [`ci-main-tests.yml`](workflows/ci-on-main.md#testing-a-change-to-this-mechanism) | Self-test of the changes-only decision (`scripts/ci-main`) | PR or push touching it, by hand |
 | [`breakage-tests.yml`](workflows/breakage-suite.md#tests) | Self-test of the breakage report (`scripts/breakage`) | PR or push touching it, by hand |
 | [`update-readme-tests.yml`](workflows/update-readme.md#how-it-is-built) | Self-test of the README generation (`scripts/update-readme`) | PR or push touching it, by hand |
+| [`shared-tests.yml`](principles.md) | Self-test of the code shared by the tools (`scripts/shared`); the tests of each tool also run on a change there | PR or push touching it, by hand |
 | `lint-workflows.yml` | actionlint on every workflow (expressions, inputs and secrets of reusable workflows, runner labels from `.github/actionlint.yaml`, shellcheck on `run:` scripts) | PR or push touching `.github/`, by hand |
 | [`occidata-runner-maintenance.yml`](workflows/occidata-runner-maintenance.md) | Clean the `occidata` self-hosted runner (git config, caches, logs, TeXLive) | weekly (Mon 02:30 UTC), by hand |
 | [`occidata-runner-watchdog.yml`](workflows/occidata-runner-watchdog.md) | Restart, over SSH, the `occidata` runner jobs that stopped | daily (03:15 UTC), by hand |

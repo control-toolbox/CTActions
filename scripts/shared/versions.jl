@@ -1,5 +1,6 @@
-# Version numbers: REL1-REL3 of ct-conventions. Pure functions, plus the versions a registry
-# holds (read from its Versions.toml on GitHub, so always fresh). Stdlib only.
+# Version numbers: REL1-REL3 of ct-conventions, used by scripts/release and scripts/breakage.
+# Pure functions, plus the versions a registry holds (read from its Versions.toml on GitHub,
+# so always fresh). Stdlib only.
 
 using Downloads, Pkg, TOML
 

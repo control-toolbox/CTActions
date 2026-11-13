@@ -33,25 +33,19 @@ valid_name(s::AbstractString) = occursin(r"^[A-Za-z0-9][A-Za-z0-9._-]*$", s)
 
 # What is read from GitHub, replaced in the tests.
 
-"Run `gh api …`: `(exit code, stdout, stderr)`."
-function gh_api(args...)
-    out, err = IOBuffer(), IOBuffer()
-    p = run(pipeline(ignorestatus(`gh api $args`); stdout=out, stderr=err))
-    return (p.exitcode, String(take!(out)), String(take!(err)))
-end
-
-const API = Ref{Function}(gh_api)
+# `gh_status`: `(exit code, stdout, stderr)`, so that a 404 is told from other failures.
+@isdefined(gh_status) || include(joinpath(@__DIR__, "..", "shared", "github.jl"))
 
 "The repositories of `org`, as `(name, archived, fork)`; throws when GitHub does not answer."
 function list_repos(org::AbstractString)
-    code, out, err = API[]("--paginate", "orgs/$org/repos?per_page=100", "--jq", ".[] | \"\\(.name)\\t\\(.archived)\\t\\(.fork)\"")
+    code, out, err = gh_status("api", "--paginate", "orgs/$org/repos?per_page=100", "--jq", ".[] | \"\\(.name)\\t\\(.archived)\\t\\(.fork)\"")
     code == 0 || error("cannot list the repositories of $org: $(strip(err))")
     return [(n, a == "true", f == "true") for (n, a, f) in (split(l, '\t') for l in split(out, '\n'; keepempty=false))]
 end
 
 "The text of `path` on the default branch of `org/repo`; `nothing` when the file does not exist, an error otherwise."
 function read_file(org::AbstractString, repo::AbstractString, path::AbstractString)
-    code, out, err = API[]("repos/$org/$repo/contents/$path", "-H", "Accept: application/vnd.github.raw")
+    code, out, err = gh_status("api", "repos/$org/$repo/contents/$path", "-H", "Accept: application/vnd.github.raw")
     code == 0 && return out
     occursin("HTTP 404", err) && return nothing
     error("cannot read $path of $org/$repo: $(strip(err))")

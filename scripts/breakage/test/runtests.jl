@@ -199,8 +199,8 @@ names(ts) = [t.name for t in ts]
     @testset "reading GitHub" begin
         calls = Vector{Vector{String}}()
         api = Ref{Any}((0, "", ""))
-        old = API[]
-        API[] = (args...) -> (push!(calls, collect(String, args)); api[])
+        old = GH_RUN[]
+        GH_RUN[] = args -> (push!(calls, args); api[])
         try
             api[] = (0, "A.jl\tfalse\tfalse\nB.jl\ttrue\tfalse\nC.jl\tfalse\ttrue\n", "")
             @test list_repos("org") == [("A.jl", false, false), ("B.jl", true, false), ("C.jl", false, true)]
@@ -215,7 +215,7 @@ names(ts) = [t.name for t in ts]
             api[] = (1, "", "gh: Bad Gateway (HTTP 502)")
             @test_throws ErrorException read_file("org", "A.jl", "Project.toml")  # anything else is
         finally
-            API[] = old
+            GH_RUN[] = old
         end
     end
 

@@ -4,21 +4,12 @@
 
 using TOML
 
-@isdefined(REGISTRY_URLS) || include(joinpath(@__DIR__, "versions.jl"))
-
-# The command runner behind `gh`: a function of the argument vector returning the standard
-# output, or `nothing` when the command fails (a 404, a missing release). Tests replace it.
-@isdefined(GH) || global GH = Ref{Any}(function (args)
-    out = IOBuffer()
-    ok = success(pipeline(`gh $args`; stdout=out, stderr=devnull))
-    return ok ? String(take!(out)) : nothing
-end)
-
-gh(args...) = GH[](collect(String, args))
+@isdefined(REGISTRY_URLS) || include(joinpath(@__DIR__, "..", "shared", "versions.jl"))
+# `gh`, `gh_strip`: `nothing` when the command fails (a 404, a missing release)
+@isdefined(gh_strip) || include(joinpath(@__DIR__, "..", "shared", "github.jl"))
 
 "The caller of release.yml in a package (docs/workflows/release.md)."
 const RELEASE_WORKFLOW = "Release.yml"
-gh_strip(args...) = (out = gh(args...); out === nothing ? nothing : strip(out))
 
 """
     pr_runs(repo, head, branch, fields) -> Union{String,Nothing}
