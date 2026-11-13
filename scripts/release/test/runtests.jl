@@ -1362,6 +1362,15 @@ failures(results) = [r.message for r in results if r.status === :fail]
         end
     end
 
+    @testset "the run to approve on (run_url)" begin
+        withenv("GITHUB_RUN_ID" => nothing) do
+            @test run_url("o/P") == ""
+        end
+        withenv("GITHUB_RUN_ID" => "42", "GITHUB_SERVER_URL" => nothing) do
+            @test run_url("o/P") == "https://github.com/o/P/actions/runs/42"
+        end
+    end
+
     @testset "the release commit and the CI of main (phase 3)" begin
         dir = mktempdir()
         write(joinpath(dir, "Project.toml"), "name = \"P\"\nversion = \"0.8.17-beta\"\n\n[compat]\nversion = \"1\"\n")
