@@ -33,6 +33,10 @@ jobs:
 | `assignees` | yes | Comma-separated users (or `team:<slug>`) to pick from |
 | `numOfAssignee` | yes | How many of them to assign |
 
+Runs are serialized per issue or PR (`concurrency`, none cancelled): a release PR is opened,
+closed and reopened within seconds, and two assignments at once fail with *Assignee has
+already been taken*.
+
 No secrets: it uses `GITHUB_TOKEN` (`issues: write`, `pull-requests: write`). This
 workflow reacts to `opened` on purpose: assignment is an "on creation" action (see
 [Labels](../conventions/labels.md)).

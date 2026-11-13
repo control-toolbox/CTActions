@@ -10,6 +10,13 @@ on:
         required: true
         type: string
 
+# One run at a time per issue or PR, none cancelled: a release PR is opened, closed and reopened
+# within seconds, so `opened` and `reopened` start two runs together, and two assignments at
+# once fail with "Assignee has already been taken" (422).
+concurrency:
+  group: auto-assign-${{ github.repository }}-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   run:
     # A pull request from a fork has a read-only token: assigning would fail with a 403.
