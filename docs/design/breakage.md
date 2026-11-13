@@ -98,8 +98,9 @@ release's installability.
 - The `Project.toml` files are read on the default branch at the time of the run: a package
   that starts to load yours appears as *a new target, no result on the base* on the first
   release pull request after.
-- `plan` and `break` are exercised by the callers only; the scripts (`consumers.jl`,
-  `report.jl`) have tests, including the ecosystem as read on 2026-10-19.
+- The jobs' wiring is exercised by the callers only; what they decide is in tested scripts
+  (`consumers.jl`, `cell.jl`, `report.jl`, `pr.jl`), including the ecosystem as read on
+  2026-10-19.
 
 ## Timeline
 

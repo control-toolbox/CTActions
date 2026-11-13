@@ -6,6 +6,8 @@ using Test, TOML
 
 include(joinpath(@__DIR__, "..", "report.jl"))
 include(joinpath(@__DIR__, "..", "consumers.jl"))
+include(joinpath(@__DIR__, "..", "cell.jl"))
+include(joinpath(@__DIR__, "..", "pr.jl"))
 
 cell(name, version, status; brk="test") =
     Dict("name" => name, "owner" => "o", "version" => version, "break" => brk, "tag" => version == "stable" ? "v1.0.0" : "main",
@@ -102,6 +104,25 @@ cell(name, version, status; brk="test") =
             text = read(joinpath(d, "pr", "summary.md"), String)
             @test contains(text, "No downstream package to test: nothing to do") && !contains(text, "| Package |")
             @test contains(text, "no downstream release broken")
+        end
+    end
+
+    @testset "--base-sha reads the two versions" begin
+        mktempdir() do d
+            git(args...) = run(pipeline(`git -C $d $args`; stdout=devnull, stderr=devnull))
+            git("init", "-q"); git("config", "user.email", "t@t"); git("config", "user.name", "t")
+            write(joinpath(d, "Project.toml"), "name = \"P\"\nversion = \"0.30.11\"\n"); git("add", "."); git("commit", "-qm", "base")
+            sha = strip(read(`git -C $d rev-parse HEAD`, String))
+            write(joinpath(d, "Project.toml"), "name = \"P\"\nversion = \"0.31.0\"\n")
+            cd(d) do
+                @test versions_at(sha) == ("0.30.11", "0.31.0")
+                mkpath("cells")
+                redirect_stdout(devnull) do
+                    # a release without baseline: blocked, so the versions were read
+                    @test report_main(["cells", "out", "--expected", "0", "--base-sha", sha]) == 1
+                    @test report_main(["cells", "out2", "--expected", "0", "--base-sha", ""]) == 0   # not a PR
+                end
+            end
         end
     end
 end
@@ -360,3 +381,180 @@ names(ts) = [t.name for t in ts]
     end
 end
 
+# --- cell.jl: one downstream package at one version -----------------------------------------
+
+"Run `f` with commands answered by `answer(cmd_text, dir)` → `(ok, stdout)`; the commands go to `calls`."
+function with_commands(f, answer)
+    calls = String[]
+    real = RUN[]
+    RUN[] = function (cmd)
+        text = join(cmd.exec, " ")
+        push!(calls, text)
+        return answer(text, cmd.dir)
+    end
+    try
+        f(calls)
+    finally
+        RUN[] = real
+    end
+end
+
+@testset "cell" begin
+    @testset "pick_ref" begin
+        @test pick_ref("latest", "main", ["v2", "v1"]) == "main"
+        @test pick_ref("stable", "main", ["v2", "v1"]) == "v2"
+        @test pick_ref("stable", "main", String[]) === nothing
+        @test pick_ref("v1.2.3", "main", String[]) == "v1.2.3"
+    end
+
+    @testset "program" begin
+        @test occursin("Pkg.test()", program("test")) && occursin("Pkg.activate(\".\")", program("test"))
+        @test occursin("docs/make.jl", program("doc")) && occursin("Pkg.activate(\"docs\")", program("doc"))
+        @test_throws ErrorException program("bench")
+    end
+
+    "A world where the clone works, the tags are `tags`, a checkout works, the test answers `test_ok`."
+    world(; clone=true, tags="v2.0.0\nv1.0.0\n", checkout=true, test_ok=true) = function (text, dir)
+        startswith(text, "git clone") && return (clone, "")
+        occursin("rev-parse", text) && return (true, "main\n")
+        occursin("tag -l", text) && return (true, tags)
+        occursin("checkout", text) && return (checkout, "")
+        occursin("fetch", text) && return (true, "")
+        (occursin("Pkg.test()", text) || occursin("docs/make.jl", text)) && return (test_ok, "")
+        occursin("Pkg.dependencies", text) && return (true, "v0.30.11")
+        return (false, "")
+    end
+
+    mktempdir() do d
+        out = joinpath(d, "cells")
+        src = joinpath(d, "CTBase.jl"); mkpath(src)
+        kw = (name="A", owner="o", source=src, out=out, job="https://x/run")
+        redirect_stdout(devnull) do
+            with_commands(world()) do calls
+                path = run_cell(; kw..., brk="test", version="stable")
+                c = TOML.parsefile(path)
+                @test basename(path) == "A-test-stable.toml"
+                @test c == Dict("name" => "A", "owner" => "o", "break" => "test", "version" => "stable", "tag" => "v2.0.0",
+                                "compat" => "v0.30.11", "status" => "pass", "job" => "https://x/run")
+                @test any(contains("git clone --quiet https://github.com/o/A.jl"), calls)
+                @test any(contains("checkout --quiet v2.0.0"), calls)
+            end
+            with_commands(world(test_ok=false)) do calls
+                c = TOML.parsefile(run_cell(; kw..., brk="doc", version="latest"))
+                @test c["status"] == "fail" && c["tag"] == "main" && c["break"] == "doc"
+                @test !any(contains("checkout"), calls)                     # latest: the clone's branch
+                @test any(contains("--project=docs"), calls)
+            end
+            with_commands(world(tags="")) do calls
+                c = TOML.parsefile(run_cell(; kw..., brk="test", version="stable"))
+                @test c["status"] == "no_tag" && c["tag"] == "none" && c["compat"] == ""
+                @test !any(contains("Pkg.test()"), calls)
+            end
+            with_commands(world(checkout=false)) do _
+                c = TOML.parsefile(run_cell(; kw..., brk="test", version="v9.9.9"))
+                @test c["status"] == "no_tag"                               # a ref that does not exist
+            end
+            with_commands(world(clone=false)) do _
+                @test run_cell(; kw..., brk="test", version="latest") === nothing
+            end
+        end
+        @test cell_main(["--name", "A"]) == 2
+        @test cell_main(["--name", "A", "--owner", "o", "--break", "bench", "--version", "latest", "--source", src, "--out", out]) == 2
+    end
+
+    @testset "SRC_NAME is the directory without .jl" begin
+        seen = Ref{Any}(nothing)
+        mktempdir() do d
+            src = joinpath(d, "CTBase.jl"); mkpath(src)
+            RUN_real = RUN[]
+            RUN[] = function (cmd)
+                text = join(cmd.exec, " ")
+                startswith(text, "git clone") && return (true, "")
+                occursin("rev-parse", text) && return (true, "main")
+                cmd.env === nothing || seen[] !== nothing || (seen[] = filter(e -> startswith(e, "SRC_NAME=") || startswith(e, "SOURCE="), cmd.env))
+                return (true, "")
+            end
+            try
+                redirect_stdout(devnull) do
+                    run_cell(; name="A", owner="o", brk="test", version="latest", source=src * "/", out=joinpath(d, "c"))
+                end
+            finally
+                RUN[] = RUN_real
+            end
+            @test "SRC_NAME=CTBase" in seen[]
+            @test "SOURCE=$src" in seen[]
+        end
+    end
+end
+
+# --- pr.jl: the pull request, the baseline, the comment -------------------------------------
+
+"Run `f` with `gh` answered by `table` (substring of the arguments => output | nothing); the calls go to `calls`."
+function with_gh_table(f, table)
+    calls = Vector{Vector{String}}()
+    real = GH[]
+    GH[] = function (args)
+        push!(calls, args)
+        line = join(args, " ")
+        for (needle, out) in table
+            occursin(needle, line) && return out
+        end
+        return nothing
+    end
+    try
+        f(calls)
+    finally
+        GH[] = real
+    end
+end
+
+@testset "pr" begin
+    with_gh_table(["pulls/7" => "abc false\n"]) do _
+        @test pr_facts("o/r", "7") == ("abc", false)
+    end
+    with_gh_table(["pulls/7" => "abc true\n"]) do _
+        @test pr_facts("o/r", "7") == ("abc", true)
+    end
+
+    @testset "baseline: the run outside a pull request, or none" begin
+        with_gh_table(["actions/workflows/Breakage.yml/runs" => "42\n", "run download" => ""]) do calls
+            @test baseline_run("o/r", "Breakage.yml", "abc") == "42"
+            @test occursin("head_sha=abc&status=completed", join(calls[end], " "))
+            @test occursin("select(.event != \"pull_request\")", join(calls[end], " "))
+            @test redirect_stdout(() -> download_baseline("o/r", "Breakage.yml", "abc", "packages", "b"), devnull)
+            @test calls[end] == ["run", "download", "42", "--repo", "o/r", "--name", "breakage-packages", "--dir", "b"]
+        end
+        with_gh_table(["actions/workflows" => "\n"]) do _
+            @test baseline_run("o/r", "Breakage.yml", "abc") === nothing
+            @test !redirect_stdout(() -> download_baseline("o/r", "Breakage.yml", "abc", "packages", "b"), devnull)
+        end
+        with_gh_table(["actions/workflows" => "42\n"]) do _                    # the artifact is gone
+            @test !redirect_stdout(() -> download_baseline("o/r", "Breakage.yml", "abc", "packages", "b"), devnull)
+        end
+    end
+
+    @testset "comment: updated when the group has one, created otherwise" begin
+        with_gh_table(["issues/7/comments --jq" => "11\n12\n", "--method PATCH" => "{}"]) do calls
+            @test upsert_comment("o/r", "7", "packages", "body") == :updated
+            @test calls[end] == ["api", "--method", "PATCH", "repos/o/r/issues/comments/11", "-f", "body=body"]
+            @test occursin("startswith(\"<!-- ct-breakage:packages -->\")", join(calls[1], " "))
+        end
+        with_gh_table(["issues/7/comments --jq" => "", "--method POST" => "{}"]) do calls
+            @test upsert_comment("o/r", "7", "packages", "body") == :created
+            @test calls[end] == ["api", "--method", "POST", "repos/o/r/issues/7/comments", "-f", "body=body"]
+        end
+    end
+
+    @testset "command line" begin
+        @test pr_main(String[]) == 2
+        @test pr_main(["nope"]) == 2
+        @test pr_main(["facts", "--repo", "o/r"]) == 2
+        with_gh_table(["pulls/7" => "abc false\n"]) do _
+            code, out = captured(() -> pr_main(["facts", "--repo", "o/r", "--pr", "7"]))
+            @test code == 0 && out == "base_sha=abc\nfork=false\n"
+        end
+        with_gh_table(Pair{String,Any}[]) do _
+            @test redirect_stderr(() -> pr_main(["facts", "--repo", "o/r", "--pr", "7"]), devnull) == 1
+        end
+    end
+end

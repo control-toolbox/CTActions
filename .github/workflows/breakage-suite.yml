@@ -213,50 +213,18 @@ jobs:
 
       - uses: julia-actions/julia-buildpkg@v1
 
+      - uses: actions/checkout@v7
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      # a downstream failure is a result (the cell says `fail`), not a failure of the job
       - name: Test ${{ matrix.target.name }} (${{ matrix.target.break || 'test' }}, ${{ matrix.version }})
         run: |
-          set -uo pipefail
-          SRC_NAME=$(basename "$PWD" .jl)
-          git clone --quiet "https://github.com/$OWNER/$NAME.jl" repo
-          cd repo
-          case "$VERSION" in
-            latest) TAG=$(git rev-parse --abbrev-ref HEAD) ;;
-            stable) git fetch --quiet --tags; TAG=$(git tag -l "v*" --sort=-creatordate | head -n1)
-                    if [ -n "$TAG" ]; then git checkout --quiet "$TAG"; fi ;;
-            *)      TAG="$VERSION"; git fetch --quiet --tags; git checkout --quiet "$TAG" || TAG="" ;;
-          esac
-          status=pass
-          # the single-quoted program is Julia: $(…) in it is Julia's interpolation
-          # shellcheck disable=SC2016
-          if [ -z "$TAG" ]; then
-            status=no_tag
-          elif ! SRC_NAME="$SRC_NAME" julia --startup-file=no -e '
-                using Pkg
-                if ENV["BREAK"] == "test"
-                    Pkg.activate("."); Pkg.instantiate(); Pkg.develop(path=".."); Pkg.build(); Pkg.test()
-                elseif ENV["BREAK"] == "doc"
-                    Pkg.activate("docs"); Pkg.instantiate(); Pkg.develop(path=".."); Pkg.build(); include("docs/make.jl")
-                else
-                    error("break must be test or doc, not $(ENV["BREAK"])")
-                end'; then
-            status=fail
-          fi
-          [ "$BREAK" = doc ] && PROJ=docs || PROJ=.
-          COMPAT=$(SRC_NAME="$SRC_NAME" julia --startup-file=no --project="$PROJ" -e '
-                using Pkg; v = get(Dict(p.name => p.version for p in values(Pkg.dependencies())), ENV["SRC_NAME"], nothing)
-                v === nothing || print("v", v)' 2> /dev/null || true)
-          mkdir -p ../cells
-          cat > "../cells/$NAME-$BREAK-$VERSION.toml" <<TOML
-          name = "$NAME"
-          owner = "$OWNER"
-          break = "$BREAK"
-          version = "$VERSION"
-          tag = "${TAG:-none}"
-          compat = "$COMPAT"
-          status = "$status"
-          job = "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-          TOML
-          echo "$NAME ($BREAK, $VERSION at ${TAG:-no tag}): $status"
+          julia --startup-file=no .ctactions/scripts/breakage/cell.jl --name "$NAME" --owner "$OWNER" \
+            --break "$BREAK" --version "$VERSION" --source . --out cells \
+            --job "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -306,11 +274,8 @@ jobs:
           NUMBER: ${{ github.event.pull_request.number || github.event.inputs.pr }}
         run: |
           [ -n "$NUMBER" ] || exit 0
-          {
-            echo "number=$NUMBER"
-            gh api "repos/$GITHUB_REPOSITORY/pulls/$NUMBER" \
-              --jq '"base_sha=\(.base.sha)", "fork=\(.head.repo.fork // false)"'
-          } >> "$GITHUB_OUTPUT"
+          echo "number=$NUMBER" >> "$GITHUB_OUTPUT"
+          julia --startup-file=no .ctactions/scripts/breakage/pr.jl facts --repo "$GITHUB_REPOSITORY" --pr "$NUMBER" >> "$GITHUB_OUTPUT"
 
       # On a PR: the run of this workflow on the base commit, outside a PR (push or dispatch)
       - name: Baseline
@@ -321,14 +286,8 @@ jobs:
           WORKFLOW_REF: ${{ github.workflow_ref }}
           GROUP: ${{ inputs.group }}
         run: |
-          file=$(basename "${WORKFLOW_REF%%@*}")
-          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$file/runs?head_sha=$BASE_SHA&status=completed&per_page=50" \
-                  --jq '[.workflow_runs[] | select(.event != "pull_request")][0].id // empty')
-          if [ -n "$run" ] && gh run download "$run" --repo "$GITHUB_REPOSITORY" --name "breakage-$GROUP" --dir baseline; then
-            echo "Baseline: run $run on $BASE_SHA"
-          else
-            echo "No baseline for $BASE_SHA"
-          fi
+          julia --startup-file=no .ctactions/scripts/breakage/pr.jl baseline --repo "$GITHUB_REPOSITORY" \
+            --workflow "$(basename "${WORKFLOW_REF%%@*}")" --sha "$BASE_SHA" --group "$GROUP" --dir baseline
 
       - name: Report
         id: report
@@ -342,11 +301,7 @@ jobs:
           expected=$(( $(jq length <<< "$TARGETS") * $(jq length <<< "$VERSIONS") ))
           args=(cells out --expected "$expected" --group "$GROUP" --sha "$SHA")
           [ -f baseline/breakage.toml ] && args+=(--baseline baseline/breakage.toml)
-          if [ -n "$BASE_SHA" ]; then
-            v0=$(git show "$BASE_SHA:Project.toml" | sed -n 's/^version = "\(.*\)"/\1/p')
-            v1=$(sed -n 's/^version = "\(.*\)"/\1/p' Project.toml)
-            args+=(--base-version "$v0" --head-version "$v1")
-          fi
+          [ -n "$BASE_SHA" ] && args+=(--base-sha "$BASE_SHA")
           mkdir -p cells
           set +e
           julia --startup-file=no .ctactions/scripts/breakage/report.jl "${args[@]}"
@@ -362,22 +317,13 @@ jobs:
       # fail the job (and hide the verdict below). The report is in the run's summary.
       - name: Comment on the PR
         if: steps.pr.outputs.number != '' && steps.pr.outputs.fork != 'true'
-        uses: actions/github-script@v9
         env:
-          MARKER: <!-- ct-breakage:${{ inputs.group }} -->
+          GH_TOKEN: ${{ github.token }}
           PR: ${{ steps.pr.outputs.number }}
-        with:
-          script: |
-            const body = require('fs').readFileSync('out/summary.md', 'utf8')
-            const issue_number = Number(process.env.PR)
-            const comments = await github.paginate(github.rest.issues.listComments,
-              { owner: context.repo.owner, repo: context.repo.repo, issue_number })
-            const mine = comments.find(c => c.body && c.body.startsWith(process.env.MARKER))
-            if (mine) {
-              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: mine.id, body })
-            } else {
-              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number, body })
-            }
+          GROUP: ${{ inputs.group }}
+        run: |
+          julia --startup-file=no .ctactions/scripts/breakage/pr.jl comment --repo "$GITHUB_REPOSITORY" \
+            --pr "$PR" --group "$GROUP" --file out/summary.md
 
       - name: Verdict
         env:
