@@ -72,7 +72,8 @@ repository:
 
 Besides, a file never affects any job when it is a root file of documentation or
 configuration: `*.md` (`AGENTS.md`, `CHANGELOG.md`, `README.md`…), `.gitignore`, `LICENSE`,
-`CITATION.cff`, `_typos.toml`, `.markdownlint.json`, `.JuliaFormatter.toml`, `formatter.lock`.
+`CITATION.cff`, `_typos.toml`, `.markdownlint.json`, `.JuliaFormatter.toml`, `formatter.lock`, and the issue and
+pull request templates (`.github/ISSUE_TEMPLATE/`, `.github/pull_request_template.md`): no workflow reads them.
 A file in one of the known directories of another scope (`docs/` for the tests, `test/` for
 the documentation) does not affect this one. **Anything else counts**: `.github/` (a
 workflow change can change what runs), a new top-level directory, a file the script does not

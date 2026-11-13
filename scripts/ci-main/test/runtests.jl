@@ -77,7 +77,13 @@ end
         @test !relevant(s, "CHANGELOG.md")
         @test !relevant(s, "AGENTS.md")
         @test !relevant(s, ".gitignore")
+        @test !relevant(s, ".github/ISSUE_TEMPLATE/bug.yml")
+        @test !relevant(s, ".github/ISSUE_TEMPLATE/config.yml")
+        @test !relevant(s, ".github/pull_request_template.md")
         @test relevant(s, ".github/workflows/CI.yml")   # unknown: run
+        @test relevant(s, ".github/dependabot.yml")
+        @test relevant(s, ".github/ISSUE_TEMPLATE")      # the folder itself, not a template
+        @test relevant(s, "sub/.github/ISSUE_TEMPLATE/bug.yml")
         @test relevant(s, "newdir/file.jl")
     end
 end
