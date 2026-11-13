@@ -89,7 +89,7 @@ forward-slash glob.
   `pull_request` run, or a run dispatched by its label, which carries the pull request in its
   `pr` input) whose `Project.toml` sets a stable version other than the base's (`release.jl stable-release`),
   the `add-ct-registry` action adds nothing, so the tests see what General serves (`REL4`).
-  Its input `skip_on_stable: 'false'` keeps the registry; [Breakage](breakage.md) sets it,
+  Its input `skip_on_stable: 'false'` keeps the registry; [Breakage](breakage-suite.md) sets it,
   since the dependents may need betas of their own. When the base `Project.toml` cannot be
   read, the registry is added as usual.
 - **Optional test artifacts:** when both upload inputs are non-empty, the requested path

@@ -26,7 +26,7 @@ package's tests select. Whether a specifier is still used depends on every packa
 ecosystem, on every supported Julia version, and on their test and docs environments.
 The prune answers that question for all of them together.
 
-It **only prunes**. Widening stays with CompatHelper (and [Breakage](breakage.md)); an
+It **only prunes**. Widening stays with CompatHelper (and [Breakage](breakage-suite.md)); an
 entry whose newest specifier is never selected is reported, with what caps it, but not
 changed.
 

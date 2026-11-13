@@ -94,7 +94,7 @@ standard output and in the job summary.
 | Command | By |
 | --- | --- |
 | `gate`, `registrable` | [`release-gate.yml`](../workflows/release-gate.md) |
-| `stable-release` | the action `add-ct-registry`, in `ci.yml`, `documentation.yml`, `breakage-suite.yml`, `breakage.yml` |
+| `stable-release` | the action `add-ct-registry`, in `ci.yml`, `documentation.yml`, `breakage-suite.yml` |
 | `tag-plan` | [`release-tag.yml`](../workflows/release-tag.md) |
 | `finish`, `register`, `register-beta`, `merge` | [`release.yml`](../workflows/release.md) |
 | all | an agent following the recipe, or a person ([doing it by hand](https://github.com/control-toolbox/ct-agents/blob/main/guides/release.md#doing-it-by-hand)) |
