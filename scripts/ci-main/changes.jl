@@ -53,8 +53,8 @@ const SCOPES = Dict(
 "The top-level directories that belong to a scope above: a change in one of them leaves the other scopes alone."
 const KNOWN_DIRS = ["src/", "ext/", "test/", "docs/"]
 
-"Root files that change nothing a job runs: documentation and configuration of the repository."
-const IGNORED = r"^(?:[^/]+\.md|\.gitignore|LICENSE|CITATION\.cff|_typos\.toml|\.markdownlint\.json|\.JuliaFormatter\.toml|formatter\.lock)$"
+"Files that change nothing a job runs: the root documentation and configuration of the repository, and the issue and pull request templates."
+const IGNORED = r"^(?:[^/]+\.md|\.gitignore|LICENSE|CITATION\.cff|_typos\.toml|\.markdownlint\.json|\.JuliaFormatter\.toml|formatter\.lock|\.github/ISSUE_TEMPLATE/.+|\.github/pull_request_template\.md)$"
 
 allowed_actors() = filter(!isempty, strip.(split(get(ENV, "CT_CI_CHANGES_ONLY_ACTORS", join(DEFAULT_ACTORS, ",")), ",")))
 
@@ -63,8 +63,8 @@ allowed_actors() = filter(!isempty, strip.(split(get(ENV, "CT_CI_CHANGES_ONLY_AC
 
 Whether a change to `file` (a path from the root) can affect the jobs of `scope`. A file in
 one of the scope's directories does; a root file of documentation or configuration, or a
-directory that belongs to another scope, does not; anything else (`.github/`, a new
-top-level directory) does, because we cannot tell.
+directory that belongs to another scope, or an issue or pull request template, does not;
+anything else (the rest of `.github/`, a new top-level directory) does, because we cannot tell.
 """
 function relevant(scope::AbstractString, file::AbstractString)
     for p in SCOPES[scope]
