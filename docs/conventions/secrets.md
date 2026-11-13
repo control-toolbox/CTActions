@@ -6,7 +6,7 @@
 
 | Secret | Where it is defined | Used by | Purpose |
 | --- | --- | --- | --- |
-| `SSH_KEY` | organization (all repositories) | `ci.yml`, `coverage.yml`, `documentation.yml`, `breakage.yml` | Add `ct-registry` (see below) |
+| `SSH_KEY` | organization (all repositories) | `ci.yml`, `coverage.yml`, `documentation.yml`, `breakage-suite.yml` | Add `ct-registry` (see below) |
 | `DOCUMENTER_KEY` | organization (all repositories) | TagBot callers (`ssh:`); read by `documentation.yml` and `compat-helper.yml` (see the note) | Documenter deploy key; TagBot's SSH key |
 | `CODECOV_TOKEN` → `codecov-secret` | organization (all repositories) | `coverage.yml` | Upload to Codecov |
 | `PROJECT_TOKEN` → `project_token` | organization (all repositories) | `add-to-project.yml` | Write to the organization's project board |
@@ -47,7 +47,7 @@ Several packages depend on ecosystem packages registered in
 in General. The registry is **public**.
 
 - **In the reusable workflows** (`ci.yml`, `coverage.yml`, `documentation.yml`,
-  `breakage.yml`), the caller passes `use_ct_registry: true` **and** `SSH_KEY`; the
+  `breakage-suite.yml`), the caller passes `use_ct_registry: true` **and** `SSH_KEY`; the
   workflow then runs `julia-actions/add-julia-registry`, which clones over SSH. Set
   `use_ct_registry: false` for a package that needs General only.
 - **In `compat-prune.yml`**, the registry is added over HTTPS
@@ -56,7 +56,7 @@ in General. The registry is **public**.
 
 On Windows, `add-julia-registry` needs Git's own OpenSSH client and Pkg needs the CLI git
 (`git_cli: true` on `julia-buildpkg`): `ci.yml` does both (see the comments in the
-workflow). `coverage.yml`, `documentation.yml` and `breakage.yml` run on Ubuntu only.
+workflow). `coverage.yml`, `documentation.yml` and `breakage-suite.yml` run on Ubuntu only.
 
 ## Pull requests from a fork
 
@@ -65,8 +65,8 @@ The workflows degrade instead of failing with an obscure message:
 
 | Workflow | On a fork's pull request |
 | --- | --- |
-| `ci.yml`, `documentation.yml`, `breakage.yml`, `breakage-suite.yml` | run; `ct-registry` is added from its public HTTPS URL (composite action `.github/actions/add-ct-registry`, a notice in the log) instead of with `SSH_KEY` |
-| `breakage.yml`, `breakage-suite.yml` | the report is in the run's summary; no PR comment (it would be a 403) |
+| `ci.yml`, `documentation.yml`, `breakage-suite.yml` | run; `ct-registry` is added from its public HTTPS URL (composite action `.github/actions/add-ct-registry`, a notice in the log) instead of with `SSH_KEY` |
+| `breakage-suite.yml` | the report is in the run's summary; no PR comment (it would be a 403) |
 | `auto-assign.yml`, `add-to-project.yml` | skipped: the maintainer assigns and adds the PR by hand |
 | `documentation.yml` | the build runs, no preview is deployed |
 

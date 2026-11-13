@@ -75,7 +75,6 @@ julia scripts/breakage/consumers.jl list --project Project.toml
 | Subject | Page |
 | --- | --- |
 | The suite, its inputs, the consumers, the verdict | [`breakage-suite.yml`](../workflows/breakage-suite.md) |
-| The former workflow (one comment per cell) | [`breakage.yml`](../workflows/breakage.md) |
 | The baseline carried over a skipped run on `main` | [CI on `main`](../workflows/ci-on-main.md#the-breakage-baseline) |
 | `REL1` | [ct-conventions](https://github.com/control-toolbox/ct-conventions/blob/main/rules/release.md) |
 | Why it is built this way | [design: breakage](../design/breakage.md) |

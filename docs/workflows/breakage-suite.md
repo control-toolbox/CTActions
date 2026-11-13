@@ -4,10 +4,8 @@
 
 Tests the packages that depend on this one against it, and reports **once**: one table in
 the job summary, one PR comment per group kept up to date, one artifact. Caller:
-`Breakage.yml`. Replaces [`breakage.yml`](breakage.md), whose cells each rewrote the
-comment with the results present at that moment (the last one to write could post an
-incomplete table) and which found its comment by the bot's id; `breakage.yml` stays until
-every caller has moved.
+`Breakage.yml`. Replaces `breakage.yml` (removed, CTActions#162); why, in
+[design: breakage](../design/breakage.md).
 
 ## What it does
 

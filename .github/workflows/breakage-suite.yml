@@ -16,8 +16,8 @@ name: Breakage suite
 # and fails with the PR is broken by the release, so the version must be breaking. Without
 # that run on the base, or with cells missing, a release PR fails: run this workflow on
 # `main` first (callers run it on push to `main` and by hand). Script and tests:
-# scripts/breakage/; see docs/workflows/breakage-suite.md. Replaces breakage.yml, kept until
-# every caller has moved.
+# scripts/breakage/; see docs/workflows/breakage-suite.md. Replaced breakage.yml
+# (removed, CTActions#162).
 
 on:
   workflow_call:
