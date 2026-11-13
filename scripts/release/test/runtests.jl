@@ -1530,6 +1530,51 @@ failures(results) = [r.message for r in results if r.status === :fail]
     end
 
     if any(r -> r.name == GENERAL, Pkg.Registry.reachable_registries())
+    @testset "pending: one approval at a time" begin
+        @test workflow_path("o/r/.github/workflows/Release.yml@refs/heads/main") == ".github/workflows/Release.yml"
+        @test job_of("start") == "start" && job_of("merge") == "merge"
+        @test job_of("register") == "register" && job_of("register-beta") == "register"
+        @test waits_for(["call / register"], "register") && waits_for(["merge"], "merge")
+        @test !waits_for(["call / merge"], "register") && !waits_for(["unregister"], "register")
+        # runs 1 (this one), 2 (waits for register), 3 (waits for merge), 4 (gone in the meantime)
+        jobs = Dict("2" => "call / register\n", "3" => "call / merge\n", "4" => nothing)
+        function fake(calls)
+            return function (args)
+                push!(calls, args)
+                line = join(args, " ")
+                occursin("runs?status=waiting", line) &&
+                    return occursin("select(.path == \".github/workflows/Release.yml\")", line) ? "1\n2\n3\n4\n" : nothing
+                m = match(r"runs/(\d+)/jobs", line)
+                m === nothing || return jobs[m[1]]
+                args[1:2] == ["run", "cancel"] && return args[3] == "4" ? nothing : ""
+                return nothing
+            end
+        end
+        ref = "o/r/.github/workflows/Release.yml@refs/heads/main"
+        calls = Vector{String}[]
+        r = with_gh(() -> pending("o/r", ref, "register-beta", 1), fake(calls))
+        @test r.action == "none"                                    # run 2 already asks for it
+        cancelled = [c[3] for c in calls if c[1:2] == ["run", "cancel"]]
+        @test cancelled == ["3", "4"]                               # never this run, nor run 2
+        @test any(contains("run 2: not asked again"), r.lines)
+        empty!(calls)
+        r = with_gh(() -> pending("o/r", ref, "start", "1"), fake(calls))
+        @test r.action == "start" && length(r.lines) == 3           # 2, 3, 4 wait for other jobs
+        r = with_gh(() -> pending("o/r", ref, "merge", 1), _ -> nothing)
+        @test r.action == "merge" && isempty(r.lines)               # GitHub not answering: ask
+        out = mktemp() do path, io
+            withenv("GITHUB_OUTPUT" => path, "GITHUB_STEP_SUMMARY" => nothing) do
+                redirect_stdout(devnull) do
+                    @test with_gh(() -> release_main(["pending", "--repo", "o/r", "--next", "merge",
+                                                      "--workflow-ref", ref, "--run-id", "1"]), fake(Vector{String}[])) == 0
+                end
+            end
+            read(path, String)
+        end
+        @test out == "action=none\n"                               # run 3 waits for merge
+        @test redirect_stderr(() -> release_main(["pending", "--repo", "o/r"]), devnull) == 2
+    end
+
     @testset "a release from its request to its checks, on a simulated GitHub" begin
         # a package released as 0.4.2, then a fix merged; its GitHub is a bare repository (the
         # pushes) and a fake with a state: issues, comments, PRs, labels and their events, runs
