@@ -113,7 +113,7 @@ from the `Project.toml` files; the label → workflow map of `label-dispatch.yml
 guards read by `release.jl ready`, both from the callers.
 
 **Exceptions.**
-- To fix: [`repositories.md`](repositories.md) is a snapshot by hand (dated); the
+- To fix: [`repositories.md`](repositories.md) is a snapshot by hand, marked as such; the
   `packages` default of `compat-prune.yml` and the installations of the Apps are kept up
   to date by hand ([recipes](recipes.md#a-new-repository), step 13).
 - Accepted: a consumer that declares no dependency (an application's docs environment) is
@@ -201,7 +201,7 @@ spreads at once; secrets are passed one by one (`secrets: inherit` only where an
 environment requires it). Every reusable workflow that runs a script of CTActions takes
 `ctactions_ref`, so that its tests run the version under review.
 
-**Limit, to fix or to document.** Pinning a caller to a tag of CTActions does **not**
+**Limit, documented ([how to freeze](README.md#centralize-then-call)).** Pinning a caller to a tag of CTActions does **not**
 freeze everything: inside, the reusable workflows call `guard.yml`, `pr-status.yml`,
 `select-gpu-runner.yml` and the action `add-ct-registry` at `@main` (a `uses:` takes no
 expression), and `ctactions_ref` defaults to `main`. CTActions has no version yet.
@@ -235,9 +235,8 @@ page and the [catalog](README.md#the-workflows) in the same pull request. The do
 is in English; examples are copied from a real caller.
 
 **Exceptions, to fix.** The sections *Superseded runs* and *On a push to `main`* are
-repeated in four pages; the caller examples of the root `README.md` and of `ci.md` show
-the `pull_request` model rather than `Labels.yml`; the reference of `release.jl` sits in
-the page of the release gate.
+repeated in four pages; the reference of `release.jl` sits in the page of the release
+gate.
 
 ## Checklist for a change
 

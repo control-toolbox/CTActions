@@ -10,20 +10,26 @@ matrix, on GitHub-hosted or self-hosted runners. Caller: `CI.yml`, in every pack
 ```yaml
 # .github/workflows/CI.yml
 name: CI
+run-name: "CI ${{ inputs.target }}${{ inputs.pr && format(' #{0}', inputs.pr) || '' }}"
 
 on:
   push:
     branches: [main]
     tags: '*'
-  pull_request:
-    types: [labeled, synchronize, reopened]
+  workflow_dispatch:          # by label-dispatch.yml, when a `run ci …` label is added
+    inputs:
+      pr:
+        description: 'Pull request number, set by label-dispatch.yml'
+        required: false
+        default: ''
+      target:
+        description: 'github, occidata or kkt'
+        required: false
+        default: ''
 
 jobs:
   test-cpu-github:
-    if: >
-      github.event_name != 'pull_request' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'run ci github-runner') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'run ci github-runner'))
+    if: github.event_name == 'push' || inputs.target == 'github'
     uses: control-toolbox/CTActions/.github/workflows/ci.yml@main
     with:
       runs_on: '["ubuntu-latest", "macos-latest", "windows-latest"]'
@@ -33,7 +39,11 @@ jobs:
       SSH_KEY: ${{ secrets.SSH_KEY }}
 ```
 
-The guard and the `types:` list are explained in [Labels](../conventions/labels.md).
+On a pull request, `CI.yml` is started by the package's `Labels.yml`
+([label-dispatch](label-dispatch.md#in-a-package)): one run per `run ci …` label, with
+`target` saying which. A caller still on `pull_request` with a label guard works too (the
+older model, see [Labels](../conventions/labels.md)); `label-dispatch.yml` is the one to
+use in a new or migrated package.
 `runs_on` lists the three GitHub-hosted OSes, Windows included. CTBase is the reference
 caller to copy from; it also carries a Windows smoke test of its test selection
 (`test-selection-smoke`), added after Windows' backslash-separated paths silently broke a

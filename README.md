@@ -47,15 +47,14 @@ on:
   push:
     branches: [main]
     tags: '*'
-  pull_request:
-    types: [labeled, synchronize, reopened]
+  workflow_dispatch:          # started by Labels.yml when a `run ci …` label is added to a PR
+    inputs:
+      pr:     { required: false, default: '' }
+      target: { required: false, default: '' }
 
 jobs:
   test-cpu-github:
-    if: >
-      github.event_name != 'pull_request' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'run ci github-runner') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'run ci github-runner'))
+    if: github.event_name == 'push' || inputs.target == 'github'
     uses: control-toolbox/CTActions/.github/workflows/ci.yml@main
     with:
       runs_on: '["ubuntu-latest", "macos-latest", "windows-latest"]'
@@ -63,6 +62,10 @@ jobs:
     secrets:
       SSH_KEY: ${{ secrets.SSH_KEY }}
 ```
+
+On a pull request the expensive workflows run on demand, by label: the package's
+`Labels.yml` calls [`label-dispatch.yml`](docs/workflows/label-dispatch.md), which starts
+the workflow of the label just added.
 
 More callers: one per page in [`docs/workflows/`](docs/workflows/).
 

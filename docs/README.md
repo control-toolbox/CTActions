@@ -48,8 +48,16 @@ jobs:
 | **Caller** (the trigger) | `<package>/.github/workflows/` | `PascalCase.yml` | `CI.yml` |
 
 Callers reference a reusable workflow by its full path, pinned to `@main`:
-`control-toolbox/CTActions/.github/workflows/<name>.yml@main`. A frozen pipeline (for a
-release branch, say) pins a tag or a commit of `CTActions` instead.
+`control-toolbox/CTActions/.github/workflows/<name>.yml@main`.
+
+**Pinning another ref does not freeze everything.** A caller pinned to a tag or a commit
+of CTActions gets that version of the workflow it names, but not of what that workflow
+uses in turn: the reusable workflows call `guard.yml`, `pr-status.yml`,
+`select-gpu-runner.yml` and the action `add-ct-registry` at `@main` (a `uses:` takes no
+expression), and check out the scripts at `ctactions_ref`, `main` by default. To freeze
+a pipeline, pin the caller **and** pass `ctactions_ref` the same commit: the scripts and
+the top workflow are then frozen, the four nested pieces still follow `main`. CTActions
+has no version yet ([Principles](principles.md#10-stable-interfaces)).
 
 ### Expensive checks are opt-in, through labels
 
