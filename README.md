@@ -10,7 +10,7 @@ Centralized GitHub Actions workflows, issue templates and configuration for the
   coverage, documentation, breakage, formatting, spell check, CompatHelper, README
   generation, issue assignment, project board, and the **release** of a package, from its
   request to its registration ([`release.yml`](docs/workflows/release.md)).
-- **The release tool**, [`scripts/release/release.jl`](docs/workflows/release-gate.md#the-release-tool):
+- **The release tool**, [`scripts/release/release.jl`](docs/tools/release-cli.md):
   the facts and the request of a release, its gate, the checked merge, the registration,
   the audit; and `release.jl lint-changelog`, the format of `[Unreleased]` for anyone who
   edits a changelog.

@@ -51,7 +51,7 @@
 #
 # The Markdown report goes to standard output, and to $GITHUB_STEP_SUMMARY when set. Exit
 # code: 0 ready (or nothing to do), 1 blocked, 2 usage error; `status` exits 1 when the
-# release is blocked, 0 otherwise. Stdlib only. See docs/workflows/release-gate.md.
+# release is blocked, 0 otherwise. Stdlib only. See docs/tools/release-cli.md.
 
 include(joinpath(@__DIR__, "tag.jl"))
 include(joinpath(@__DIR__, "status.jl"))

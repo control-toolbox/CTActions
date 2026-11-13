@@ -236,8 +236,7 @@ page and the [catalog](README.md#the-workflows) in the same pull request. The do
 is in English; examples are copied from a real caller.
 
 **Exceptions, to fix.** The sections *Superseded runs* and *On a push to `main`* are
-repeated in four pages; the reference of `release.jl` sits in the page of the release
-gate.
+repeated in four pages.
 
 ## Checklist for a change
 
