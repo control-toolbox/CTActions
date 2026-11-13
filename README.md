@@ -30,6 +30,7 @@ labels), the catalog of every workflow with its page, and the conventions:
 
 | Page | Content |
 | --- | --- |
+| [Principles](docs/principles.md) | The rules behind every workflow and script, and a checklist for a change |
 | [Labels](docs/conventions/labels.md) | Opt-in triggers on pull requests, and their vocabulary |
 | [Runners](docs/conventions/runners.md) | GitHub-hosted and self-hosted (GPU) runners, split CI |
 | [Secrets and registries](docs/conventions/secrets.md) | Every secret, `ct-registry` |

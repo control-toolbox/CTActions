@@ -12,6 +12,9 @@ a new package starts from.
 
 ## The philosophy
 
+The rules behind all of it, with their exceptions and a checklist for a change, are in
+**[Principles](principles.md)**.
+
 ### Centralize, then call
 
 A control-toolbox repository **does not define its CI logic**. The logic lives once in
@@ -119,6 +122,7 @@ benchmarks: see [Workflows defined in a package](workflows/per-repo.md).
 
 | Page | Content |
 | --- | --- |
+| [Principles](principles.md) | The rules CTActions follows (centralize, scripts decide, tests, facts, ensure, least privilege, …), how they map to DRY, KISS, YAGNI, SOLID, their exceptions, and a checklist for a change |
 | [Labels](conventions/labels.md) | Label-gated triggers: the `if:` guard, the `types:` list (no `opened`), the label vocabulary |
 | [Runners](conventions/runners.md) | GitHub-hosted and self-hosted runners: `occidata` (GPU on demand), `kkt`, `pinwheel`; the split CI |
 | [Secrets and registries](conventions/secrets.md) | Every secret, who uses it; `ct-registry` and `SSH_KEY` |
