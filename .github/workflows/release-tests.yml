@@ -41,3 +41,6 @@ jobs:
         run: julia --startup-file=no -e 'using Pkg; Pkg.Registry.add("General")'
       - name: Tests
         run: julia --startup-file=no scripts/release/test/runtests.jl
+      - name: Tests of setup.sh
+        if: matrix.version == '1.12'
+        run: bash scripts/release/setup_test.sh
