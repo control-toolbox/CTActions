@@ -15,13 +15,8 @@
 # Anything unexpected (no pull request found, no previous green run, a base that is not an
 # ancestor, a failing command) answers `run=true`: the safe side is to run.
 
-# The command runner behind `gh`: a function of the argument vector returning the standard
-# output, or `nothing` when the command fails. Tests replace it.
-@isdefined(GH) || global GH = Ref{Any}(function (args)
-    out = IOBuffer()
-    ok = success(pipeline(`gh $args`; stdout=out, stderr=devnull))
-    return ok ? String(take!(out)) : nothing
-end)
+# `gh`: the standard output, or `nothing` when the command fails; tests replace `GH`.
+@isdefined(gh_strip) || include(joinpath(@__DIR__, "..", "shared", "github.jl"))
 
 # The same for `git` in a directory; `nothing` when the command fails.
 @isdefined(GIT) || global GIT = Ref{Any}(function (dir, args)
@@ -30,7 +25,6 @@ end)
     return ok ? String(take!(out)) : nothing
 end)
 
-gh(args...) = GH[](collect(String, args))
 git(dir, args...) = GIT[](dir, collect(String, args))
 
 "The label on a pull request that asks for the changes-only mode on its merge."

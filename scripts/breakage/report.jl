@@ -17,7 +17,7 @@
 
 using TOML
 
-include(joinpath(@__DIR__, "..", "release", "versions.jl"))
+include(joinpath(@__DIR__, "..", "shared", "versions.jl"))
 
 "The marker of the PR comment of a group, so that a run updates its own comment only."
 marker(group) = "<!-- ct-breakage:$group -->"

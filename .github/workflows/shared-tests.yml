@@ -1,0 +1,32 @@
+name: Shared scripts tests
+
+# Self-test of the code shared by the tools of scripts/ (docs/principles.md, principle 2):
+# the unit tests of scripts/shared. The tests of each tool also run on a change here.
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/shared/**'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/shared/**'
+  workflow_dispatch:
+
+concurrency:
+  group: shared-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Tests
+        run: julia --startup-file=no scripts/shared/test/runtests.jl

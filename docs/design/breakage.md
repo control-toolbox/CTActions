@@ -100,7 +100,6 @@ release's installability.
   release pull request after.
 - `plan` and `break` are exercised by the callers only; the scripts (`consumers.jl`,
   `report.jl`) have tests, including the ecosystem as read on 2026-10-19.
-- `breakage/report.jl` includes `release/versions.jl` (CTActions#160).
 
 ## Timeline
 

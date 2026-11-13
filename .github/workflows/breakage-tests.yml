@@ -7,13 +7,13 @@ on:
   pull_request:
     paths:
       - 'scripts/breakage/**'
-      - 'scripts/release/versions.jl'
+      - 'scripts/shared/**'
       - '.github/workflows/breakage-*.yml'
   push:
     branches: [main]
     paths:
       - 'scripts/breakage/**'
-      - 'scripts/release/versions.jl'
+      - 'scripts/shared/**'
       - '.github/workflows/breakage-*.yml'
   workflow_dispatch:
 

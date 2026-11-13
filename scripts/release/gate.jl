@@ -5,7 +5,7 @@
 
 using Pkg, TOML
 
-for f in ("versions.jl", "changelog.jl", "changes.jl", "registrable.jl")
+for f in ("../shared/versions.jl", "changelog.jl", "changes.jl", "registrable.jl")
     include(joinpath(@__DIR__, f))
 end
 

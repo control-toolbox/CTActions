@@ -57,21 +57,6 @@ end
 commit_message(owner, edits) = join(vcat("chore(compat): drop [compat] specifiers no supported Julia version selects", "",
     sort(["$(e["file"]): $(e["dep"]) = \"$(e["before"])\" → \"$(e["after"])\"" for e in edits if e["owner"] == owner && e["status"] == "edited"])), "\n")
 
-"""
-    api(method, path, fields...; jq=nothing) -> String
-
-Call the REST API: `method` on `path`, with the string fields `key => value`, the output
-filtered by `jq` when given.
-"""
-function api(method, path, fields::Pair...; jq=nothing)
-    args = ["api", "--method", method, path]
-    for (k, v) in fields
-        push!(args, "-f", "$k=$v")
-    end
-    jq === nothing || push!(args, "--jq", jq)
-    return gh(args...)
-end
-
 "Number and URL of the open PR from BRANCH in `repo`, or `nothing`."
 function find_pr(repo)
     owner = first(split(repo, "/"))
@@ -84,7 +69,7 @@ end
 "Number and state (`open`/`closed`) of the tracking issue of `repo`, or `nothing`."
 function find_issue(repo)
     jq = ".[] | select(.pull_request == null) | select((.body // \"\") | contains(\"$MARKER\")) | \"\\(.number) \\(.state)\""
-    out = strip(gh("api", "--paginate", "repos/$repo/issues?state=all&per_page=100", "--jq", jq))
+    out = strip(gh!("api", "--paginate", "repos/$repo/issues?state=all&per_page=100", "--jq", jq))
     isempty(out) && return nothing
     number, state = split(first(split(out, '\n')))
     return (number, state)
@@ -106,7 +91,7 @@ function publish(root, checkouts, tracking; run_url="")
     # The issue first: the PRs link to it.
     issue = find_issue(tracking)
     if issue === nothing && !isempty(with_edits)
-        number = strip(api("POST", "repos/$tracking/issues", "title" => ISSUE_TITLE,
+        number = strip(gh_api("POST", "repos/$tracking/issues", "title" => ISSUE_TITLE,
                            "body" => render_report(audit, edits; run_url); jq=".number"))
         issue = (number, "open")
     end
@@ -117,10 +102,10 @@ function publish(root, checkouts, tracking; run_url="")
         pr = find_pr(repo)
         if !(owner in with_edits)
             if pr !== nothing
-                api("POST", "repos/$repo/issues/$(pr[1])/comments",
+                gh_api("POST", "repos/$repo/issues/$(pr[1])/comments",
                     "body" => "Nothing left to prune in this repository$(isempty(issue_url) ? "" : " (see $issue_url)").")
-                api("PATCH", "repos/$repo/pulls/$(pr[1])", "state" => "closed")
-                api("DELETE", "repos/$repo/git/refs/heads/$BRANCH")
+                gh_api("PATCH", "repos/$repo/pulls/$(pr[1])", "state" => "closed")
+                gh_api("DELETE", "repos/$repo/git/refs/heads/$BRANCH")
                 push!(done["closed"], owner)
             end
             continue
@@ -132,10 +117,10 @@ function publish(root, checkouts, tracking; run_url="")
         end
         body = render_pr_body(owner, edits; issue_url, run_url)
         if pr === nothing
-            url = strip(api("POST", "repos/$repo/pulls", "title" => PR_TITLE, "head" => BRANCH, "base" => base,
+            url = strip(gh_api("POST", "repos/$repo/pulls", "title" => PR_TITLE, "head" => BRANCH, "base" => base,
                             "body" => body; jq=".html_url"))
         else
-            api("PATCH", "repos/$repo/pulls/$(pr[1])", "body" => body)
+            gh_api("PATCH", "repos/$repo/pulls/$(pr[1])", "body" => body)
             url = pr[2]
         end
         done["prs"][owner] = url
@@ -145,12 +130,12 @@ function publish(root, checkouts, tracking; run_url="")
         path = "repos/$tracking/issues/$(issue[1])"
         body = "body" => render_report(audit, edits; prs=done["prs"], run_url)
         if isempty(with_edits) && issue[2] == "open"
-            api("POST", "$path/comments", "body" => "Nothing left to prune.")
-            api("PATCH", path, body, "state" => "closed")
+            gh_api("POST", "$path/comments", "body" => "Nothing left to prune.")
+            gh_api("PATCH", path, body, "state" => "closed")
         elseif !isempty(with_edits) && issue[2] == "closed"
-            api("PATCH", path, body, "state" => "open")
+            gh_api("PATCH", path, body, "state" => "open")
         else
-            api("PATCH", path, body)
+            gh_api("PATCH", path, body)
         end
     end
     done["issue"] = issue_url
