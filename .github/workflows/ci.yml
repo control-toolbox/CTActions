@@ -163,33 +163,19 @@ jobs:
       # self-hosted runners can have different real depot locations (e.g. a
       # cluster-wide JULIA_DEPOT_PATH exported by the runner service vs. the
       # Julia default of ~/.julia). Hardcoding ~/.julia below would silently
-      # cache/purge nothing on a runner where that's not the real depot. Ask
+      # purge nothing on a runner where that's not the real depot. Ask
       # Julia itself where its writable depot is instead of guessing.
+      #
+      # No actions/cache here: the depot persists between jobs, so artifacts/ and
+      # compiled/ are already on disk. Caching them restored what was there (or an
+      # older compiled/) and archived the whole shared depot at the end of every job
+      # (6.4 GB, tens of minutes on occidata's network disk, most of each repository's
+      # 10 GB cache quota).
       - name: Resolve Julia depot path (self-hosted runners)
         id: depot
         if: inputs.runner_type == 'self-hosted'
         shell: bash
         run: echo "path=$(julia -e 'print(Base.DEPOT_PATH[1])')" >> "$GITHUB_OUTPUT"
-
-      - name: Cache Julia artifacts (self-hosted runners)
-        if: inputs.runner_type == 'self-hosted'
-        uses: actions/cache@v6
-        env:
-          cache-name: cache-artifacts
-        with:
-          path: ${{ steps.depot.outputs.path }}/artifacts
-          key: ${{ runner.os }}-test-julia-${{ steps.julia.outputs.julia-version }}-${{ env.cache-name }}-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-test-julia-${{ steps.julia.outputs.julia-version }}-${{ env.cache-name }}-
-
-      - name: Cache Julia compiled code (self-hosted runners)
-        if: inputs.runner_type == 'self-hosted'
-        uses: actions/cache@v6
-        with:
-          path: ${{ steps.depot.outputs.path }}/compiled
-          key: ${{ runner.os }}-julia-compiled-${{ steps.julia.outputs.julia-version }}-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-julia-compiled-${{ steps.julia.outputs.julia-version }}-
 
       # ---------------------------
       # Add ct-registry

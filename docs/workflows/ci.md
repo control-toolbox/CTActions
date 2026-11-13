@@ -72,7 +72,7 @@ forward-slash glob.
 ## What it does
 
 - **GitHub-hosted:** `julia-actions/cache`, then `julia-buildpkg` and `julia-runtest`.
-- **Self-hosted:** caches of `artifacts/` and `compiled/` at the depot Julia reports,
+- **Self-hosted:** no cache (the depot persists, see [Runners](../conventions/runners.md)),
   `TMPDIR` moved off the node's `/tmp`, the tests run through `$OCCIDATA_GPU_RUN` (a GPU
   node on `occidata`, nothing elsewhere), and **retried once after purging `compiled/`**,
   since a persistent depot can hold stale precompiled code. See
