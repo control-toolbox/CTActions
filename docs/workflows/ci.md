@@ -108,10 +108,7 @@ label (see [Runners](../conventions/runners.md#split-ci)):
 
 ```yaml
   test-gpu-occidata:
-    if: >
-      github.event_name == 'pull_request' &&
-      ((github.event.action == 'labeled' && github.event.label.name == 'run ci occidata-runner') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'run ci occidata-runner')))
+    if: inputs.target == 'occidata'          # `run ci occidata-runner`, through Labels.yml
     uses: control-toolbox/CTActions/.github/workflows/ci.yml@main
     with:
       runs_on: '[["occidata"]]'
@@ -121,15 +118,15 @@ label (see [Runners](../conventions/runners.md#split-ci)):
       SSH_KEY: ${{ secrets.SSH_KEY }}
 ```
 
-A `kkt` job is the same with `kkt` and `run ci kkt-runner`.
+A `kkt` job is the same with `kkt` (`inputs.target == 'kkt'`, label `run ci kkt-runner`).
 
-The two GPU jobs are guarded `github.event_name == 'pull_request' && (…)`: on a PR each
-runs on its label. On a push (`main`, tags) a single job picks the runner at run time,
-`kkt` unless it is offline, else `occidata` ([`ci-gpu.yml`](ci-gpu.md)):
+On a pull request each GPU job runs on its label. On a push (`main`, tags) a single job
+picks the runner at run time, `kkt` unless it is offline, else `occidata`
+([`ci-gpu.yml`](ci-gpu.md)):
 
 ```yaml
   test-gpu-main:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'push'
     uses: control-toolbox/CTActions/.github/workflows/ci-gpu.yml@main
     with:
       use_ct_registry: true
@@ -138,7 +135,10 @@ runs on its label. On a push (`main`, tags) a single job picks the runner at run
       CT_RUNNERS_CLIENT_ID: ${{ secrets.CT_RUNNERS_CLIENT_ID }}
       CT_RUNNERS_PRIVATE_KEY: ${{ secrets.CT_RUNNERS_PRIVATE_KEY }}
 ```
- CTFlows.jl also calls
+
+A caller still on `pull_request` guards the GPU jobs on their label
+(`github.event_name == 'pull_request' && …`, see [Labels](../conventions/labels.md#the-guard))
+and `test-gpu-main` on `github.event_name != 'pull_request'`. CTFlows.jl also calls
 `ci.yml` from `CITargeted.yml` (a subset of the tests on a chosen runner, by hand) and
 `CronIntegration.yml` (weekly slow tests, `test_args: 'cron'`): see
 [Workflows defined in a package](per-repo.md).

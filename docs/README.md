@@ -87,7 +87,7 @@ why it is built so (design), and what tests it.
 | Theme | Guide | Reference | Design | Tests |
 | --- | --- | --- | --- | --- |
 | Pull requests: labels, dispatch, statuses, `main` | [pull-requests](guides/pull-requests.md) | [label-dispatch](workflows/label-dispatch.md), [guard](workflows/guard.md), [superseded runs](workflows/superseded-runs.md), [ci on main](workflows/ci-on-main.md), [labels](conventions/labels.md) | [pull-request triggers](design/pull-request-triggers.md) | `label-dispatch-tests`, `guard-tests`, `ci-main-tests` |
-| Tests and runners | — | [ci](workflows/ci.md), [ci-gpu](workflows/ci-gpu.md), [select-gpu-runner](workflows/select-gpu-runner.md), [coverage](workflows/coverage.md), [runners](conventions/runners.md) | — | lint only |
+| Tests and runners | [testing](guides/testing.md) | [ci](workflows/ci.md), [ci-gpu](workflows/ci-gpu.md), [select-gpu-runner](workflows/select-gpu-runner.md), [coverage](workflows/coverage.md), [runners](conventions/runners.md) | [tests and runners](design/testing-runners.md) | lint only |
 | Documentation | — | [documentation](workflows/documentation.md), [preview cleanup](workflows/documentation-preview-cleanup.md) | — | lint only |
 | Breakage | — | [breakage-suite](workflows/breakage-suite.md), [breakage](workflows/breakage.md) (former) | — | `breakage-tests` |
 | Dependencies (`[compat]`) | — | [compat-helper](workflows/compat-helper.md), [compat-prune](workflows/compat-prune.md) | in [compat-prune § Why](workflows/compat-prune.md#why) | `compat-prune-tests` |
