@@ -224,7 +224,8 @@ caller has moved (without a list of who has not); `WORKFLOWS.md`, a redirect pag
 section *Future uses* of [GitHub Apps](conventions/github-app.md#future-uses-ai-agents-ct-agents),
 written before `ct-release` settled the question. Around labels, five mechanisms (guard,
 label-dispatch, commit statuses, changes-only, superseded runs) are each justified, but
-together they need a page that shows them as one.
+together they needed a page that shows them as one: [design: pull-request
+triggers](design/pull-request-triggers.md).
 
 ## 12. Document once, link elsewhere
 

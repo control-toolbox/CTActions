@@ -79,6 +79,24 @@ token. A release acts as a second App,
 lives in the environments of the packages: only the jobs a person approves (in supervised
 mode) can use it.
 
+## By theme
+
+Where to read, for each theme: how to use it (guide), how each piece behaves (reference),
+why it is built so (design), and what tests it.
+
+| Theme | Guide | Reference | Design | Tests |
+| --- | --- | --- | --- | --- |
+| Pull requests: labels, dispatch, statuses, `main` | [pull-requests](guides/pull-requests.md) | [label-dispatch](workflows/label-dispatch.md), [guard](workflows/guard.md), [superseded runs](workflows/superseded-runs.md), [ci on main](workflows/ci-on-main.md), [labels](conventions/labels.md) | [pull-request triggers](design/pull-request-triggers.md) | `label-dispatch-tests`, `guard-tests`, `ci-main-tests` |
+| Tests and runners | — | [ci](workflows/ci.md), [ci-gpu](workflows/ci-gpu.md), [select-gpu-runner](workflows/select-gpu-runner.md), [coverage](workflows/coverage.md), [runners](conventions/runners.md) | — | lint only |
+| Documentation | — | [documentation](workflows/documentation.md), [preview cleanup](workflows/documentation-preview-cleanup.md) | — | lint only |
+| Breakage | — | [breakage-suite](workflows/breakage-suite.md), [breakage](workflows/breakage.md) (former) | — | `breakage-tests` |
+| Dependencies (`[compat]`) | — | [compat-helper](workflows/compat-helper.md), [compat-prune](workflows/compat-prune.md) | in [compat-prune § Why](workflows/compat-prune.md#why) | `compat-prune-tests` |
+| Release | ct-agents [guide](https://github.com/control-toolbox/ct-agents/blob/main/guides/release.md) | [release](workflows/release.md), [release-gate](workflows/release-gate.md) (and the `release.jl` CLI), [release-tag](workflows/release-tag.md) | ct-agents [design](https://github.com/control-toolbox/ct-agents/blob/main/design/release.md), [who acts in a release](design/release-identities.md) | `release-tests` |
+| Housekeeping | — | [formatter](workflows/formatter.md), [spell-check](workflows/spell-check.md), [update-readme](workflows/update-readme.md), [auto-assign](workflows/auto-assign.md), [add-to-project](workflows/add-to-project.md) | — | lint only |
+| The organization: Apps, secrets, self-hosted runners | [recipes](recipes.md) | [GitHub Apps](conventions/github-app.md), [secrets](conventions/secrets.md), [runner maintenance](workflows/occidata-runner-maintenance.md), [watchdog](workflows/occidata-runner-watchdog.md), [repositories](repositories.md) | [GitHub Apps § Why an App](conventions/github-app.md#why-an-app) | lint only |
+
+Across all themes: [Principles](principles.md). Every workflow passes `lint-workflows.yml`.
+
 ## The workflows
 
 ### Reusable workflows (called by packages)
