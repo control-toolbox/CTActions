@@ -75,6 +75,12 @@ forward-slash glob.
 - **Windows with `ct-registry`:** Git's own OpenSSH client and Pkg's CLI git, because
   Windows' OpenSSH and Julia's LibGit2 cannot use the agent `add-julia-registry` starts
   (details in the workflow's comments).
+- **Stable release pull requests run without `ct-registry`:** on a `pull_request` whose
+  `Project.toml` sets a stable version other than the base's (`release.jl stable-release`),
+  the `add-ct-registry` action adds nothing, so the tests see what General serves (`REL4`).
+  Its input `skip_on_stable: 'false'` keeps the registry; [Breakage](breakage.md) sets it,
+  since the dependents may need betas of their own. When the base `Project.toml` cannot be
+  read, the registry is added as usual.
 - **Optional test artifacts:** when both upload inputs are non-empty, the requested path
   is uploaded with `actions/upload-artifact@v4` after the test step, with the matrix Julia
   version and sanitized runner labels appended to the artifact name as

@@ -9,6 +9,9 @@
 #       PR's title and description (REL6 on every PR)
 #   julia release.jl registrable [--base BASE_PROJECT] PROJECT
 #       REL4 alone: the package resolves from General alone
+#   julia release.jl stable-release --base BASE_PROJECT PROJECT
+#       whether PROJECT sets a stable version other than BASE_PROJECT's (a stable release PR),
+#       as `stable=true|false`: the workflows add ct-registry only when it is false
 #   julia release.jl tag-plan [DIR]
 #       what the release-tag workflow tags, as key=value lines
 #   julia release.jl ready --repo OWNER/REPO --pr N
@@ -81,6 +84,7 @@ const USAGE = """
     usage: julia release.jl status --repo OWNER/REPO [--version V]
            julia release.jl gate --base SHA [--labels "a,b" [--labels-info]] [--text-file FILE] [DIR]
            julia release.jl registrable [--base BASE_PROJECT] PROJECT
+           julia release.jl stable-release --base BASE_PROJECT PROJECT
            julia release.jl tag-plan [DIR]
            julia release.jl ready --repo OWNER/REPO --pr N
            julia release.jl merge --repo OWNER/REPO --pr N [--confirm]
@@ -208,6 +212,13 @@ function release_main(args)
             f, results = audit(repo, VersionNumber(version))
             emit(audit_report(f, results))
             return any(r -> r.status === :fail, results) ? 1 : 0
+        elseif command == "stable-release"
+            base = option!(args, "base")
+            (base === nothing || length(args) != 1) && throw(ArgumentError("--base and PROJECT are required"))
+            stable, why = applies(TOML.parsefile(only(args)), TOML.parsefile(base))
+            println("stable=", stable)
+            println(stderr, why)
+            return 0
         elseif command == "tag-plan"
             p = tag_plan(isempty(args) ? "." : only(args))
             if p.tag === nothing

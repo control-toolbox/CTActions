@@ -1755,6 +1755,13 @@ failures(results) = [r.message for r in results if r.status === :fail]
         @test command()[1] == 2
         @test command("nope")[1] == 2
         @test command("gate")[1] == 2                     # --base is required
+        @test command("stable-release")[1] == 2
+        mktempdir() do tmp
+            versioned(v) = (f = joinpath(tmp, "$v.toml"); write(f, "name = \"P\"\nversion = \"$v\"\n"); f)
+            @test command("stable-release", "--base", versioned("1.1.0"), versioned("1.1.0")) == (0, "stable=false\n")
+            @test command("stable-release", "--base", versioned("1.1.0"), versioned("1.2.0")) == (0, "stable=true\n")
+            @test command("stable-release", "--base", versioned("1.1.0"), versioned("1.2.0-beta")) == (0, "stable=false\n")
+        end
         dir, base = package_repo()
         sh(dir, "git checkout -q main")                    # the release PR is not merged
         code, out = command("tag-plan", dir)

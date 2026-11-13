@@ -201,6 +201,7 @@ jobs:
         uses: control-toolbox/CTActions/.github/actions/add-ct-registry@main
         with:
           key: ${{ secrets.SSH_KEY }}
+          skip_on_stable: 'false'   # the dependents may need betas of their own
 
       - name: Cache Julia artifacts
         uses: actions/cache@v6

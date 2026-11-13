@@ -31,8 +31,10 @@ writes it, not at the release. Cheap and GitHub-hosted: no label.
 | — | for a package with a `Documentation.yml`, the label `documentation push preview` is on the PR; ℹ️ when it is not (the workflows do not require it, but without it no preview is deployed) |
 | `REL4` | a stable resolves from General alone, weak dependencies included, on the lowest Julia (`julia_lowest`) and the newest |
 
-The packages' CI uses ct-registry (`use_ct_registry: true`), so it passes with a bound
-that only a beta satisfies; the gate runs with General only.
+The packages' CI uses ct-registry (`use_ct_registry: true`), but not on a pull request that
+sets a stable version: the `add-ct-registry` action skips it there (see
+[`ci.md`](ci.md#what-it-does)), so the CI and the gate fail for the same reason. The gate stays
+the one that says which bound fails; it runs with General only.
 
 ## Caller
 
