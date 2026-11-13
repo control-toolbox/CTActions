@@ -1,0 +1,33 @@
+name: Update README tests
+
+# Self-test of the README generation (docs/workflows/update-readme.md): the unit tests of
+# scripts/update-readme. Runs when the script or the workflow that calls it changes.
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/update-readme/**'
+      - '.github/workflows/update-readme.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/update-readme/**'
+  workflow_dispatch:
+
+concurrency:
+  group: update-readme-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Tests
+        run: julia --startup-file=no scripts/update-readme/test/runtests.jl
