@@ -11,7 +11,7 @@ The two kinds differ in what they keep between jobs:
 | | GitHub-hosted | Self-hosted |
 | --- | --- | --- |
 | Disk | fresh for every job | persistent depot, shared by every job and branch |
-| Cache | `julia-actions/cache` | `actions/cache` of `artifacts/` and `compiled/`, at the depot Julia reports (`Base.DEPOT_PATH[1]`) |
+| Cache | `julia-actions/cache` | none: `artifacts/` and `compiled/` are already in the depot (`Base.DEPOT_PATH[1]`); an `actions/cache` of them archived the whole shared depot (6.4 GB) at the end of every job |
 | Stale precompiled code | impossible | possible: the tests are retried once after purging `compiled/` |
 | `/tmp` | private | may be wiped by the node (`occidata`: every hour at `HH:01`), so `TMPDIR` is moved under `$RUNNER_TEMP` |
 

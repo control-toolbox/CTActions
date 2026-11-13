@@ -226,21 +226,7 @@ jobs:
         with:
           key: ${{ secrets.SSH_KEY }}
 
-      - name: Cache Julia artifacts
-        uses: actions/cache@v6
-        with:
-          path: ${{ steps.depot.outputs.path }}/artifacts
-          key: ${{ runner.os }}-gpu-docs-julia-${{ steps.julia.outputs.julia-version }}-artifacts-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-gpu-docs-julia-${{ steps.julia.outputs.julia-version }}-artifacts-
-
-      - name: Cache Julia compiled code
-        uses: actions/cache@v6
-        with:
-          path: ${{ steps.depot.outputs.path }}/compiled
-          key: ${{ runner.os }}-gpu-docs-julia-${{ steps.julia.outputs.julia-version }}-compiled-${{ hashFiles('**/Project.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-gpu-docs-julia-${{ steps.julia.outputs.julia-version }}-compiled-
+      # No actions/cache: the self-hosted depot persists, as in ci.yml.
 
       - uses: julia-actions/julia-buildpkg@latest
 
