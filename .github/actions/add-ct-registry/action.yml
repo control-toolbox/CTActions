@@ -4,7 +4,9 @@ description: >
   organization), through julia-actions/add-julia-registry as before. Without one (a pull
   request from a fork: GitHub passes no secret to it), from the public HTTPS URL, with
   General alongside, since a depot whose only registry is ct-registry has no General.
-  Julia must be set up before.
+  Skipped on a pull request that sets a stable version (REL4: a stable release resolves from
+  General alone), unless `skip_on_stable` is 'false'. Julia must be set up and the repository
+  checked out before.
 
 inputs:
   key:
@@ -12,11 +14,34 @@ inputs:
     required: false
     default: ''
 
+  skip_on_stable:
+    description: "Skip ct-registry on a pull request that sets a stable version ('false' to keep it)"
+    required: false
+    default: 'true'
+
 runs:
   using: composite
   steps:
+    # `release.jl stable-release` decides; without a base to compare with, ct-registry is added as before
+    - name: Is this a stable release pull request?
+      id: mode
+      if: inputs.skip_on_stable == 'true' && github.event_name == 'pull_request'
+      shell: bash
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        stable=false
+        if git fetch --quiet --depth=1 origin "$BASE_SHA" && git show "$BASE_SHA:Project.toml" > "$RUNNER_TEMP/base-Project.toml"; then
+          stable=$(julia --startup-file=no "${{ github.action_path }}/../../../scripts/release/release.jl" \
+                   stable-release --base "$RUNNER_TEMP/base-Project.toml" Project.toml | sed -n 's/^stable=//p')
+        fi
+        [ "$stable" = true ] || stable=false
+        echo "stable=$stable" >> "$GITHUB_OUTPUT"
+        [ "$stable" = true ] && echo "::notice::Stable release pull request: ct-registry is not added (REL4, General alone)."
+        exit 0
+
     - name: Add ct-registry (SSH key)
-      if: inputs.key != ''
+      if: steps.mode.outputs.stable != 'true' && inputs.key != ''
       uses: julia-actions/add-julia-registry@v2
       env:
         SHELL: /bin/bash
@@ -25,7 +50,7 @@ runs:
         registry: control-toolbox/ct-registry
 
     - name: Add ct-registry (public HTTPS, no SSH key)
-      if: inputs.key == ''
+      if: steps.mode.outputs.stable != 'true' && inputs.key == ''
       shell: bash
       run: |
         echo "::notice::No SSH key (a pull request from a fork gets no secret): adding ct-registry from its public URL."
