@@ -342,8 +342,7 @@ function finish(repo::AbstractString; managers::AbstractString, act::Symbol=:ste
         requester = main = nothing
         r = f.pr.state == "OPEN" ? ready(repo, f.pr.number) : nothing
     end
-    run = haskey(ENV, "GITHUB_RUN_ID") ?
-        "$(get(ENV, "GITHUB_SERVER_URL", "https://github.com"))/$repo/actions/runs/$(ENV["GITHUB_RUN_ID"])" : ""
+    run = run_url(repo)
     # the bot refused the comment: the stop shows it, for a person to post
     handover = if p.phase == 7 && p.state === :blocked && get(f, :bot_error, nothing) !== nothing && live_mentions(f) == 0
         body, target = registration_comment(repo, f, f.main_sha != f.pr.merge)

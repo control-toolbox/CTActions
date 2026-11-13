@@ -96,6 +96,10 @@ function review_table(r)
         join(("| `$(x["id"])`: $(replace(get(x, "what", ""), "|" => "\\|")) | $(x["verdict"]) | $(replace(get(x, "note", ""), "|" => "\\|")) |" for x in rows), '\n')
 end
 
+"The URL of the workflow run this process is in (`GITHUB_RUN_ID`), `\"\"` outside a run: where a person approves."
+run_url(repo::AbstractString) = haskey(ENV, "GITHUB_RUN_ID") ?
+    "$(get(ENV, "GITHUB_SERVER_URL", "https://github.com"))/$repo/actions/runs/$(ENV["GITHUB_RUN_ID"])" : ""
+
 """
     open_issue(repo, dir, version; actor, managers, tries=12, pause=5) -> (Bool, String)
 
@@ -139,12 +143,15 @@ function open_issue(repo::AbstractString, dir, version; actor, managers::Abstrac
         f = facts(repo; version=v)
     end
     f.issue === nothing && return (true, "opened #$n; GitHub does not list it yet: the next run posts the proposal")
+    run = run_url(repo)
+    approval = mode === :supervised ?
+        ", after an approval of the environment `release`" * (isempty(run) ? "" : " ([this run]($run), *Review deployments*)") : ""
     comment = """
         **Phase 2 — Tracking issue.**
         Done: the tracking issue, from the request.
         Decisions: $(f.kind) `$v`, $mode, validated by `$(rel["requested_by"])`; started by `$actor`. Versions applied: ct-agents `$(r["versions"]["ct_agents"])`, ct-conventions `$(r["versions"]["ct_conventions"])`, CTActions `$(r["versions"]["ctactions"])`.
         Check: `release.jl request` → the request is complete (expected version, a verdict for every candidate).
-        Next: the release PR, once the CI of `main` is green on `$(rel["base"])`$(mode === :supervised ? ", after an approval of the environment `release`" : "").
+        Next: the release PR, once the CI of `main` is green on `$(rel["base"])`$approval.
 
         <details><summary>The proposal</summary>
 
