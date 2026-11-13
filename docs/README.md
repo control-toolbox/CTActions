@@ -123,5 +123,6 @@ benchmarks: see [Workflows defined in a package](workflows/per-repo.md).
 | [Runners](conventions/runners.md) | GitHub-hosted and self-hosted runners: `occidata` (GPU on demand), `kkt`, `pinwheel`; the split CI |
 | [Secrets and registries](conventions/secrets.md) | Every secret, who uses it; `ct-registry` and `SSH_KEY` |
 | [GitHub Apps](conventions/github-app.md) | `ct-prune-compat`: what it is, how to use it in a new workflow, how to extend it; `ct-release`, the App of [`release.yml`](workflows/release.md) |
+| [Who acts in a release](design/release-identities.md) | Design record: the identities of a release (`GITHUB_TOKEN`, the App `ct-release`, a release manager's token, a person), why each, what it costs, and the plan that changed when the registration bot refused the App |
 | [Repositories](repositories.md) | Which repository has which workflow, and why |
 | [Recipes](recipes.md) | A new repository, an organization-wide change, the checklist |

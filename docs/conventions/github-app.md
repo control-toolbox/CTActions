@@ -161,7 +161,7 @@ release PRs (so that they run the CI), merges them, pushes betas to ct-registry.
 `ct-prune-compat`, for the reasons of the table above: it needs a permission the prune does
 not (*Actions: read*, to read the runs before a merge), its key lives in the environments
 of the packages rather than in CTActions, and a leak of one key does not touch the other
-App.
+App. The full reasoning, and the history: [Who acts in a release](../design/release-identities.md).
 
 | Item | Value |
 | --- | --- |
