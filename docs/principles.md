@@ -75,7 +75,7 @@ moves to a script. One entry point per tool, with subcommands (`release.jl statu
 helpers (`versions.jl`) of `release` and `breakage` (CTActions#160).
 
 **Exceptions, to fix.**
-- Long inline shell: `breakage.yml` (≈117 lines),
+- Long inline shell:
   `breakage-suite.yml` (≈102), `release.yml` (≈98, mostly wiring around `release.jl`)
   (CTActions#161; `update-readme.yml` is done: `scripts/update-readme`, tested).
 - `release/finish.jl` (≈410 lines) plans every phase of a release; it is the most
@@ -219,8 +219,7 @@ moved, with the list of who has not.
 the CI still running (one run per label added, about thirty skipped jobs each);
 `select-gpu-runner.yml` answers `kkt` being offline.
 
-**Exceptions, to clear.** `breakage.yml`, kept beside `breakage-suite.yml` until every
-caller has moved (without a list of who has not, CTActions#162); `WORKFLOWS.md`, a redirect page; the
+**Exceptions, to clear.** `WORKFLOWS.md`, a redirect page; the
 section *Future uses* of [GitHub Apps](conventions/github-app.md#future-uses-ai-agents-ct-agents),
 written before `ct-release` settled the question. Around labels, five mechanisms (guard,
 label-dispatch, commit statuses, changes-only, superseded runs) are each justified, but

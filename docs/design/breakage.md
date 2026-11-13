@@ -112,3 +112,4 @@ release's installability.
 | 2026-10-21 | the `break` jobs run on a pull request (8c24a34); `guard.yml` (9bd0a24); the baseline carried over (eac188e) | a skipped job skipping the whole suite; a release without baseline |
 | 2026-11-07 | nothing to test is an empty plan (66c741a) | a package with no consumer failing |
 | 2026-11-10 | dispatched by label, a commit status | see [pull-request triggers](pull-request-triggers.md) |
+| 2026-11-13 | `breakage.yml` removed, its last caller (CTAppTemplate.jl) moved | #162 |

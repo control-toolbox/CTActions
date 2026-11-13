@@ -21,9 +21,9 @@
 7. **Decide on a runner split.** With GPU-dependent code to test, split `CI.yml` into a
    GitHub-hosted job and a job per self-hosted runner (`occidata`, optionally `kkt`), see
    [Runners](conventions/runners.md#split-ci). Use the labels verbatim.
-8. **Gate the expensive callers** (`CI`, `Documentation`, `Breakage`) with the
-   [label guard](conventions/labels.md#the-guard) and
-   `types: [labeled, synchronize, reopened]`.
+8. **Keep the expensive callers on labels.** The template already has `Labels.yml`, and
+   `CI.yml`, `Documentation.yml`, `Breakage.yml` on `workflow_dispatch`
+   ([label dispatch](workflows/label-dispatch.md)); keep that shape when editing them.
 9. **Create the labels** the callers reference, see [Labels](conventions/labels.md#creating-the-labels).
 10. **Secrets.** `SSH_KEY`, `DOCUMENTER_KEY`, `CODECOV_TOKEN`, `PROJECT_TOKEN` are
     organization secrets visible to every repository: nothing to do unless one is

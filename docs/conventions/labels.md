@@ -98,8 +98,8 @@ chooses *which* labels it defines, never *how they are spelled*.
 | `run ci github-runner` | `ci.yml` on GitHub-hosted runners | every core package |
 | `run ci occidata-runner` | `ci.yml` on the self-hosted `occidata` GPU runner | OptimalControl, CTParser, CTDirect, CTFlows, CTSolvers, CTLie |
 | `run ci kkt-runner` | `ci.yml` on the self-hosted `kkt` GPU runner | CTFlows, CTSolvers |
-| `run breakage` | `breakage.yml` against downstream **packages** | every package with downstream packages |
-| `run breakage applications` | `breakage.yml` against downstream **applications and tutorials** | OptimalControl |
+| `run breakage` | `breakage-suite.yml` against downstream **packages** | every package with downstream packages |
+| `run breakage applications` | `breakage-suite.yml` against downstream **applications and tutorials** | OptimalControl |
 | `run documentation` | `documentation.yml` on the PR | every package with a documentation site |
 | `documentation push preview` | **Modifier, not a trigger**: with `run documentation`, the PR build also deploys its preview (`previews/PR<n>`); alone it does nothing ([details](../workflows/documentation.md#pr-previews)) | every package with a documentation site |
 | `run probe` | the capability probes (`CPUProbe.yml`, `GPUProbe.yml`, [details](../workflows/per-repo.md#probes)) | CTFlows, CTSolvers |

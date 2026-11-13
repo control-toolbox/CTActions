@@ -22,16 +22,23 @@ inputs:
 runs:
   using: composite
   steps:
-    # `release.jl stable-release` decides; without a base to compare with, ct-registry is added as before
+    # `release.jl stable-release` decides; without a pull request, or a base to compare with,
+    # ct-registry is added as before. The pull request is `pull_request`'s, or the `pr` input of a
+    # run dispatched by a label (label-dispatch.yml), which has no `pull_request` payload.
     - name: Is this a stable release pull request?
       id: mode
-      if: inputs.skip_on_stable == 'true' && github.event_name == 'pull_request'
+      if: inputs.skip_on_stable == 'true'
       shell: bash
       env:
+        PR: ${{ github.event.pull_request.number || github.event.inputs.pr }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        GH_TOKEN: ${{ github.token }}
       run: |
         stable=false
-        if git fetch --quiet --depth=1 origin "$BASE_SHA" && git show "$BASE_SHA:Project.toml" > "$RUNNER_TEMP/base-Project.toml"; then
+        if [ -n "$PR" ]; then
+          [ -n "$BASE_SHA" ] || BASE_SHA=$(gh pr view "$PR" --repo "$GITHUB_REPOSITORY" --json baseRefOid --jq .baseRefOid) || BASE_SHA=
+        fi
+        if [ -n "$BASE_SHA" ] && git fetch --quiet --depth=1 origin "$BASE_SHA" && git show "$BASE_SHA:Project.toml" > "$RUNNER_TEMP/base-Project.toml"; then
           stable=$(julia --startup-file=no "${{ github.action_path }}/../../../scripts/release/release.jl" \
                    stable-release --base "$RUNNER_TEMP/base-Project.toml" Project.toml | sed -n 's/^stable=//p')
         fi

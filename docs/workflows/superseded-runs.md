@@ -19,7 +19,6 @@ In the reusable workflows, at the level of the workflow:
 | `ci.yml` (also reached through `ci-gpu.yml`) | `ctactions-ci-<caller>-<runner_type>-<runs_on>-<pull request>` |
 | `documentation.yml` | `ctactions-documentation-<caller>-<pull request>` |
 | `breakage-suite.yml` | `ctactions-breakage-suite-<caller>-<group>-<pull request>` |
-| `breakage.yml` | `ctactions-breakage-<caller>-<pkgname>-<pkgpath>-<pkgbreak>-<pkgversion>-<pull request>` |
 
 ```yaml
 concurrency:

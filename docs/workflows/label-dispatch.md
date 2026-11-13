@@ -112,7 +112,7 @@ becomes the baseline of the next release PR, as before.
 Inside a reusable workflow `github.event` is the caller's event, so `github.event.inputs.pr`
 is readable without passing it through every caller.
 
-- `ci.yml`, `documentation.yml`, `breakage-suite.yml`, `breakage.yml`: the concurrency
+- `ci.yml`, `documentation.yml`, `breakage-suite.yml`: the concurrency
   group ends with the pull request number, and a run with `pr` is cancelled by a newer one
   of the same group.
 - `breakage-suite.yml`: the base commit, the baseline and the comment come from the pull
