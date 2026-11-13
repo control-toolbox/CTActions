@@ -18,7 +18,8 @@ run-name: "Documentation${{ inputs.pr && format(' #{0}', inputs.pr) || '' }}"
 on:
   push:
     branches: [main]
-    tags: '*'
+    tags:
+      - 'v[0-9]+\.[0-9]+\.[0-9]+'   # v0.26.0 yes, v0.26.0-beta no (CTBase.jl)
   workflow_dispatch:          # by Labels.yml for `run documentation`, by release-tag.yml on a tag, or by hand
     inputs:
       pr:      { required: false, default: '' }
