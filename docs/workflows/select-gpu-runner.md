@@ -31,9 +31,10 @@ Called by [`ci-gpu.yml`](ci-gpu.md) and by [`documentation.yml`](documentation.m
 The workflow's `GITHUB_TOKEN` cannot list the organization's runners, so the job mints a
 one-hour token as the App `ct-runners`, whose only permission is the organization's
 **Self-hosted runners: read**. Its secrets `CT_RUNNERS_CLIENT_ID` and
-`CT_RUNNERS_PRIVATE_KEY` are organization secrets, visible to the packages with a GPU CI
-(not CTActions, not the other App [`ct-prune-compat`](../conventions/github-app.md): that one
-writes to the packages, and its key stays in CTActions). A leaked `ct-runners` key
+`CT_RUNNERS_PRIVATE_KEY` are organization secrets, visible to **every repository** (*Repository access*: all,
+checked on 2026-11-13), so a new package needs nothing. They are not the secrets of the
+other App [`ct-prune-compat`](../conventions/github-app.md): that one writes to the
+packages, and its key stays in CTActions. A leaked `ct-runners` key
 reveals the state of the runners and nothing else. A caller passes the two secrets
 explicitly:
 
