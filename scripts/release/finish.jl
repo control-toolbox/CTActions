@@ -14,6 +14,9 @@ using SHA
 @isdefined(register_beta) || include(joinpath(@__DIR__, "register_beta.jl"))
 @isdefined(open_issue) || include(joinpath(@__DIR__, "start.jl"))
 
+"The `why` of the phase-7 marker that hands the registration comment to a person."
+const BY_HAND = "by-hand"
+
 "The labels that hand phases 4 to 8 of a release PR to the workflow, and the mode each one sets."
 const OPTIN_LABELS = ("release: supervised" => :supervised, "release: autonomous" => :autonomous)
 
@@ -128,15 +131,14 @@ end
 A comment that stops the release at phase `n` (`state` `stopped`), or waits for a person
 (`waiting`): the reason, the output of `status`, who resumes, the progress list with ❌.
 """
-function stop_comment(f, p, mode, n, reason; state="stopped", next=nothing)
-    why = digest(reason)
+function stop_comment(f, p, mode, n, reason; state="stopped", next=nothing, why=digest(reason), details="")
     head = state == "stopped" ? "**Phase $n — stopped.**" : "**Phase $n — ⏸ waiting for you.**"
     nxt = something(next, "a human (or an agent) resumes: fix the cause, then the next event, the hourly wake-up or a run of `Release.yml` by hand goes on from the facts")
     body = """
         $head
         Reason: $reason.
         Next: $nxt.
-
+        $(isempty(details) ? "" : "\n" * details)
         <details><summary><code>release.jl status</code></summary>
 
         $(status_report(f, p))
@@ -162,7 +164,7 @@ marker): `requester` is `nothing` when the person who started it may, else why n
 is the state of the CI of `main` at the base of the request (`main_state`): the release PR
 is opened once it is green.
 """
-function finish_plan(f, p, ms, r; mode::Symbol, main=nothing, requester=nothing)
+function finish_plan(f, p, ms, r; mode::Symbol, main=nothing, requester=nothing, run="", handover=nothing)
     comments = NamedTuple[]
     has(n) = any(m -> m.phase == n && m.state == "done", ms)
     last_m = isempty(ms) ? nothing : last(ms)
@@ -175,11 +177,15 @@ function finish_plan(f, p, ms, r; mode::Symbol, main=nothing, requester=nothing)
     links = progress_links(f)
     pr = f.pr === nothing ? "" : "#$(f.pr.number)"
     merged = f.pr !== nothing && f.pr.state == "MERGED"
-    who = mode === :supervised ? "the merge job waits for an approval of the environment `release` (*Review deployments* on the run of `Release.yml`), then merges with `release.jl merge`" :
+    # where the human approves: the run that posts the comment is the one whose job waits; the
+    # list of the waiting runs when it is not known (a run that found an approval already asked)
+    where = isempty(run) ? "[the waiting run of `Release.yml`](https://github.com/$(f.repo)/actions/workflows/Release.yml?query=status%3Awaiting)" : "[this run]($run)"
+    approve = "open $where, *Review deployments*, tick `release`, *Approve and deploy*"
+    who = mode === :supervised ? "the merge job waits for your approval: $approve; it then merges with `release.jl merge`" :
                                  "the merge, by `release.jl merge`, which checks again what ran on the head commit"
     reg = f.kind === :stable ?
-        (mode === :supervised ? "the registration comment, once, after an approval of the environment `release`" : "the registration comment, once, by `release.jl register --post`") :
-        (mode === :supervised ? "the registration in ct-registry, after an approval of the environment `release`" : "the registration in ct-registry, by `release.jl register-beta`")
+        (mode === :supervised ? "the registration comment, once, after your approval: $approve" : "the registration comment, once, by `release.jl register --post`") :
+        (mode === :supervised ? "the registration in ct-registry, after your approval: $approve" : "the registration in ct-registry, by `release.jl register-beta`")
 
     # the phase comments the issue lacks, in order: the trail, whoever did the step
     reached = Dict(4 => merged || (r !== nothing && r.ready),
@@ -210,7 +216,13 @@ function finish_plan(f, p, ms, r; mode::Symbol, main=nothing, requester=nothing)
         push!(comments, (; phase=n, state="done", why="", body))
     end
 
-    p.state === :blocked && return stop!(p.phase, join(p.blockers, "; "))
+    # the bot refused the comment: the stop shows the comment for a person to post
+    refused = p.phase == 7 && handover !== nothing && get(f, :bot_error, nothing) !== nothing && live_mentions(f) == 0
+    if p.state === :blocked
+        refused && return stop!(p.phase, join(p.blockers, "; "); details=handover,
+                                next="a person posts the comment below, once; the workflow then follows General's PR")
+        return stop!(p.phase, join(p.blockers, "; "))
+    end
     if p.phase == 3 && f.pr === nothing && has(2)
         requester === nothing || return stop!(3, "the release was started by someone who may not: $requester")
         main === nothing && return (; comments, action=:none, summary="phase 3: cannot read the request or the CI of `main`")
@@ -238,6 +250,9 @@ function finish_plan(f, p, ms, r; mode::Symbol, main=nothing, requester=nothing)
             get(p, :on_commit, false) &&
                 return stop!(7, "`main` moved past the merge commit $(f.pr.merge) before the registration: the comment must go on that commit, which is never automatic";
                              state="waiting", next="give the go by running `release.jl register --repo $(f.repo) --version $(f.version) --on-commit --post` (after its dry run); the workflow then follows General's PR")
+            # without the token of a person, the comment was handed to a person: no approval again
+            any(m -> m.phase == 7 && m.state == "waiting" && m.why == BY_HAND, ms) &&
+                return (; comments, action=:none, summary="phase 7: the registration comment is a person's to post (see the issue)")
             return (; comments, action=:register, summary="post the registration comment of `$(f.version)`, once")
         end
         f.general_pr !== nothing && f.general_pr.state == "OPEN" && get(f, :jump, :none) === :betas &&
@@ -275,7 +290,7 @@ function post_comment(repo::AbstractString, n::Integer, body::AbstractString)
 end
 
 """
-    finish(repo; managers, act=:step, version=nothing, actor=nothing, dir=nothing) -> (; ok, action, mode, report)
+    finish(repo; managers, act=:step, version=nothing, actor=nothing, dir=nothing, by_hand=false) -> (; ok, action, mode, report)
 
 One wake-up of the release workflow on `repo`, for the release in progress.
 
@@ -289,12 +304,15 @@ One wake-up of the release workflow on `repo`, for the release in progress.
   of the environment (`:none` if none), and `mode` the mode of the opt-in.
 - `act = :start`, `:merge`, `:register` or `:register_beta` (a job of the environment, the App's
   token): do it if, computed again now, it is still the next action — an approval given
-  late, or a second run, does nothing. `action` is then `:none`.
+  late, or a second run, does nothing. `action` is then `:none`. With `by_hand` (the
+  environment has no token of a person), `:register` posts the registration comment for a
+  person to post, its mention broken (`BY_HAND_MENTION`), and the workflow waits for it.
 
 `ok` is false when something failed: a comment not posted, the issue not closed, the
 audit, the privileged action. `report` is Markdown.
 """
-function finish(repo::AbstractString; managers::AbstractString, act::Symbol=:step, version=nothing, actor=nothing, dir=nothing)
+function finish(repo::AbstractString; managers::AbstractString, act::Symbol=:step, version=nothing, actor=nothing, dir=nothing,
+                by_hand::Bool=false)
     nothing_to_do(why; ok=true) = (; ok, action=:none, mode=nothing, report="## Release — nothing to do\n\n$why.\n")
     opened = ""
     if version !== nothing && act === :step
@@ -324,7 +342,14 @@ function finish(repo::AbstractString; managers::AbstractString, act::Symbol=:ste
         requester = main = nothing
         r = f.pr.state == "OPEN" ? ready(repo, f.pr.number) : nothing
     end
-    plan = finish_plan(f, p, ms, r; mode=o.mode, main, requester)
+    run = haskey(ENV, "GITHUB_RUN_ID") ?
+        "$(get(ENV, "GITHUB_SERVER_URL", "https://github.com"))/$repo/actions/runs/$(ENV["GITHUB_RUN_ID"])" : ""
+    # the bot refused the comment: the stop shows it, for a person to post
+    handover = if p.phase == 7 && p.state === :blocked && get(f, :bot_error, nothing) !== nothing && live_mentions(f) == 0
+        body, target = registration_comment(repo, f, f.main_sha != f.pr.merge)
+        body === nothing ? nothing : by_hand(body, target)
+    end
+    plan = finish_plan(f, p, ms, r; mode=o.mode, main, requester, run, handover)
     io = IOBuffer()
     done(ok, action) = (; ok, action, mode=o.mode, version=f.version, report=String(take!(io)))
     print(io, opened)
@@ -363,6 +388,18 @@ function finish(repo::AbstractString; managers::AbstractString, act::Symbol=:ste
         ok, message = start(repo, dir; version=f.version)
     elseif act === :merge
         ok, message = merge_release(repo, f.pr.number; confirm=true)
+    elseif act === :register && by_hand
+        # no token of a person (the bot takes no App): the comment, for a person to post
+        body, target = registration_comment(repo, f, false)
+        if body === nothing
+            ok, message = false, target
+        else
+            c = stop_comment(f, p, o.mode, 7, "the registration comment is a person's to post: the bot takes only a public member of the organization, and the environment has no `CT_RELEASE_REGISTRATION_TOKEN`";
+                             state="waiting", why=BY_HAND, details=by_hand(body, target),
+                             next="a person posts the comment below, once; the workflow then follows General's PR")
+            url = post_comment(repo, f.issue.number, c.body)
+            ok, message = url !== nothing, url === nothing ? "posting the comment for a person failed" : "handed the registration comment to a person: $url"
+        end
     elseif act === :register
         ok, message = register(repo, f.version; post=true)
     elseif act === :register_beta

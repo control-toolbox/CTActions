@@ -6,6 +6,16 @@ using Downloads, Pkg, TOML
 "The registration bot's mention, built so that it appears in no file (REL6)."
 const MENTION = "@" * "JuliaRegistrator"
 
+"""
+The mention, broken by an apostrophe: what a person is shown to copy. Rendered, even in a
+code block or a quote, the real mention would make the bot react to the comment that shows
+it; this one triggers nothing, and the person removes the apostrophe when posting.
+"""
+const BY_HAND_MENTION = "@'" * "JuliaRegistrator"
+
+"The link of a General PR in an answer of the bot (a regex, also for jq): without it, a refusal."
+const GENERAL_PR = "JuliaRegistries/General/(pull/)?[0-9]+"
+
 "The `X.Y.Z` of `v`, without suffix."
 triple(v::VersionNumber) = VersionNumber(v.major, v.minor, v.patch)
 

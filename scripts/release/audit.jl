@@ -36,7 +36,7 @@ end
 
 "Whether `body` is the registration comment as `register` builds it (REL6), not one written by hand."
 built_by_the_tool(body::AbstractString) =
-    startswith(body, "$MENTION register\n\nRelease notes:\n\n")
+    startswith(replace(body, "\r\n" => "\n"), "$MENTION register\n\nRelease notes:\n\n")   # posted from the web: CRLF
 
 """
     audit_checks(f, t) -> Vector{NamedTuple}
@@ -99,12 +99,15 @@ function audit_checks(f, t)
     mention_comments = [c for c in vcat(t.comments, t.commit_comments)
                         if contains(c.body, Regex(MENTION, "i")) && c.author != "JuliaRegistrator"]
     if stable
-        f.mentions == 1 ? add(:pass, "registration", "the bot is mentioned once (REL6)") :
-            add(:fail, "registration", "the bot is mentioned $(f.mentions) times (REL6: once)")
-        if length(mention_comments) == 1
-            built_by_the_tool(only(mention_comments).body) ?
+        # a mention the bot refused registered nothing: it does not count (posted again by a person)
+        refused = get(f, :refused, 0)
+        live_mentions(f) == 1 ?
+            add(:pass, "registration", "the bot is mentioned once (REL6)" * (refused > 0 ? ", after $refused refused (registered nothing)" : "")) :
+            add(:fail, "registration", "the bot is mentioned $(live_mentions(f)) times, not counting $refused refused (REL6: once)")
+        if !isempty(mention_comments)
+            all(c -> built_by_the_tool(c.body), mention_comments) ?
                 add(:pass, "registration", "the registration comment is the one `release.jl register` builds") :
-                add(:fail, "registration", "the registration comment is not in the form `release.jl register` builds: posted by hand?")
+                add(:fail, "registration", "the registration comment is not in the form `release.jl register` builds: written by hand?")
         end
     else
         f.mentions == 0 && isempty(mention_comments) ?

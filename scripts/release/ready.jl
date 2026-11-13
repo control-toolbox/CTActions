@@ -4,9 +4,10 @@
 # Why not the checks: a label-gated workflow runs once per label added, and a run whose jobs
 # are all skipped (the label added was another one) reports success; the latest result of a
 # check name is the one GitHub shows. So a check can look green while the real tests failed
-# or are still running. Here, for each workflow, the latest run that executed jobs is the
-# one that counts, and every job its labels call for must have run and passed. The runs of
-# the PR are its own events and the ones label-dispatch.yml dispatched on its branch.
+# or are still running. Here, for each workflow, each job counts by its latest outcome where it
+# ran (a workflow whose jobs are split over runs, CI per runner label, has the other runner's
+# job skipped in each), and every job its labels call for must have run and passed. The runs
+# of the PR are its own events and the ones label-dispatch.yml dispatched on its branch.
 
 @isdefined(facts) || include(joinpath(@__DIR__, "status.jl"))
 @isdefined(GPU_LABELS) || include(joinpath(@__DIR__, "changes.jl"))
@@ -110,22 +111,34 @@ function ready(repo::AbstractString, pr::Integer)
             push!(lines, verdict_line(:wait, "`$f`: a run is in progress"))
             continue
         end
-        real = findlast(r -> r.conclusion != "skipped", rs)
-        if real === nothing
+        executed = [r for r in rs if r.conclusion != "skipped"]
+        if isempty(executed)
             mandatory && push!(lines, verdict_line(:fail, "`$f`: no run executed its jobs on $(head[1:min(end, 8)]) (a missing label?)"))
             continue
         end
-        run = rs[real]
-        jobs_out = something(gh("api", "repos/$repo/actions/runs/$(run.id)/jobs?per_page=100",
-                                "--jq", ".jobs[] | \"\\(.name)\\t\\(.conclusion)\""), "")
-        ran = [(n, c) for (n, c) in (split(l, '\t'; limit=2) for l in split(jobs_out, '\n'; keepempty=false))]
-        bad = [n for (n, c) in ran if !(c in ("success", "skipped", "neutral"))]
-        isempty(bad) || push!(lines, verdict_line(:fail, "`$f`, run $(run.id): $(join(("`$n`" for n in bad), ", ")) did not pass"))
+        # a label-gated workflow splits its jobs over its runs (CI: one run per runner label, the
+        # other runner's job skipped): the outcome of a job is its latest one where it ran, in any run
+        latest = Dict{String,Tuple{Int,String}}()
+        for run in executed
+            # a run cancelled by the concurrency group (two labels in a row) is superseded by the
+            # next run that executed: it is no verdict, and stands only when none came after it
+            run.conclusion == "cancelled" || filter!(kv -> last(kv)[2] != "cancelled", latest)
+            jobs_out = something(gh("api", "repos/$repo/actions/runs/$(run.id)/jobs?per_page=100",
+                                    "--jq", ".jobs[] | \"\\(.name)\\t\\(.conclusion)\""), "")
+            for l in split(jobs_out, '\n'; keepempty=false)
+                n, c = split(l, '\t'; limit=2)
+                c == "skipped" || (latest[n] = (run.id, c))
+            end
+        end
+        ran = [(n, c) for (n, (_, c)) in latest]
+        bad = sort!([n for (n, (_, c)) in latest if !(c in ("success", "neutral"))])
+        isempty(bad) || push!(lines, verdict_line(:fail, "`$f`, run $(latest[first(bad)][1]): $(join(("`$n`" for n in bad), ", ")) did not pass"))
         missing_jobs = [id for (id, _) in required if !any(((n, c),) -> job_of(n, id) && c == "success", ran)]
         isempty(missing_jobs) ||
-            push!(lines, verdict_line(:fail, "`$f`, run $(run.id): $(join(("`$j`" for j in missing_jobs), ", ")) did not run (skipped): add its label, the workflow runs again"))
+            push!(lines, verdict_line(:fail, "`$f`: $(join(("`$j`" for j in missing_jobs), ", ")) did not run (skipped): add its label, the workflow runs again"))
+        ids = sort!(unique(first.(values(latest))))
         isempty(bad) && isempty(missing_jobs) &&
-            push!(lines, verdict_line(:pass, "`$f`, run $(run.id): $(count(((n, c),) -> c == "success", ran)) job(s) passed"))
+            push!(lines, verdict_line(:pass, "`$f`, run$(length(ids) > 1 ? "s" : "") $(join(ids, ", ")): $(count(((n, c),) -> c == "success", ran)) job(s) passed"))
     end
     ok = !isempty(lines) && all(l -> l.status === :pass, lines)
     return (; ready=ok, head, branch, lines)

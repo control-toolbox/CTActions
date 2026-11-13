@@ -334,15 +334,20 @@ jobs:
         with:
           version: '1'
 
-      # stable: the registration comment, as the App, or as the person of
-      # CT_RELEASE_REGISTRATION_TOKEN when the environment has it (in case the registration
-      # bot does not take a comment of an App)
+      # stable: the registration comment, as the person of CT_RELEASE_REGISTRATION_TOKEN. The
+      # registration bot takes only a public member of the organization, never an App (seen on
+      # CTParser 0.9.6). Without the token, the App posts the comment for a person to post, its
+      # mention broken, and the workflow waits for it
       - name: Registration comment
         if: needs.step.outputs.action == 'register'
         env:
           GH_TOKEN: ${{ secrets.CT_RELEASE_REGISTRATION_TOKEN || steps.app.outputs.token }}
+          BY_HAND: ${{ secrets.CT_RELEASE_REGISTRATION_TOKEN == '' }}
           MANAGERS: ${{ vars.CT_RELEASE_MANAGERS }}
-        run: julia --startup-file=no .ctactions/scripts/release/release.jl finish --repo "$GITHUB_REPOSITORY" --managers "$MANAGERS" --act register
+        run: |
+          args=(--repo "$GITHUB_REPOSITORY" --managers "$MANAGERS" --act register)
+          [ "$BY_HAND" = true ] && args+=(--by-hand)
+          julia --startup-file=no .ctactions/scripts/release/release.jl finish "${args[@]}"
 
       # beta: LocalRegistry pushes to ct-registry over HTTPS, with the App's token
       - name: Registration in ct-registry

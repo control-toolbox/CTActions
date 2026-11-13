@@ -157,7 +157,7 @@ tokens, never on untrusted code, a human merges.
 ## `ct-release`: the App of the releases
 
 A second App, for [`release.yml`](../workflows/release.md) alone: it opens
-release PRs (so that they run the CI), merges them, posts the registration comment of a stable, pushes betas to ct-registry. Not
+release PRs (so that they run the CI), merges them, pushes betas to ct-registry. It does not post the registration comment of a stable: the registration bot takes only a public member of the organization, never an App ([details](../workflows/release.md#the-registration-comment)). Not
 `ct-prune-compat`, for the reasons of the table above: it needs a permission the prune does
 not (*Actions: read*, to read the runs before a merge), its key lives in the environments
 of the packages rather than in CTActions, and a leak of one key does not touch the other

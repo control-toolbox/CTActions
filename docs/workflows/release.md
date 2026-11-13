@@ -71,7 +71,7 @@ mistake, late, or after a person did a step by hand goes on from where the facts
 | 4. Checks | the package's workflows; `release.jl ready` decides | ✅ the verdict of `ready`, or ❌ the checks that failed |
 | 5. Merge | job `merge`: `release.jl merge` as the App (or a person merges) | ✅ merged as `<sha>` |
 | 6. Tag, GitHub release | [`release-tag.yml`](release-tag.md), started by the merge | ✅ the tag |
-| 7. Registration | job `register`: the registration comment of a stable (`release.jl register --post`), or LocalRegistry for a beta (`release.jl register-beta`) | ✅ General's PR merged, or the tree in ct-registry |
+| 7. Registration | job `register`: the registration comment of a stable, as the person of `CT_RELEASE_REGISTRATION_TOKEN` (`release.jl register --post`), or, without the token, handed to a person ([The registration comment](#the-registration-comment)); LocalRegistry for a beta (`release.jl register-beta`) | ✅ General's PR merged, or the tree in ct-registry |
 | 8. Close | job `step`: the final comment, the issue closed, the branch deleted, `release.jl audit` | the final comment; the audit, when it fails |
 
 The comments follow
@@ -143,7 +143,8 @@ issue, the reason, what to do), and goes on once the facts change:
   must go on the merge commit (`release.jl register --on-commit`), after a person's go;
 - a version that jumps over betas (`REL3`): `[merge approved]` on General's PR, by a
   person;
-- the bot answers with an error: never posted again (`status` says *blocked*).
+- the registration comment without `CT_RELEASE_REGISTRATION_TOKEN`, or refused by the bot:
+  a person posts it ([The registration comment](#the-registration-comment)).
 
 Any other stop condition (`status` *blocked*, the CI of `main` red, the gate refusing, a
 check that failed) is a ❌ comment with the reason and the output of `status`. A person
@@ -240,15 +241,35 @@ Then add the caller. To start with supervised mode only, do not create
 `release-autonomous`: GitHub then creates it empty when a job names it, without the App's
 secrets, and a run in autonomous mode fails at the token, before anything is done.
 
-**Optional: `CT_RELEASE_REGISTRATION_TOKEN`.** The registration comment of a stable is
-posted as the App. Whether the registration bot takes a comment of an App is not verified
-yet; if it does not, set this environment secret to a fine-grained token of a release
-manager (the package, *Issues: read and write*): the comment is then posted as that
-person, and the rest stays the App's.
+**`CT_RELEASE_REGISTRATION_TOKEN`, for an automatic registration.** Set this environment
+secret, in each environment, to a fine-grained token of a release manager who is a
+**public** member of the organization (the package, *Issues: read and write*). See
+[The registration comment](#the-registration-comment).
+
+## The registration comment
+
+The registration bot takes a comment only from a **public member** of the organization: an
+App never is one, so it refuses the App's comment ("not a publicly listed member", seen on
+CTParser 0.9.6). The comment is therefore a person's:
+
+| `CT_RELEASE_REGISTRATION_TOKEN` | What the job `register` does | Then |
+| --- | --- | --- |
+| set (the default to aim at) | posts the comment as that person, once, after the approval in supervised mode | the bot opens General's PR; the workflow follows it |
+| not set | posts, as the App, the comment for a person to post: in a code block, its mention broken by an apostrophe (`@'JuliaRegistrator`), with the instruction to remove it | the workflow waits, without asking for an approval again; a person posts it once, and the workflow follows General's PR |
+
+Both modes use the token: in supervised mode the approval of the job is the person's
+control, and a copy to paste on top of it would check nothing more. Without the token, both
+modes wait for the person.
+
+The mention is broken because the bot reacts to it wherever it is written, even in a code
+block or a quote. If the bot refuses a comment anyway (the token's person is not a public
+member, for instance), the workflow never posts again: it stops, and its stop shows the
+same comment for a person to post. A comment the bot refused registered nothing, so `REL6`
+(one registration mention) does not count it: `status` and `release.jl audit` count only
+the mentions the bot did not refuse.
 
 ## Not verified yet
 
-- A comment of the App taken into account by the registration bot (see above).
 - `workflow_run` started by the end of a run that was itself dispatched with
   `GITHUB_TOKEN` (the CI dispatched by [label-dispatch](label-dispatch.md)): if it is not,
   the hourly run takes over, a little later.
@@ -265,6 +286,8 @@ the facts, the skeleton and `check_request` (each refusal), the release commit (
 it is done once), the state of the CI of `main`, `finish_plan` on facts (every phase, both
 modes, both kinds; phase 3 waiting for `main`, red, a requester who may not; a comment
 posted once, a stop once per reason, the markers in the order the audit checks, no mention
-of the bot), the opt-in (fork, branch, labels, manager, role, the App), a whole run on a
+of the bot), the registration comment for a person (no live mention, the code block, no
+approval asked again, shown again when the bot refuses), the mentions the bot refused (not
+counted by `status` nor the audit), the opt-in (fork, branch, labels, manager, role, the App), a whole run on a
 fake GitHub (the comments, the close, the audit, a second run that does nothing; nothing
 without the opt-in), and `register-beta` with the commands faked.

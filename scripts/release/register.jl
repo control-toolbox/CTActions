@@ -26,6 +26,32 @@ end
 masked(text) = replace(text, MENTION => "<the registration bot's mention>")
 
 """
+    by_hand(body, target) -> String
+
+The registration comment `body` for a person to post on `target`: in a code block, its
+mention broken by an apostrophe (`BY_HAND_MENTION`), so that showing it triggers nothing.
+"""
+function by_hand(body::AbstractString, target::AbstractString)
+    fence = repeat('`', max(3, maximum(m -> length(m.match), eachmatch(r"`+", body); init=0) + 1))
+    return """
+        **The registration comment, to post by hand, once.** Copy the block below (the copy button of the block) into a new comment on $target, **remove the apostrophe** in `$BY_HAND_MENTION register` on its first line, and post it. Post it once: the workflow follows General's PR.
+
+        $(fence)markdown
+        $(replace(body, MENTION => BY_HAND_MENTION))
+        $fence
+        """
+end
+
+"`(body, target)` of the registration comment of `f`, or `(nothing, why)`."
+function registration_comment(repo, f, moved::Bool)
+    target = moved ? "the merge commit $(f.pr.merge)" : "#$(f.issue.number)"
+    changelog = gh("api", "repos/$repo/contents/CHANGELOG.md?ref=v$(f.version)", "-H", "Accept: application/vnd.github.raw")
+    changelog === nothing && return (nothing, "cannot read CHANGELOG.md at `v$(f.version)`")
+    notes = something(gh("release", "view", "v$(f.version)", "-R", repo, "--json", "body", "--jq", ".body"), "")
+    return (registration_body(changelog, f.version, repo, notes), target)
+end
+
+"""
     register(repo, version; post=false, on_commit=false) -> (Bool, String)
 
 Post the registration comment of the stable `version` of `repo`, once: only when `status`
@@ -47,11 +73,8 @@ function register(repo::AbstractString, version; post::Bool=false, on_commit::Bo
         return (false, "not on the issue: $(p.next). Rerun with --on-commit once the human agrees")
     !moved && on_commit &&
         return (false, "`main` is at the merge commit: the comment goes on the tracking issue, without --on-commit")
-    target = moved ? "the merge commit $(f.pr.merge)" : "#$(f.issue.number)"
-    changelog = gh("api", "repos/$repo/contents/CHANGELOG.md?ref=v$(f.version)", "-H", "Accept: application/vnd.github.raw")
-    changelog === nothing && return (false, "cannot read CHANGELOG.md at `v$(f.version)`")
-    notes = something(gh("release", "view", "v$(f.version)", "-R", repo, "--json", "body", "--jq", ".body"), "")
-    body = registration_body(changelog, f.version, repo, notes)
+    body, target = registration_comment(repo, f, moved)
+    body === nothing && return (false, target)
     post || return (true, "Dry run: the comment that `--post` would put on $target:\n\n" * masked(body))
     path, io = mktemp()
     write(io, body); close(io)
@@ -60,7 +83,7 @@ function register(repo::AbstractString, version; post::Bool=false, on_commit::Bo
     rm(path; force=true)
     out === nothing && return (false, "posting the comment on $target failed: check it before anything else")
     after = facts(repo; version=f.version)
-    after.mentions == 1 ||
-        return (false, "posted, but there are now $(after.mentions) mentions: a human checks them (REL6)")
+    live_mentions(after) == 1 ||
+        return (false, "posted, but there are now $(live_mentions(after)) mentions not refused by the bot: a human checks them (REL6)")
     return (true, "posted on $target ($(strip(out))): rerun `status` in a minute for the bot's answer")
 end

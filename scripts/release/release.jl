@@ -40,10 +40,10 @@
 #       hand the release over: check the request, commit it on `release/vX`, push, start the
 #       release workflow (Release.yml) with the version
 #   julia release.jl finish --repo OWNER/REPO --managers "a,b" [--version V --actor LOGIN --dir DIR]
-#                           [--act start|merge|register|register-beta]
+#                           [--act start|merge|register|register-beta] [--by-hand]
 #       one wake-up of the release workflow: phase 2 when started with a version, then the
 #       phase comments, a stop, the close; or, with --act, the privileged action if it is
-#       still the next one. Writes `action=<start|merge|register|register-beta|none>` and
+#       still the next one (--by-hand: the registration comment for a person to post). Writes `action=<start|merge|register|register-beta|none>` and
 #       `mode=` to $GITHUB_OUTPUT (to standard output when unset)
 #
 # The Markdown report goes to standard output, and to $GITHUB_STEP_SUMMARY when set. Exit
@@ -90,7 +90,7 @@ const USAGE = """
            julia release.jl lint-changelog [DIR]
            julia release.jl facts --repo OWNER/REPO --kind stable|beta [DIR]
            julia release.jl request --repo OWNER/REPO [--no-dispatch] .releases/vX.toml [DIR]
-           julia release.jl finish --repo OWNER/REPO --managers "a,b" [--version V --actor LOGIN --dir DIR] [--act start|merge|register|register-beta]"""
+           julia release.jl finish --repo OWNER/REPO --managers "a,b" [--version V --actor LOGIN --dir DIR] [--act start|merge|register|register-beta] [--by-hand]"""
 
 function release_main(args)
     isempty(args) && (println(stderr, USAGE); return 2)
@@ -192,8 +192,9 @@ function release_main(args)
                 throw(ArgumentError("--act is start, merge, register or register-beta"))
             version = option!(args, "version")
             version = version === nothing || isempty(version) ? nothing : version
+            by_hand = "--by-hand" in args
             r = finish(repo; managers, act=Symbol(replace(act, "-" => "_")), version,
-                       actor=option!(args, "actor"), dir=option!(args, "dir"))
+                       actor=option!(args, "actor"), dir=option!(args, "dir"), by_hand)
             emit(r.report)
             # for the jobs of the environment: what to do, and in which environment
             outputs = "action=$(replace(string(r.action), "_" => "-"))\nmode=$(something(r.mode, ""))\nversion=$(something(get(r, :version, nothing), ""))\n"
