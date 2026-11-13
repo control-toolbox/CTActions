@@ -217,56 +217,39 @@ Once, by an organization owner:
 1. **The App** `ct-release`: see [GitHub App](../conventions/github-app.md#ct-release-the-app-of-the-releases).
 2. **The release managers**: `gh variable set CT_RELEASE_MANAGERS --org control-toolbox --visibility all --body 'ocots'`.
 
-In each package, by an administrator of the repository:
+In each package, by an administrator of the repository, with
+[`scripts/release/setup.sh`](https://github.com/control-toolbox/CTActions/blob/main/scripts/release/setup.sh)
+(idempotent: run it again for a new token, or for a new package):
 
 ```bash
-REPO=control-toolbox/CTParser.jl
-# the environments: `release` with a required reviewer, `release-autonomous` without
-me=$(gh api users/ocots --jq .id)
-gh api --method PUT "repos/$REPO/environments/release" --input - <<EOF
-{"reviewers": [{"type": "User", "id": $me}]}
-EOF
-gh api --method PUT "repos/$REPO/environments/release-autonomous" --input - <<< '{}'
-# the App's secrets, in each environment (not in the repository: only these jobs see them)
-for env in release release-autonomous; do
-  gh secret set CT_RELEASE_CLIENT_ID   -R "$REPO" --env "$env" --body '<client id>'
-  gh secret set CT_RELEASE_PRIVATE_KEY -R "$REPO" --env "$env" < ct-release.private-key.pem
-done
-# the labels
-gh label create "release: supervised" -R "$REPO" --color 0E8A16 --description "Hand phases 4 to 8 of this release PR to Release, with approvals"
-gh label create "release: autonomous" -R "$REPO" --color B60205 --description "Hand phases 4 to 8 of this release PR to Release, without approvals"
+CT_RELEASE_CLIENT_ID='<client id>' \
+CT_RELEASE_KEY_FILE=ct-release.private-key.pem \
+CT_RELEASE_REGISTRATION_TOKEN='<token, see below>' \
+  bash scripts/release/setup.sh CTParser.jl CTModels.jl     # --dry-run to see the commands
 ```
 
-Then add the caller. To start with supervised mode only, do not create
-`release-autonomous`: GitHub then creates it empty when a job names it, without the App's
-secrets, and a run in autonomous mode fails at the token, before anything is done.
+For each repository it creates:
 
-**`CT_RELEASE_REGISTRATION_TOKEN`, for an automatic registration.** Set this environment
-secret, in each environment, to a fine-grained token of a release manager who is a
-**public** member of the organization (the package, *Issues: read and write*). See
-[The registration comment](#the-registration-comment).
+- the environment `release`, with `ocots` as required reviewer (`CT_RELEASE_REVIEWER` to change it);
+- the App's secrets `CT_RELEASE_CLIENT_ID` and `CT_RELEASE_PRIVATE_KEY`, and the token below, in the **environment**, not in the repository: only the jobs of the environment, after its approval, see them;
+- the label `release: supervised`.
 
-## The registration comment
+`--autonomous` also creates `release-autonomous` (no reviewer, same secrets) and the label `release: autonomous`. Without it, GitHub creates `release-autonomous` empty when a job names it, without the App's secrets, and a run in autonomous mode fails at the token, before anything is done.
 
-The registration bot takes a comment only from a **public member** of the organization: an
-App never is one, so it refuses the App's comment ("not a publicly listed member", seen on
-CTParser 0.9.6). The comment is therefore a person's:
+By hand, once per package: the App `ct-release` must be **installed** on it (organization settings, *Installed GitHub Apps*, *Selected repositories*). Then add the caller above.
 
-| `CT_RELEASE_REGISTRATION_TOKEN` | What the job `register` does | Then |
-| --- | --- | --- |
-| set (the default to aim at) | posts the comment as that person, once, after the approval in supervised mode | the bot opens General's PR; the workflow follows it |
-| not set | posts, as the App, the comment for a person to post: in a code block, its mention broken by an apostrophe (`@'JuliaRegistrator`), with the instruction to remove it | the workflow waits, without asking for an approval again; a person posts it once, and the workflow follows General's PR |
+### The registration token
 
-Both modes use the token: in supervised mode the approval of the job is the person's
-control, and a copy to paste on top of it would check nothing more. Without the token, both
-modes wait for the person.
+`CT_RELEASE_REGISTRATION_TOKEN` is what the registration comment of a stable is posted with ([why](#the-registration-comment)). It is the token of a release manager who is a **public** member of the organization: the registration bot takes no comment of an App.
 
-The mention is broken because the bot reacts to it wherever it is written, even in a code
-block or a quote. If the bot refuses a comment anyway (the token's person is not a public
-member, for instance), the workflow never posts again: it stops, and its stop shows the
-same comment for a person to post. A comment the bot refused registered nothing, so `REL6`
-(one registration mention) does not count it: `status` and `release.jl audit` count only
-the mentions the bot did not refuse.
+1. As that person: *Settings, Developer settings, Personal access tokens, Fine-grained tokens, Generate new token*.
+2. *Resource owner*: `control-toolbox` (an owner approves the token under the organization's *Personal access tokens, Pending requests* if the organization requires it). *Repository access*: *Only select repositories*, the packages released with `release.yml`. An expiration date: at most a year.
+3. *Repository permissions*: **Issues: read and write**, and **Contents: read and write** to cover the registration comment on a commit (when the release PR's merge commit moved); *Metadata: read* comes with them. Nothing else.
+4. Copy the value (shown once) and give it to `setup.sh`. One token serves all the packages; add each new package to its repositories.
+
+An environment secret is read after the approval of the environment, which is why it is set per package and not once for the organization (an organization secret would be readable by any workflow of the repositories it is shared with). When the token expires, generate it again and run `setup.sh` again.
+
+Without the token, the workflow hands the comment to a person ([details](#the-registration-comment)).
 
 ## Not verified yet
 
