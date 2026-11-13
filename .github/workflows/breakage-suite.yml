@@ -146,7 +146,7 @@ jobs:
           ref: ${{ inputs.ctactions_ref }}
           path: .ctactions
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: '1'
 
@@ -192,7 +192,7 @@ jobs:
 
       - name: Setup Julia
         id: julia
-        uses: julia-actions/setup-julia@v2
+        uses: julia-actions/setup-julia@v3
         with:
           version: '1'
 
@@ -284,7 +284,7 @@ jobs:
           ref: ${{ inputs.ctactions_ref }}
           path: .ctactions
 
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: '1'
 
