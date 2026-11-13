@@ -126,7 +126,8 @@ julia scripts/release/release.jl finish --repo control-toolbox/CTBase.jl --manag
 - **`register`** builds and posts the registration comment of a stable (`REL6`): the bot's
   mention, the CHANGELOG entry (links made absolute at the tag) and the GitHub release's
   notes. It refuses unless `status` says phase 7, todo — so never twice, never for a beta,
-  never once `main` has moved — and checks afterwards that the issue holds one mention.
+  never once `main` has moved — and checks afterwards that the issue holds one mention
+  (a mention the bot refused registered nothing and does not count).
   Without `--post` it is a dry run, which shows the comment with the mention masked, so
   that it can be pasted anywhere. The bot registers the head of `main` when asked on an
   issue, and a commit when asked on that commit: once `main` has moved past the merge

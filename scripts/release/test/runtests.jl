@@ -326,9 +326,14 @@ failures(results) = [r.message for r in results if r.status === :fail]
         # REL6: posted, no answer yet: wait, never post again
         p = phase(at(mentions=1))
         @test p.state === :waiting && contains(p.next, "never post it again")
-        p = phase(at(mentions=1, bot_error="Error while trying to register: the tag exists"))
+        p = phase(at(mentions=1, refused=1, bot_error="Error while trying to register: the tag exists"))
         @test p.state === :blocked && contains(only(p.blockers), "the tag exists")
         @test phase(at(mentions=2)).state === :blocked
+        # a mention the bot refused registered nothing: the one after it is the only one (REL6)
+        @test phase(at(mentions=2, refused=1, bot_error="Error while trying to register: **Register Failed**")).state === :waiting
+        @test phase(at(mentions=3, refused=1)).state === :blocked
+        p = phase(at(mentions=1, refused=1, bot_error="Error while trying to register: **Register Failed**"))
+        @test p.state === :blocked && contains(only(p.blockers), "a person posts it")
         @test phase(at(issues=2)).state === :blocked                        # duplicate tracking issues
         # main moved past the merge: still todo, but on the merge commit only
         p = phase(at(main_sha="N"))
@@ -392,6 +397,9 @@ failures(results) = [r.message for r in results if r.status === :fail]
                 contains(a, "commits/main") && return "$main\n"
                 contains(a, "issue list") && return join(issues, "\n")
                 contains(a, "issue view") && contains(a, "body,comments") && return "$(st[:mentions])\n"
+                # the refusals: one line per answer of the bot, whether it links a General PR
+                contains(a, "issue view") && contains(a, "test(") &&
+                    return join((string(occursin(Regex(GENERAL_PR), l)) for l in split(answers, '\n'; keepempty=false)), "\n")
                 contains(a, "issue view") && return answers
                 contains(a, "pr list -R o/P") && return "2 MERGED M true\n"
                 contains(a, "commits/v") && contains(a, "tree") && return "T\n"
@@ -487,6 +495,22 @@ failures(results) = [r.message for r in results if r.status === :fail]
                 f = facts("o/P"; version="0.4.3")
                 @test f.general_pr === nothing && contains(f.bot_error, "already exists")
                 @test phase(f).state === :blocked
+                @test !first(register("o/P", v"0.4.3"; post=true)) && isempty(st[:posted])
+            end
+            # the bot refused the App's comment, then took a person's: one mention counts (REL6)
+            fake, st = github(mentions=2, answers="Error while trying to register: **Register Failed**\n" *
+                "Registration pull request created: [JuliaRegistries/General/172378](https://github.com/JuliaRegistries/General/pull/172378)\n")
+            with_gh(fake) do
+                f = facts("o/P"; version="0.4.3")
+                @test f.refused == 1 && live_mentions(f) == 1 && f.bot_error === nothing && f.general_pr.number == 172378
+            end
+            # refused, and nothing after: the workflow never posts again (a person does)
+            fake, st = github(mentions=1, answers="Error while trying to register: **Register Failed**\n")
+            with_gh(fake) do
+                f = facts("o/P"; version="0.4.3")
+                @test f.refused == 1 && live_mentions(f) == 0
+                p = phase(f)
+                @test p.state === :blocked && contains(only(p.blockers), "a person posts it")
                 @test !first(register("o/P", v"0.4.3"; post=true)) && isempty(st[:posted])
             end
             # two tracking issues for the same version
@@ -591,23 +615,27 @@ failures(results) = [r.message for r in results if r.status === :fail]
             @test "registration" in areas(withfield(f, :mentions, 0), t)
             @test "registration" in areas(withfield(f, :mentions, 2), t)
             by_hand = withfield(t, :comments, [c.body == register_body ? (; author="a", time="x", body=MENTION * " register") : c for c in t.comments])
-            @test any(x -> contains(x[2], "posted by hand"), failed(f, by_hand))
+            @test any(x -> contains(x[2], "written by hand"), failed(f, by_hand))
             # on the merge commit instead of the issue (main moved): the same form is required
             on_commit = withfield(without(t, c -> c.body == register_body), :commit_comments, [(; author="a", time="x", body=register_body)])
             @test isempty(failed(f, on_commit))
-            @test any(x -> contains(x[2], "posted by hand"), failed(f, withfield(on_commit, :commit_comments, [(; author="a", time="x", body=MENTION * " register")])))
-            # two comments with the mention: the count refuses, the form check does not crash
+            @test any(x -> contains(x[2], "written by hand"), failed(f, withfield(on_commit, :commit_comments, [(; author="a", time="x", body=MENTION * " register")])))
+            # two comments with the mention: the count refuses, and each must have the tool's form
             two = withfield(t, :comments, [t.comments; (; author="a", time="y", body=MENTION * " register")])
-            @test "registration" in areas(withfield(f, :mentions, 2), two) && !any(x -> contains(x[2], "posted by hand"), failed(withfield(f, :mentions, 2), two))
-            @test !any(x -> contains(x[2], "posted by hand"), failed(f, two))
+            @test "registration" in areas(withfield(f, :mentions, 2), two) && any(x -> contains(x[2], "written by hand"), failed(withfield(f, :mentions, 2), two))
+            @test any(x -> contains(x[2], "written by hand"), failed(f, two))
             # a bot's comment is not a mention of it: the one by hand is still seen
             botsaid = withfield(by_hand, :comments, [by_hand.comments; (; author="JuliaRegistrator", time="y", body="hello $MENTION")])
-            @test any(x -> contains(x[2], "posted by hand"), failed(f, botsaid))
+            @test any(x -> contains(x[2], "written by hand"), failed(f, botsaid))
             # the bot's own answers are not mentions of it
             @test isempty(failed(f, withfield(t, :comments, [t.comments; (; author="JuliaRegistrator", time="y", body="hello $MENTION")])))
             @test "registration" in areas(f, withfield(t, :release_body, "register $MENTION"))
             @test "registration" in areas(f, withfield(t, :pr, withfield(t.pr, :body, "$MENTION")))
             @test "registration" in areas(f, withfield(t, :pr, withfield(t.pr, :title, "$MENTION")))
+            # the bot refused the App's comment; a person posted the same, which it took: once (REL6)
+            again = withfield(t, :comments, [t.comments; (; author="ocots", time="y", body=replace(register_body, "\n" => "\r\n"))])
+            @test !("registration" in areas(merge(withfield(f, :mentions, 2), (; refused=1)), again))
+            @test "registration" in areas(withfield(f, :mentions, 2), again)
             fb, tb = done(; kind=:beta)                                                  # a beta never goes to the bot
             @test "registration" in areas(withfield(fb, :mentions, 1), tb)
             @test "registration" in areas(fb, withfield(tb, :comments, [tb.comments; (; author="a", time="x", body=register_body)]))
@@ -1068,6 +1096,30 @@ failures(results) = [r.message for r in results if r.status === :fail]
         @test contains(body(""), "actions/workflows/Release.yml?query=status%3Awaiting") && contains(body(""), "*Approve and deploy*")
     end
 
+    @testset "the registration comment, by a person" begin
+        body = registration_body(changelog("0.4.3" => "### 🐛 Bug Fixes\n\n- a fix:\n\n```julia\nx = 1\n```"), v"0.4.3", "o/P", "")
+        h = by_hand(body, "#7")
+        # shown, it triggers nothing: no mention, the broken one, and the block holds the body
+        @test !occursin(Regex(MENTION, "i"), h) && contains(h, "$BY_HAND_MENTION register") && contains(h, "remove the apostrophe")
+        @test contains(h, "````markdown\n") && contains(h, replace(body, MENTION => BY_HAND_MENTION))
+        @test built_by_the_tool(replace(replace(body, MENTION => BY_HAND_MENTION), BY_HAND_MENTION => MENTION))
+        f = (; repo="o/P", name="P", version=v"0.4.3", kind=:stable, main_version=v"0.4.3", main_sha="M",
+             issue=(; number=7, state="OPEN"), issues=1, mentions=0, refused=0, bot_error=nothing,
+             pr=(; number=2, state="MERGED", merge="M", auto=false), tag="M", tag_tree="T", release=false,
+             registry="General", registered=nothing, general_pr=nothing, jump=:none)
+        @test phase(f).phase == 7 && phase(f).state === :todo
+        plan(f, ms; kw...) = finish_plan(f, phase(f), ms, nothing; mode=:supervised, kw...)
+        @test plan(f, NamedTuple[]).action === :register
+        # handed to a person: no approval asked again
+        handed = markers([(; author="b", time="t", body="<!-- ct-release phase=7 kind=stable version=0.4.3 mode=supervised pr=2 merge=M state=waiting why=$BY_HAND -->")])
+        @test plan(f, handed).action === :none
+        # the bot refused: the stop shows the comment for a person, once
+        refused = merge(f, (; mentions=1, refused=1, bot_error="Error while trying to register: **Register Failed**"))
+        p = plan(refused, NamedTuple[]; handover=h)
+        @test p.action === :none && contains(p.comments[end].body, h) && contains(p.comments[end].body, "a person posts the comment below")
+        @test !occursin(Regex(MENTION, "i"), p.comments[end].body)
+    end
+
     @testset "finish: the opt-in" begin
         function fake(; cross=false, branch="release/v0.4.3", labels="run ci github-runner,release: supervised", actor="ocots", role="admin")
             return function (args)
@@ -1461,6 +1513,11 @@ failures(results) = [r.message for r in results if r.status === :fail]
         # the environment follows the mode, with a reviewer by default
         @test count("inputs.autonomous_environment || inputs.environment", wf) == 3
         @test contains(wf, "default: release\n")
+        # the registration comment: the token of a person; without it, handed to a person (the
+        # bot takes no App), never posted by the App with the mention
+        @test contains(jobs["register"], "GH_TOKEN: \${{ secrets.CT_RELEASE_REGISTRATION_TOKEN || steps.app.outputs.token }}")
+        @test contains(jobs["register"], "BY_HAND: \${{ secrets.CT_RELEASE_REGISTRATION_TOKEN == '' }}")
+        @test contains(jobs["register"], "[ \"\$BY_HAND\" = true ] && args+=(--by-hand)")
     end
 
     if any(r -> r.name == GENERAL, Pkg.Registry.reachable_registries())

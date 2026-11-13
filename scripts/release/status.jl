@@ -105,6 +105,16 @@ function facts(repo::AbstractString; version=nothing)
         answers *= something(gh("api", "repos/$repo/commits/$(pr.merge)/comments", "--jq",
                                 ".[] | select(.user.login == \"JuliaRegistrator\") | .body"), "")
     end
+    # the bot's refusals (an answer without a General PR): such a mention registered nothing,
+    # so REL6 does not count it; a person posts the comment again, once (CTParser 0.9.6: the
+    # bot takes only a public member of the organization, never an App)
+    refused = issue === nothing ? 0 :
+        count(==("false"), split(something(gh_strip("issue", "view", string(issue.number), "-R", repo, "--json", "comments", "--jq",
+            ".comments[] | select(.author.login == \"JuliaRegistrator\") | .body | test(\"$GENERAL_PR\")"), ""), '\n'; keepempty=false))
+    if pr !== nothing && pr.merge !== nothing
+        refused += count(==("false"), split(something(gh_strip("api", "repos/$repo/commits/$(pr.merge)/comments", "--jq",
+            ".[] | select(.user.login == \"JuliaRegistrator\") | .body | test(\"$GENERAL_PR\")"), ""), '\n'; keepempty=false))
+    end
     bot_pr = match(r"JuliaRegistries/General/(?:pull/)?(\d+)", answers)
     bot_error = !isempty(strip(answers)) && bot_pr === nothing ? first(split(strip(answers), '\n')) : nothing
     tag = gh_strip("api", "repos/$repo/commits/v$v", "--jq", ".sha")
@@ -127,7 +137,7 @@ function facts(repo::AbstractString; version=nothing)
             out === nothing || isempty(out) ? nothing :
                 (x = split(first(split(out, '\n'))); (; number=parse(Int, x[1]), state=x[2]))
         end
-    return (; repo, name, version=v, kind, main_version, main_sha, issue, issues=length(issues), mentions, bot_error, pr, tag, tag_tree,
+    return (; repo, name, version=v, kind, main_version, main_sha, issue, issues=length(issues), mentions, refused, bot_error, pr, tag, tag_tree,
             release=release === nothing ? nothing : release == "true", registry, registered, general_pr, jump=jump_kind)
 end
 
@@ -192,13 +202,14 @@ function phase(f)
             return blocked(7, "General's PR #$(f.general_pr.number) was closed without merge")
         return (; phase=7, state=:waiting, next="General merged #$(f.general_pr.number); wait for the registry to show v$v", blockers=String[])
     end
-    f.mentions > 1 &&
-        return blocked(7, "the bot is mentioned $(f.mentions) times on #$(f.issue.number) (REL6): a human checks what was registered")
-    get(f, :bot_error, nothing) !== nothing &&
-        return blocked(7, "the bot answered without a General PR: \"$(f.bot_error)\"; never post again: a human decides")
-    f.mentions > 0 &&
+    live = live_mentions(f)
+    live > 1 &&
+        return blocked(7, "the bot is mentioned $live times on #$(f.issue.number) (REL6): a human checks what was registered")
+    live == 1 &&
         return (; phase=7, state=:waiting, next="the registration comment is posted: wait for the bot's answer (a minute), then rerun; never post it again",
                 blockers=String[])
+    get(f, :bot_error, nothing) !== nothing &&
+        return blocked(7, "the bot refused the registration comment: \"$(f.bot_error)\"; never posted again by the workflow: a person posts it, once")
     # the bot registers the head of `main` when asked on the issue, the commit itself when
     # asked on the commit: once `main` moved, only the commit is right (a human decides)
     f.main_sha != f.pr.merge &&
@@ -207,6 +218,9 @@ function phase(f)
                 blockers=String[])
     return (; phase=7, state=:todo, on_commit=false, next="post the registration comment, once, on #$(f.issue.number)", blockers=String[])
 end
+
+"The mentions of the registration bot that count (REL6): those it did not refuse."
+live_mentions(f) = f.mentions - get(f, :refused, 0)
 
 "The Markdown report of `facts` and `phase`."
 function status_report(f, p)
