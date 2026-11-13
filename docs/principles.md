@@ -70,12 +70,12 @@ moves to a script. One entry point per tool, with subcommands (`release.jl statu
 **Shared code** goes to a place both tools own, not into the other tool's files.
 
 **Shows in.** `scripts/release` (a CLI shared by the agent, a person and the workflows),
-`scripts/compat-prune`, `scripts/breakage`, `scripts/ci-main`, `scripts/label-dispatch`.
+`scripts/compat-prune`, `scripts/breakage`, `scripts/update-readme`, `scripts/ci-main`, `scripts/label-dispatch`.
 
 **Exceptions, to fix.**
-- Long inline shell: `breakage.yml` (≈117 lines), `update-readme.yml` (≈112),
+- Long inline shell: `breakage.yml` (≈117 lines),
   `breakage-suite.yml` (≈102), `release.yml` (≈98, mostly wiring around `release.jl`)
-  (CTActions#161).
+  (CTActions#161; `update-readme.yml` is done: `scripts/update-readme`, tested).
 - `breakage/report.jl` includes `release/versions.jl`: right to share, wrong place. Four
   different GitHub wrappers (`gh_api`, `gh_raw`/`gh_jq`, `api`, `gh`/`gh_strip`). Target:
   a `scripts/shared/` for the GitHub calls and the version and registry helpers
@@ -98,7 +98,7 @@ the release tests also check invariants of `release.yml` and of the caller in it
 documentation.
 
 **Exceptions.** Only linted: `ci.yml`, `documentation.yml`, `coverage.yml`,
-`update-readme.yml`, `select-gpu-runner.yml`, `pr-status.yml`, the runner workflows. They are
+`select-gpu-runner.yml`, `pr-status.yml`, the runner workflows. They are
 exercised by every package's runs, which find a regression after it is merged. Moving
 their decisions into scripts (principle 2) is what makes them testable.
 

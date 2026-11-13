@@ -63,6 +63,7 @@ jobs:
 | `doc_url` | yes | Documentation URL, for the badges |
 | `citation_badge` | no | Markdown of the `Citation` badge |
 | `assignee` | no | User the PR is assigned to |
+| `ctactions_ref` | no | Ref of CTActions the script is checked out from (default `main`) |
 
 ## The template
 
@@ -79,3 +80,12 @@ Known badges: `Documentation`, `CI`, `Coverage`, `PackageEvaluation`, `Release`,
 `Citation`, `License`, `CodeStyle`, `Downloads`. `{{PACKAGE}}` in `INSTALL.md` and
 `{{REPO}}` in `CONTRIBUTING.md` are replaced; `CONTRIBUTING.md` is written to the
 repository as well.
+
+## How it is built
+
+The workflow only fetches the shared texts, calls
+[`scripts/update-readme/render.jl`](../../scripts/update-readme/render.jl) (the template,
+the texts and the badge table in, the README out; inputs go through `env`, never into the
+shell text), checks whether the files changed, and opens the PR. The logic is in the script
+so that it is tested: [`update-readme-tests.yml`](../../.github/workflows/update-readme-tests.yml)
+runs `julia scripts/update-readme/test/runtests.jl` when the script or the workflow changes.

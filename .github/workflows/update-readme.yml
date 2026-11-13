@@ -31,6 +31,11 @@ on:
         description: 'GitHub username to assign the PR to. Leave empty for no assignee.'
         required: false
         type: string
+      ctactions_ref:
+        description: 'Ref of CTActions the script is checked out from'
+        required: false
+        type: string
+        default: main
 
 jobs:
   generate-readme:
@@ -52,96 +57,36 @@ jobs:
           curl -sL "https://raw.githubusercontent.com/control-toolbox/.github/main/CONTRIBUTING.md" -o CONTRIBUTING.md
           echo "✅ Files downloaded."
 
+      - uses: actions/checkout@v7
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+
       - name: 📝 Generate README with placeholders and badges
+        env:
+          TEMPLATE: ${{ inputs.template_file }}
+          OUTPUT: ${{ inputs.output_file }}
+          PACKAGE: ${{ inputs.package_name }}
+          REPO: ${{ inputs.repo_name }}
+          DOC_URL: ${{ inputs.doc_url }}
+          CITATION: ${{ inputs.citation_badge }}
         run: |
-          echo "🔧 Replacing placeholders and inserting content..."
-          PACKAGE="${{ inputs.package_name }}"
-          REPO="${{ inputs.repo_name }}"
-          DOCU="${{ inputs.doc_url }}"
-          CITATION="${{ inputs.citation_badge }}"
-
-          sed "s|{{PACKAGE}}|$PACKAGE|g" INSTALL.md > INSTALL.tmp.md
-          sed "s|{{REPO}}|$REPO|g" CONTRIBUTING.md > CONTRIBUTING.tmp.md
-
-          # replace CONTRIBUTING.md since we want to commit it if any changes
-          cp CONTRIBUTING.tmp.md CONTRIBUTING.md
-          
-          # Insert ABOUT.md
-          sed '/<!-- INCLUDE_ABOUT -->/ {
-            r ABOUT.md
-            d
-          }' "${{ inputs.template_file }}" > README.tmp1.md
-
-          # Insert INSTALL.md
-          sed '/<!-- INCLUDE_INSTALL -->/ {
-            r INSTALL.tmp.md
-            d
-          }' README.tmp1.md > README.tmp2.md
-
-          # Insert CONTRIBUTING.md
-          sed '/<!-- INCLUDE_CONTRIBUTING -->/ {
-            r CONTRIBUTING.tmp.md
-            d
-          }' README.tmp2.md > README.tmp3.md
-
-          BADGES_LINE=$(grep '<!-- INCLUDE_BADGES:' README.tmp3.md || echo "")
-          if [ -n "$BADGES_LINE" ]; then
-            BADGES_LIST=$(echo "$BADGES_LINE" | sed 's|.*: \(.*\) -->|\1|' | sed 's|,| |g')
-            {
-              echo "| **Category** | **Badge** |"
-              echo "|-----------------------|-----------|"
-              for BADGE in $BADGES_LIST; do
-                case $BADGE in
-                  Documentation)
-                    echo "| **Documentation** | [![Stable Docs](https://img.shields.io/badge/docs-stable-blue.svg)]($DOCU/stable/) [![Dev Docs](https://img.shields.io/badge/docs-dev-8A2BE2.svg)]($DOCU/dev/) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/$REPO) |"
-                    ;;
-                  CI)
-                    echo "| **CI / Build** | [![Build Status](https://github.com/$REPO/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/$REPO/actions/workflows/CI.yml?query=branch%3Amain) |"
-                    ;;
-                  Coverage)
-                    echo "| **Test Coverage** | [![Coverage](https://codecov.io/gh/$REPO/branch/main/graph/badge.svg)](https://codecov.io/gh/$REPO) |"
-                    ;;
-                  PackageEvaluation)
-                    echo "| **Package Evaluation** | [![PkgEval](https://img.shields.io/badge/Julia-package-purple)](https://juliahub.com/ui/Packages/General/$PACKAGE) [![Dependencies](https://juliahub.com/docs/General/$PACKAGE/stable/deps.svg)](https://juliahub.com/ui/Packages/General/$PACKAGE?t=2) |"
-                    ;;
-                  Release)
-                    echo "| **Release / Version** | [![Release](https://img.shields.io/github/v/release/$REPO.svg)](https://github.com/$REPO/releases) |"
-                    ;;
-                  Citation)
-                    if [ -n "$CITATION" ]; then
-                      echo "| **Citation** | $CITATION |"
-                    fi
-                    ;;
-                  License)
-                    echo "| **License** | [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/$REPO/blob/master/LICENSE) |"
-                    ;;
-                  CodeStyle)
-                    echo "| **Code Style / Quality** | [![Code Style: Blue](https://img.shields.io/badge/code%20style-blue-4495d1.svg)](https://github.com/JuliaDiff/BlueStyle) [![Aqua.jl](https://raw.githubusercontent.com/JuliaTesting/Aqua.jl/master/badge.svg)](https://github.com/JuliaTesting/Aqua.jl) |"
-                    ;;
-                  Downloads)
-                    echo "| **Downloads** | [![Monthly](https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Fmonthly_downloads/$PACKAGE&query=total_requests&suffix=%2Fmonth&label=Monthly%20Downloads)](https://juliapkgstats.com/pkg/$PACKAGE) [![Total](https://img.shields.io/badge/dynamic/json?url=http%3A%2F%2Fjuliapkgstats.com%2Fapi%2Fv1%2Ftotal_downloads/$PACKAGE&query=total_requests&label=Total%20Downloads)](https://juliapkgstats.com/pkg/$PACKAGE) |"
-                    ;;
-                esac
-              done
-            } > badges.tmp.md
-
-            sed "/<!-- INCLUDE_BADGES:/{
-              r badges.tmp.md
-              d
-            }" README.tmp3.md > "${{ inputs.output_file }}"
-            
-            echo "✅ README generated with badges."
-            rm -f ABOUT.md INSTALL.md INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md badges.tmp.md
-          else
-            mv README.tmp3.md "${{ inputs.output_file }}"
-            echo "✅ README generated (no badges)."
-            rm -f ABOUT.md INSTALL.md INSTALL.tmp.md CONTRIBUTING.tmp.md README.tmp1.md README.tmp2.md README.tmp3.md
-          fi
+          julia --startup-file=no .ctactions/scripts/update-readme/render.jl \
+            --template "$TEMPLATE" --output "$OUTPUT" --package "$PACKAGE" --repo "$REPO" \
+            --doc-url "$DOC_URL" --citation "$CITATION"
+          # the pull request commits the working tree: leave only the generated files in it
+          rm -rf .ctactions ABOUT.md INSTALL.md
 
       - name: "🔍 Check for README or CONTRIBUTING changes"
         id: check
+        env:
+          OUTPUT_FILE: ${{ inputs.output_file }}
         run: |
-          OUTPUT_FILE="${{ inputs.output_file }}"
           echo "🔎 Checking git-tracked changes for $OUTPUT_FILE and CONTRIBUTING.md..."
 
           # Was CONTRIBUTING.md in the repository before this workflow?
