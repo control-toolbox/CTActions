@@ -74,10 +74,12 @@ moves to a script. One entry point per tool, with subcommands (`release.jl statu
 
 **Exceptions, to fix.**
 - Long inline shell: `breakage.yml` (≈117 lines), `update-readme.yml` (≈112),
-  `breakage-suite.yml` (≈102), `release.yml` (≈98, mostly wiring around `release.jl`).
+  `breakage-suite.yml` (≈102), `release.yml` (≈98, mostly wiring around `release.jl`)
+  (CTActions#161).
 - `breakage/report.jl` includes `release/versions.jl`: right to share, wrong place. Four
   different GitHub wrappers (`gh_api`, `gh_raw`/`gh_jq`, `api`, `gh`/`gh_strip`). Target:
-  a `scripts/shared/` for the GitHub calls and the version and registry helpers.
+  a `scripts/shared/` for the GitHub calls and the version and registry helpers
+  (CTActions#160).
 - `release/finish.jl` (≈410 lines) plans every phase of a release; it is the most
   likely to need splitting.
 
@@ -204,7 +206,7 @@ environment requires it). Every reusable workflow that runs a script of CTAction
 **Limit, documented ([how to freeze](README.md#centralize-then-call)).** Pinning a caller to a tag of CTActions does **not**
 freeze everything: inside, the reusable workflows call `guard.yml`, `pr-status.yml`,
 `select-gpu-runner.yml` and the action `add-ct-registry` at `@main` (a `uses:` takes no
-expression), and `ctactions_ref` defaults to `main`. CTActions has no version yet.
+expression), and `ctactions_ref` defaults to `main`. CTActions has no version yet (CTActions#163).
 
 ## 11. Simple, and only what is needed
 
@@ -220,7 +222,7 @@ the CI still running (one run per label added, about thirty skipped jobs each);
 `select-gpu-runner.yml` answers `kkt` being offline.
 
 **Exceptions, to clear.** `breakage.yml`, kept beside `breakage-suite.yml` until every
-caller has moved (without a list of who has not); `WORKFLOWS.md`, a redirect page; the
+caller has moved (without a list of who has not, CTActions#162); `WORKFLOWS.md`, a redirect page; the
 section *Future uses* of [GitHub Apps](conventions/github-app.md#future-uses-ai-agents-ct-agents),
 written before `ct-release` settled the question. Around labels, five mechanisms (guard,
 label-dispatch, commit statuses, changes-only, superseded runs) are each justified, but
