@@ -13,30 +13,31 @@ package with a documentation site.
 ```yaml
 # .github/workflows/Documentation.yml
 name: Documentation
+run-name: "Documentation${{ inputs.pr && format(' #{0}', inputs.pr) || '' }}"
 
 on:
   push:
     branches: [main]
     tags: '*'
-  pull_request:
-    types: [labeled, synchronize, reopened]
+  workflow_dispatch:          # by Labels.yml for `run documentation`, by release-tag.yml on a tag, or by hand
+    inputs:
+      pr:      { required: false, default: '' }
+      preview: { required: false, default: 'false' }
 
 jobs:
   call:
-    # `run documentation` is the only trigger; adding the preview label to a PR that
-    # already has it re-runs the build
-    if: >
-      github.event_name != 'pull_request' ||
-      (contains(github.event.pull_request.labels.*.name, 'run documentation') &&
-        (github.event.action != 'labeled' ||
-         github.event.label.name == 'run documentation' ||
-         github.event.label.name == 'documentation push preview'))
     uses: control-toolbox/CTActions/.github/workflows/documentation.yml@main
     with:
       use_ct_registry: true
     secrets:
       SSH_KEY: ${{ secrets.SSH_KEY }}
 ```
+
+On a pull request, [label-dispatch](label-dispatch.md) starts it for `run documentation`,
+with `preview=true` when the pull request also carries `documentation push preview` (and
+again when that label is added afterwards). A caller still on `pull_request` guards the job
+on `run documentation`, rerunning it when `documentation push preview` is added
+([Labels](../conventions/labels.md#the-guard)).
 
 ## Inputs and secrets
 
@@ -57,9 +58,12 @@ no caller passes it today (see the note in [Secrets](../conventions/secrets.md))
 
 Deploying a preview of every PR build fills `gh-pages` with `previews/PR<n>` directories
 nobody looks at. The workflow therefore passes `DOCUMENTER_PUSH_PREVIEW` to `make.jl`:
-`"true"` only on a PR carrying the `documentation push preview` label (inside a reusable
-workflow `github.event` is the caller's event, so the PR's labels are visible). The
-caller's `make.jl` reads it:
+`"true"` only when the pull request asks for it, with the label `documentation push
+preview` (a dispatched run receives `preview=true`; a `pull_request` run reads the label).
+A dispatched run is not a `pull_request` event, which Documenter needs to deploy a preview:
+the workflow sets `GITHUB_EVENT_NAME=pull_request` and `GITHUB_REF=refs/pull/<pr>/merge`
+for the build ([label-dispatch](label-dispatch.md#what-the-reusable-workflows-do-with-pr)).
+The caller's `make.jl` reads it:
 
 ```julia
 # docs/make.jl

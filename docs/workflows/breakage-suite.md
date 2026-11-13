@@ -50,26 +50,30 @@ push to `main` (the baseline of the next release PR) and by hand.
 ```yaml
 # .github/workflows/Breakage.yml
 name: Breakage
+run-name: "Breakage ${{ inputs.target }}${{ inputs.pr && format(' #{0}', inputs.pr) || '' }}"
 
 on:
-  pull_request:
-    types: [labeled, synchronize, reopened]
   push:
     branches: [main]
-  workflow_dispatch:
+  workflow_dispatch:          # by Labels.yml for `run breakage`, or by hand (the baseline)
+    inputs:
+      pr:     { required: false, default: '' }
+      target: { required: false, default: '' }
 
 jobs:
   call:
-    if: >
-      github.event_name != 'pull_request' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'run breakage') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'run breakage'))
+    if: inputs.pr == '' || inputs.target == 'packages'
     uses: control-toolbox/CTActions/.github/workflows/breakage-suite.yml@main
     with:
       use_ct_registry: true
     secrets:
       SSH_KEY: ${{ secrets.SSH_KEY }}
 ```
+
+`inputs.pr` is empty on a push and on a run by hand: the suite runs; on a pull request,
+[label-dispatch](label-dispatch.md) passes `pr` and `target=packages` (`run breakage`) or
+`target=applications` (`run breakage applications`). A caller still on `pull_request` guards
+the job on the label `run breakage` ([Labels](../conventions/labels.md#the-guard)).
 
 No list of packages: the consumers are derived. A package with two suites (OptimalControl:
 `run breakage` for its packages, `run breakage applications` for the applications) calls it

@@ -12,6 +12,9 @@ a new package starts from.
 
 ## The philosophy
 
+The rules behind all of it, with their exceptions and a checklist for a change, are in
+**[Principles](principles.md)**.
+
 ### Centralize, then call
 
 A control-toolbox repository **does not define its CI logic**. The logic lives once in
@@ -45,8 +48,16 @@ jobs:
 | **Caller** (the trigger) | `<package>/.github/workflows/` | `PascalCase.yml` | `CI.yml` |
 
 Callers reference a reusable workflow by its full path, pinned to `@main`:
-`control-toolbox/CTActions/.github/workflows/<name>.yml@main`. A frozen pipeline (for a
-release branch, say) pins a tag or a commit of `CTActions` instead.
+`control-toolbox/CTActions/.github/workflows/<name>.yml@main`.
+
+**Pinning another ref does not freeze everything.** A caller pinned to a tag or a commit
+of CTActions gets that version of the workflow it names, but not of what that workflow
+uses in turn: the reusable workflows call `guard.yml`, `pr-status.yml`,
+`select-gpu-runner.yml` and the action `add-ct-registry` at `@main` (a `uses:` takes no
+expression), and check out the scripts at `ctactions_ref`, `main` by default. To freeze
+a pipeline, pin the caller **and** pass `ctactions_ref` the same commit: the scripts and
+the top workflow are then frozen, the four nested pieces still follow `main`. CTActions
+has no version yet ([Principles](principles.md#10-stable-interfaces)).
 
 ### Expensive checks are opt-in, through labels
 
@@ -67,6 +78,24 @@ token. A release acts as a second App,
 [`ct-release`](conventions/github-app.md#ct-release-the-app-of-the-releases), whose key
 lives in the environments of the packages: only the jobs a person approves (in supervised
 mode) can use it.
+
+## By theme
+
+Where to read, for each theme: how to use it (guide), how each piece behaves (reference),
+why it is built so (design), and what tests it.
+
+| Theme | Guide | Reference | Design | Tests |
+| --- | --- | --- | --- | --- |
+| Pull requests: labels, dispatch, statuses, `main` | [pull-requests](guides/pull-requests.md) | [label-dispatch](workflows/label-dispatch.md), [guard](workflows/guard.md), [superseded runs](workflows/superseded-runs.md), [ci on main](workflows/ci-on-main.md), [labels](conventions/labels.md) | [pull-request triggers](design/pull-request-triggers.md) | `label-dispatch-tests`, `guard-tests`, `ci-main-tests` |
+| Tests and runners | [testing](guides/testing.md) | [ci](workflows/ci.md), [ci-gpu](workflows/ci-gpu.md), [select-gpu-runner](workflows/select-gpu-runner.md), [coverage](workflows/coverage.md), [runners](conventions/runners.md) | [tests and runners](design/testing-runners.md) | lint only |
+| Documentation | [documentation](guides/documentation.md) | [documentation](workflows/documentation.md), [preview cleanup](workflows/documentation-preview-cleanup.md) | [documentation](design/documentation.md) | lint only |
+| Breakage | [breakage](guides/breakage.md) | [breakage-suite](workflows/breakage-suite.md), [breakage](workflows/breakage.md) (former) | [breakage](design/breakage.md) | `breakage-tests` |
+| Dependencies (`[compat]`) | [dependencies](guides/dependencies.md) | [compat-helper](workflows/compat-helper.md), [compat-prune](workflows/compat-prune.md) | in [compat-prune § Why](workflows/compat-prune.md#why) | `compat-prune-tests` |
+| Release | ct-agents [guide](https://github.com/control-toolbox/ct-agents/blob/main/guides/release.md) | [release](workflows/release.md), [release-gate](workflows/release-gate.md), [release-tag](workflows/release-tag.md), [the `release.jl` CLI](tools/release-cli.md) | ct-agents [design](https://github.com/control-toolbox/ct-agents/blob/main/design/release.md), [who acts in a release](design/release-identities.md) | `release-tests` |
+| Housekeeping | [housekeeping](guides/housekeeping.md) | [formatter](workflows/formatter.md), [spell-check](workflows/spell-check.md), [update-readme](workflows/update-readme.md), [auto-assign](workflows/auto-assign.md), [add-to-project](workflows/add-to-project.md) | in the guide (*Why*) | lint only |
+| The organization: Apps, secrets, self-hosted runners | [recipes](recipes.md) | [GitHub Apps](conventions/github-app.md), [secrets](conventions/secrets.md), [runner maintenance](workflows/occidata-runner-maintenance.md), [watchdog](workflows/occidata-runner-watchdog.md), [repositories](repositories.md) | [GitHub Apps § Why an App](conventions/github-app.md#why-an-app) | lint only |
+
+Across all themes: [Principles](principles.md). Every workflow passes `lint-workflows.yml`.
 
 ## The workflows
 
@@ -119,9 +148,11 @@ benchmarks: see [Workflows defined in a package](workflows/per-repo.md).
 
 | Page | Content |
 | --- | --- |
+| [Principles](principles.md) | The rules CTActions follows (centralize, scripts decide, tests, facts, ensure, least privilege, …), how they map to DRY, KISS, YAGNI, SOLID, their exceptions, and a checklist for a change |
 | [Labels](conventions/labels.md) | Label-gated triggers: the `if:` guard, the `types:` list (no `opened`), the label vocabulary |
 | [Runners](conventions/runners.md) | GitHub-hosted and self-hosted runners: `occidata` (GPU on demand), `kkt`, `pinwheel`; the split CI |
 | [Secrets and registries](conventions/secrets.md) | Every secret, who uses it; `ct-registry` and `SSH_KEY` |
 | [GitHub Apps](conventions/github-app.md) | `ct-prune-compat`: what it is, how to use it in a new workflow, how to extend it; `ct-release`, the App of [`release.yml`](workflows/release.md) |
+| [Who acts in a release](design/release-identities.md) | Design record: the identities of a release (`GITHUB_TOKEN`, the App `ct-release`, a release manager's token, a person), why each, what it costs, and the plan that changed when the registration bot refused the App |
 | [Repositories](repositories.md) | Which repository has which workflow, and why |
 | [Recipes](recipes.md) | A new repository, an organization-wide change, the checklist |

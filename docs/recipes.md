@@ -71,8 +71,10 @@
   [GitHub App](conventions/github-app.md#using-it-in-a-workflow), not a personal token.
 - **Disable a workflow in one repository without deleting it:** rename `X.yml` to
   `X.yml.disabled` (CTDirect.jl's Formatter).
-- **Pinning:** `@main` for in-ecosystem reuse (fast propagation); pin a caller to a tag or
-  a commit of CTActions for a frozen pipeline (a release branch).
+- **Pinning:** `@main` for in-ecosystem reuse (fast propagation). A caller pinned to a
+  commit of CTActions, with `ctactions_ref` set to the same commit, freezes the workflow
+  and its scripts, but not the nested workflows and actions, which stay at `@main`
+  ([details](README.md#centralize-then-call)).
 
 ### Rename a label across the organization
 

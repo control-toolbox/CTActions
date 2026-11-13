@@ -10,7 +10,7 @@ Centralized GitHub Actions workflows, issue templates and configuration for the
   coverage, documentation, breakage, formatting, spell check, CompatHelper, README
   generation, issue assignment, project board, and the **release** of a package, from its
   request to its registration ([`release.yml`](docs/workflows/release.md)).
-- **The release tool**, [`scripts/release/release.jl`](docs/workflows/release-gate.md#the-release-tool):
+- **The release tool**, [`scripts/release/release.jl`](docs/tools/release-cli.md):
   the facts and the request of a release, its gate, the checked merge, the registration,
   the audit; and `release.jl lint-changelog`, the format of `[Unreleased]` for anyone who
   edits a changelog.
@@ -30,6 +30,7 @@ labels), the catalog of every workflow with its page, and the conventions:
 
 | Page | Content |
 | --- | --- |
+| [Principles](docs/principles.md) | The rules behind every workflow and script, and a checklist for a change |
 | [Labels](docs/conventions/labels.md) | Opt-in triggers on pull requests, and their vocabulary |
 | [Runners](docs/conventions/runners.md) | GitHub-hosted and self-hosted (GPU) runners, split CI |
 | [Secrets and registries](docs/conventions/secrets.md) | Every secret, `ct-registry` |
@@ -46,15 +47,14 @@ on:
   push:
     branches: [main]
     tags: '*'
-  pull_request:
-    types: [labeled, synchronize, reopened]
+  workflow_dispatch:          # started by Labels.yml when a `run ci …` label is added to a PR
+    inputs:
+      pr:     { required: false, default: '' }
+      target: { required: false, default: '' }
 
 jobs:
   test-cpu-github:
-    if: >
-      github.event_name != 'pull_request' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'run ci github-runner') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'run ci github-runner'))
+    if: github.event_name == 'push' || inputs.target == 'github'
     uses: control-toolbox/CTActions/.github/workflows/ci.yml@main
     with:
       runs_on: '["ubuntu-latest", "macos-latest", "windows-latest"]'
@@ -62,6 +62,10 @@ jobs:
     secrets:
       SSH_KEY: ${{ secrets.SSH_KEY }}
 ```
+
+On a pull request the expensive workflows run on demand, by label: the package's
+`Labels.yml` calls [`label-dispatch.yml`](docs/workflows/label-dispatch.md), which starts
+the workflow of the label just added.
 
 More callers: one per page in [`docs/workflows/`](docs/workflows/).
 

@@ -2,7 +2,11 @@
 
 [← Workflows of control-toolbox](README.md)
 
-Measured on 2026-10-19 (`gh api repos/control-toolbox/<repo>/contents/.github/workflows`).
+> **A snapshot, measured on 2026-10-19**, not kept up to date as packages change (the
+> Release column was edited by hand on 2026-11-12; which packages have moved to
+> `Labels.yml` is not recorded). To know the present state, measure it again:
+> `gh api repos/control-toolbox/<repo>/contents/.github/workflows --jq '.[].name'`.
+> The *Why* below does not age.
 The base set is CI, Coverage, Documentation, Formatter, SpellCheck, CompatHelper,
 UpdateReadme and TagBot, in every repository below; the columns are what varies.
 

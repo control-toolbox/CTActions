@@ -10,20 +10,26 @@ matrix, on GitHub-hosted or self-hosted runners. Caller: `CI.yml`, in every pack
 ```yaml
 # .github/workflows/CI.yml
 name: CI
+run-name: "CI ${{ inputs.target }}${{ inputs.pr && format(' #{0}', inputs.pr) || '' }}"
 
 on:
   push:
     branches: [main]
     tags: '*'
-  pull_request:
-    types: [labeled, synchronize, reopened]
+  workflow_dispatch:          # by label-dispatch.yml, when a `run ci …` label is added
+    inputs:
+      pr:
+        description: 'Pull request number, set by label-dispatch.yml'
+        required: false
+        default: ''
+      target:
+        description: 'github, occidata or kkt'
+        required: false
+        default: ''
 
 jobs:
   test-cpu-github:
-    if: >
-      github.event_name != 'pull_request' ||
-      (github.event.action == 'labeled' && github.event.label.name == 'run ci github-runner') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'run ci github-runner'))
+    if: github.event_name == 'push' || inputs.target == 'github'
     uses: control-toolbox/CTActions/.github/workflows/ci.yml@main
     with:
       runs_on: '["ubuntu-latest", "macos-latest", "windows-latest"]'
@@ -33,7 +39,11 @@ jobs:
       SSH_KEY: ${{ secrets.SSH_KEY }}
 ```
 
-The guard and the `types:` list are explained in [Labels](../conventions/labels.md).
+On a pull request, `CI.yml` is started by the package's `Labels.yml`
+([label-dispatch](label-dispatch.md#in-a-package)): one run per `run ci …` label, with
+`target` saying which. A caller still on `pull_request` with a label guard works too (the
+older model, see [Labels](../conventions/labels.md)); `label-dispatch.yml` is the one to
+use in a new or migrated package.
 `runs_on` lists the three GitHub-hosted OSes, Windows included. CTBase is the reference
 caller to copy from; it also carries a Windows smoke test of its test selection
 (`test-selection-smoke`), added after Windows' backslash-separated paths silently broke a
@@ -98,10 +108,7 @@ label (see [Runners](../conventions/runners.md#split-ci)):
 
 ```yaml
   test-gpu-occidata:
-    if: >
-      github.event_name == 'pull_request' &&
-      ((github.event.action == 'labeled' && github.event.label.name == 'run ci occidata-runner') ||
-      (github.event.action != 'labeled' && contains(github.event.pull_request.labels.*.name, 'run ci occidata-runner')))
+    if: inputs.target == 'occidata'          # `run ci occidata-runner`, through Labels.yml
     uses: control-toolbox/CTActions/.github/workflows/ci.yml@main
     with:
       runs_on: '[["occidata"]]'
@@ -111,15 +118,15 @@ label (see [Runners](../conventions/runners.md#split-ci)):
       SSH_KEY: ${{ secrets.SSH_KEY }}
 ```
 
-A `kkt` job is the same with `kkt` and `run ci kkt-runner`.
+A `kkt` job is the same with `kkt` (`inputs.target == 'kkt'`, label `run ci kkt-runner`).
 
-The two GPU jobs are guarded `github.event_name == 'pull_request' && (…)`: on a PR each
-runs on its label. On a push (`main`, tags) a single job picks the runner at run time,
-`kkt` unless it is offline, else `occidata` ([`ci-gpu.yml`](ci-gpu.md)):
+On a pull request each GPU job runs on its label. On a push (`main`, tags) a single job
+picks the runner at run time, `kkt` unless it is offline, else `occidata`
+([`ci-gpu.yml`](ci-gpu.md)):
 
 ```yaml
   test-gpu-main:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'push'
     uses: control-toolbox/CTActions/.github/workflows/ci-gpu.yml@main
     with:
       use_ct_registry: true
@@ -128,7 +135,10 @@ runs on its label. On a push (`main`, tags) a single job picks the runner at run
       CT_RUNNERS_CLIENT_ID: ${{ secrets.CT_RUNNERS_CLIENT_ID }}
       CT_RUNNERS_PRIVATE_KEY: ${{ secrets.CT_RUNNERS_PRIVATE_KEY }}
 ```
- CTFlows.jl also calls
+
+A caller still on `pull_request` guards the GPU jobs on their label
+(`github.event_name == 'pull_request' && …`, see [Labels](../conventions/labels.md#the-guard))
+and `test-gpu-main` on `github.event_name != 'pull_request'`. CTFlows.jl also calls
 `ci.yml` from `CITargeted.yml` (a subset of the tests on a chosen runner, by hand) and
 `CronIntegration.yml` (weekly slow tests, `test_args: 'cron'`): see
 [Workflows defined in a package](per-repo.md).

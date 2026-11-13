@@ -96,7 +96,8 @@ next run. A stop is posted once per reason.
   by hand) is cancelled.
 
 Why the App: a PR opened, or a merge made, with `GITHUB_TOKEN` starts no workflow: the PR
-would run no CI, and `Release tag` would not run.
+would run no CI, and `Release tag` would not run. Every identity of a release, and why:
+[Who acts in a release](../design/release-identities.md).
 
 ### When it runs
 
@@ -150,6 +151,25 @@ Any other stop condition (`status` *blocked*, the CI of `main` red, the gate ref
 check that failed) is a ❌ comment with the reason and the output of `status`. A person
 fixes the cause; the next event, the hourly run or a run by hand goes on. `main` moved
 after the request: run `facts` and `request` again.
+
+## The registration comment
+
+The registration comment of a stable is posted **once**, by the job `register`, as the
+release manager whose token is `CT_RELEASE_REGISTRATION_TOKEN`
+([the token](#the-registration-token)). Not as the App: the registration bot of General
+takes a comment from a public member of the organization only, and refused the App's on
+the first release run by this workflow (CTParser v0.9.6). Why a personal token here and
+nowhere else: [Who acts in a release](../design/release-identities.md#6-the-registration-comment-the-plan-that-changed).
+
+- **With the token**: `release.jl register --post`, after the approval of the environment
+  in supervised mode, without one in autonomous mode. The workflow then follows General's PR.
+- **Without the token, or when the bot answers with an error**: the App posts the comment
+  ready to copy, in a code block, the bot's name written `@'JuliaRegistrator` (the bot
+  reacts to its mention even in a code block), and the workflow waits (`⏸ waiting for
+  you`) without asking for an approval again. A person removes the apostrophe and posts it
+  once, on the tracking issue (or on the merge commit when `main` moved).
+- A mention the bot refused registered nothing: `status`, `register` and `audit` do not
+  count it (`REL6`), and the workflow never posts again after a refusal.
 
 ## Caller
 
