@@ -75,9 +75,11 @@ moves to a script. One entry point per tool, with subcommands (`release.jl statu
 helpers (`versions.jl`) of `release` and `breakage` (CTActions#160).
 
 **Exceptions, to fix.**
-- Long inline shell: `release.yml` (≈98, mostly wiring around `release.jl`) (CTActions#161;
-  done: `update-readme.yml`, `scripts/update-readme`; `breakage-suite.yml`,
-  `scripts/breakage/cell.jl` and `pr.jl`).
+- Long inline shell, done (CTActions#161): `update-readme.yml` (`scripts/update-readme`),
+  `breakage-suite.yml` (`scripts/breakage/cell.jl`, `pr.jl`), `release.yml` (the pending
+  approvals, `release.jl pending`). Left in `release.yml` on purpose: the check for an
+  open `[RELEASE]` issue, one `gh` call that ends most runs before Julia is set up; the
+  bot's git identity and the wake-up, wiring repeated in three jobs.
 - `release/finish.jl` (≈410 lines) plans every phase of a release; it is the most
   likely to need splitting.
 

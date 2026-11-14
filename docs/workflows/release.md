@@ -93,7 +93,7 @@ next run. A stop is posted once per reason.
   wrong. Each ends by starting the workflow again for the next step.
 - One approval at a time: an approval of the same action already asked in another run is
   not asked again; one asked for an action that is no longer the next one (a person merged
-  by hand) is cancelled.
+  by hand) is cancelled (`release.jl pending`).
 
 Why the App: a PR opened, or a merge made, with `GITHUB_TOKEN` starts no workflow: the PR
 would run no CI, and `Release tag` would not run. Every identity of a release, and why:

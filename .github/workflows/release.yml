@@ -141,22 +141,8 @@ jobs:
           NEXT: ${{ steps.finish.outputs.action }}
           WORKFLOW_REF: ${{ github.workflow_ref }}
         run: |
-          wf=${WORKFLOW_REF%@*}; wf=${wf#*/*/}
-          case "$NEXT" in merge) job=merge ;; start) job=start ;; *) job=register ;; esac
-          action=$NEXT
-          for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/runs?status=waiting&per_page=100" \
-                         --jq ".workflow_runs[] | select(.path == \"$wf\") | .id"); do
-            [ "$run" = "$GITHUB_RUN_ID" ] && continue
-            waiting=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs" --jq '.jobs[] | select(.status == "waiting") | .name')
-            if grep -qE "(^|/ )$job\$" <<< "$waiting"; then
-              action=none
-              echo "An approval of \`$job\` is already asked in run $run: not asked again." >> "$GITHUB_STEP_SUMMARY"
-            else
-              gh run cancel "$run" -R "$GITHUB_REPOSITORY" || true
-              echo "Run $run waited for an approval that is no longer the next action: cancelled." >> "$GITHUB_STEP_SUMMARY"
-            fi
-          done
-          echo "action=$action" >> "$GITHUB_OUTPUT"
+          julia --startup-file=no .ctactions/scripts/release/release.jl pending --repo "$GITHUB_REPOSITORY" \
+            --next "$NEXT" --workflow-ref "$WORKFLOW_REF" --run-id "$GITHUB_RUN_ID"
 
   start:
     needs: step

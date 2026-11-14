@@ -28,6 +28,7 @@ julia scripts/release/release.jl facts --repo control-toolbox/CTBase.jl --kind s
 julia scripts/release/release.jl request --repo control-toolbox/CTBase.jl [--no-dispatch] .releases/v0.30.13.toml [<clone>]
 julia scripts/release/release.jl register-beta --repo control-toolbox/CTBase.jl --version 0.31.0-beta [--confirm]
 julia scripts/release/release.jl finish --repo control-toolbox/CTBase.jl --managers ocots [--version V --actor L --dir D] [--act start|merge|register|register-beta] [--by-hand]
+julia scripts/release/release.jl pending --repo control-toolbox/CTBase.jl --next ACTION --workflow-ref REF --run-id ID
 ```
 
 - **`lint-changelog`**, **`facts`**, **`request`**, **`finish`**, **`register-beta`**: the
@@ -35,6 +36,10 @@ julia scripts/release/release.jl finish --repo control-toolbox/CTBase.jl --manag
   (the request) and [How the workflow works](../workflows/release.md#how-the-workflow-works)
   (`finish`, `register-beta`). `lint-changelog` checks the format of `[Unreleased]` in
   `CHANGELOG.md` and `BREAKING.md` (`CHG2`–`CHG4`), for anyone who edits them.
+
+- **`pending`** is the workflow's too: one approval at a time, see
+  [release.md](../workflows/release.md#how-the-workflow-works). It cancels runs: never run it
+  by hand on a real repository.
 
 - **`status`** says where a release stands, from the facts only — the tracking issue and
   its registration mentions, the release PR and its merge commit, the tag and its tree,
@@ -96,7 +101,7 @@ standard output and in the job summary.
 | `gate`, `registrable` | [`release-gate.yml`](../workflows/release-gate.md) |
 | `stable-release` | the action `add-ct-registry`, in `ci.yml`, `documentation.yml`, `breakage-suite.yml` |
 | `tag-plan` | [`release-tag.yml`](../workflows/release-tag.md) |
-| `finish`, `register`, `register-beta`, `merge` | [`release.yml`](../workflows/release.md) |
+| `finish`, `pending`, `register`, `register-beta`, `merge` | [`release.yml`](../workflows/release.md) |
 | all | an agent following the recipe, or a person ([doing it by hand](https://github.com/control-toolbox/ct-agents/blob/main/guides/release.md#doing-it-by-hand)) |
 
 ## Tests

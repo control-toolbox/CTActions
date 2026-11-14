@@ -48,6 +48,10 @@
 #       phase comments, a stop, the close; or, with --act, the privileged action if it is
 #       still the next one (--by-hand: the registration comment for a person to post). Writes `action=<start|merge|register|register-beta|none>` and
 #       `mode=` to $GITHUB_OUTPUT (to standard output when unset)
+#   julia release.jl pending --repo OWNER/REPO --next ACTION --workflow-ref REF --run-id ID
+#       one approval at a time: the other runs of the workflow waiting for an approval are
+#       cancelled, unless one waits for the job of ACTION; writes `action=ACTION|none` to
+#       $GITHUB_OUTPUT (to standard output when unset)
 #
 # The Markdown report goes to standard output, and to $GITHUB_STEP_SUMMARY when set. Exit
 # code: 0 ready (or nothing to do), 1 blocked, 2 usage error; `status` exits 1 when the
@@ -62,6 +66,7 @@ include(joinpath(@__DIR__, "register_beta.jl"))
 include(joinpath(@__DIR__, "prepare.jl"))
 include(joinpath(@__DIR__, "start.jl"))
 include(joinpath(@__DIR__, "finish.jl"))
+include(joinpath(@__DIR__, "pending.jl"))
 
 "The value of the option `--name` in `args`, removed from it, or `default`."
 function option!(args, name, default=nothing)
@@ -94,7 +99,8 @@ const USAGE = """
            julia release.jl lint-changelog [DIR]
            julia release.jl facts --repo OWNER/REPO --kind stable|beta [DIR]
            julia release.jl request --repo OWNER/REPO [--no-dispatch] .releases/vX.toml [DIR]
-           julia release.jl finish --repo OWNER/REPO --managers "a,b" [--version V --actor LOGIN --dir DIR] [--act start|merge|register|register-beta] [--by-hand]"""
+           julia release.jl finish --repo OWNER/REPO --managers "a,b" [--version V --actor LOGIN --dir DIR] [--act start|merge|register|register-beta] [--by-hand]
+           julia release.jl pending --repo OWNER/REPO --next ACTION --workflow-ref REF --run-id ID"""
 
 function release_main(args)
     isempty(args) && (println(stderr, USAGE); return 2)
@@ -205,6 +211,16 @@ function release_main(args)
             out = get(ENV, "GITHUB_OUTPUT", "")
             isempty(out) ? print(outputs) : open(io -> print(io, outputs), out, "a")
             return r.ok ? 0 : 1
+        elseif command == "pending"
+            repo = option!(args, "repo"); next = option!(args, "next")
+            ref = option!(args, "workflow-ref"); run_id = option!(args, "run-id")
+            any(isnothing, (repo, next, ref, run_id)) &&
+                throw(ArgumentError("--repo, --next, --workflow-ref and --run-id are required"))
+            r = pending(repo, ref, next, run_id)
+            isempty(r.lines) || emit(join(r.lines, "\n") * "\n")
+            out = get(ENV, "GITHUB_OUTPUT", "")
+            isempty(out) ? println("action=", r.action) : open(io -> println(io, "action=", r.action), out, "a")
+            return 0
         elseif command == "audit"
             repo = option!(args, "repo")
             version = option!(args, "version")
