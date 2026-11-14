@@ -338,7 +338,7 @@ jobs:
 
       - name: Upload requested test artifact
         if: ${{ always() && inputs.upload_artifact_path != '' && inputs.upload_artifact_name != '' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.artifact-name.outputs.name }}
           path: ${{ inputs.upload_artifact_path }}
