@@ -93,12 +93,13 @@ the runner labels of `.github/actionlint.yaml`). A mechanism of a reusable workf
 can be exercised alone gets its own test workflow (`guard-tests.yml`).
 
 **Shows in.** `release-tests.yml`, `compat-prune-tests.yml` (with a real dry run),
-`breakage-tests.yml`, `ci-main-tests.yml`, `label-dispatch-tests.yml`, `guard-tests.yml`;
+`breakage-tests.yml`, `ci-main-tests.yml`, `label-dispatch-tests.yml`, `guard-tests.yml`,
+`select-gpu-tests.yml`;
 the release tests also check invariants of `release.yml` and of the caller in its
 documentation.
 
 **Exceptions.** Only linted: `ci.yml`, `documentation.yml`, `coverage.yml`,
-`select-gpu-runner.yml`, `pr-status.yml`, the runner workflows. They are
+`pr-status.yml`, the runner workflows. They are
 exercised by every package's runs, which find a regression after it is merged. Moving
 their decisions into scripts (principle 2) is what makes them testable.
 
@@ -219,7 +220,8 @@ moved, with the list of who has not.
 ([what each safeguard answers](https://github.com/control-toolbox/ct-agents/blob/main/design/release.md#what-each-safeguard-answers));
 `label-dispatch.yml` answers a run with all jobs skipped hiding, on the pull request page,
 the CI still running (one run per label added, about thirty skipped jobs each);
-`select-gpu-runner.yml` answers `kkt` being offline.
+`select-gpu-runner.yml` answers `kkt` being offline, and its `when_busy: 'skip'` a GPU
+pass of the docs queued for hours (CTActions#174).
 
 **Exceptions, to clear.** `WORKFLOWS.md`, a redirect page; the
 section *Future uses* of [GitHub Apps](conventions/github-app.md#future-uses-ai-agents-ct-agents),

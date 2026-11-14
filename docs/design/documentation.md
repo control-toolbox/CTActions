@@ -58,6 +58,15 @@ persistent depot can miss a package's build output (88a63e6, KNITRO.jl's `deps/d
 (cancelling a Julia process on the self-hosted runner was seen to leave orphans) and
 cancels on a pull request, where there is no GPU pass.
 
+**A pass is never queued for a busy runner** (CTActions#174). The group is held by the
+whole run: on 2026-11-14 an OptimalControl.jl run waited from 16:35 for a busy `occidata`,
+and the runs of three merges, CPU `build` included, stayed pending behind it, so `dev` was
+not updated. `select-gpu` now takes a GPU runner only if it is online and idle, else the
+pass is skipped (`when_busy: 'skip'`). Set aside: cancelling on `main` (kills a running
+pass, the orphan case), and separate groups for `build` and `build-gpu` with a check
+"still the head of `main`?" before the GPU deployment, which CTActions cannot place: the
+deployment runs inside each package's `make.jl`, in the same step as the build.
+
 ### 4. The docs of a tag, dispatched by the tag workflow
 
 A tag created with `GITHUB_TOKEN` starts no workflow, so `release-tag.yml` dispatches
@@ -77,6 +86,12 @@ declared optional and passed by no caller today (see
   runs.
 - A documentation run skipped on `main` by `ci on main: changes only` does not redeploy
   `dev` for that commit; it only happens when nothing the docs are built from changed.
+- A GPU runner idle when `select-gpu` reads it can be taken before `build-gpu` starts: the
+  pass then waits for that other job, and the next runs wait with it. It is bounded by the
+  other job's timeout, not by GitHub's 24 hours; cancel by hand if needed
+  ([ordering](../workflows/documentation.md#ordering-the-deployments)).
+- When `kkt` and `occidata` are both busy for long periods, the GPU pass is skipped as often:
+  `dev` then shows the CPU build, as when the pass fails.
 
 ## Timeline
 
@@ -88,3 +103,4 @@ declared optional and passed by no caller today (see
 | 2026-10-16 | rebuild the docs environment in `build-gpu` (88a63e6) | a build output missing from the persistent depot |
 | 2026-10-20 | `gpu_runner: 'auto'` (45cf317) | `kkt` offline |
 | 2026-11-10 | dispatched by label; preview as a `pull_request` for Documenter; status with the link (fd6610b, 0aefac7, 77f7981) | see [pull-request triggers](pull-request-triggers.md) |
+| 2026-11-14 | no GPU pass queued for a busy runner (`when_busy: 'skip'`, CTActions#174) | a queued pass held the docs of three merges on `main` |

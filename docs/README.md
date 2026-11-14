@@ -87,7 +87,7 @@ why it is built so (design), and what tests it.
 | Theme | Guide | Reference | Design | Tests |
 | --- | --- | --- | --- | --- |
 | Pull requests: labels, dispatch, statuses, `main` | [pull-requests](guides/pull-requests.md) | [label-dispatch](workflows/label-dispatch.md), [guard](workflows/guard.md), [superseded runs](workflows/superseded-runs.md), [ci on main](workflows/ci-on-main.md), [labels](conventions/labels.md) | [pull-request triggers](design/pull-request-triggers.md) | `label-dispatch-tests`, `guard-tests`, `ci-main-tests` |
-| Tests and runners | [testing](guides/testing.md) | [ci](workflows/ci.md), [ci-gpu](workflows/ci-gpu.md), [select-gpu-runner](workflows/select-gpu-runner.md), [coverage](workflows/coverage.md), [runners](conventions/runners.md) | [tests and runners](design/testing-runners.md) | lint only |
+| Tests and runners | [testing](guides/testing.md) | [ci](workflows/ci.md), [ci-gpu](workflows/ci-gpu.md), [select-gpu-runner](workflows/select-gpu-runner.md), [coverage](workflows/coverage.md), [runners](conventions/runners.md) | [tests and runners](design/testing-runners.md) | `select-gpu-tests`; the rest lint only |
 | Documentation | [documentation](guides/documentation.md) | [documentation](workflows/documentation.md), [preview cleanup](workflows/documentation-preview-cleanup.md) | [documentation](design/documentation.md) | lint only |
 | Breakage | [breakage](guides/breakage.md) | [breakage-suite](workflows/breakage-suite.md) | [breakage](design/breakage.md) | `breakage-tests` |
 | Dependencies (`[compat]`) | [dependencies](guides/dependencies.md) | [compat-helper](workflows/compat-helper.md), [compat-prune](workflows/compat-prune.md) | in [compat-prune § Why](workflows/compat-prune.md#why) | `compat-prune-tests` |
@@ -108,7 +108,7 @@ Across all themes: [Principles](principles.md). Every workflow passes `lint-work
 | [`label-dispatch.yml`](workflows/label-dispatch.md) | `Labels.yml` | Starts the workflow of the label just added (`workflow_dispatch`), so that the runs of different labels accumulate on the pull request | every pull request |
 | [Superseded runs](workflows/superseded-runs.md) | `ci.yml`, `documentation.yml`, `breakage-suite.yml` | On a pull request, a new run cancels the previous one of the same workflow; nothing is cancelled on `main` or tags | declared in the three, nothing to add in a package |
 | [`guard.yml`](workflows/guard.md) | `ci.yml`, `coverage.yml`, `breakage-suite.yml`, `documentation.yml` | Whether the jobs below run: no on a pull request that is not open; on `main`, the label `ci on main: changes only` | called by the four above |
-| [`select-gpu-runner.yml`](workflows/select-gpu-runner.md) | `ci-gpu.yml`, `documentation.yml` | Picks `kkt` unless offline, else `occidata` | called by the two above |
+| [`select-gpu-runner.yml`](workflows/select-gpu-runner.md) | `ci-gpu.yml`, `documentation.yml` | Picks `kkt` unless offline, else `occidata`; for the docs, only an idle runner, else none | called by the two above |
 | [`coverage.yml`](workflows/coverage.md) | `Coverage.yml` | Test suite with coverage, uploaded to Codecov | no (push and tags) |
 | [`documentation.yml`](workflows/documentation.md) | `Documentation.yml` | Build and deploy the documentation; optional GPU upgrade pass; opt-in PR previews | label `run documentation` |
 | [`documentation-preview-cleanup.yml`](workflows/documentation-preview-cleanup.md) | `DocPreviewCleanup.yml` | Remove the previews of closed PRs from `gh-pages` | on close |
@@ -133,6 +133,7 @@ Across all themes: [Principles](principles.md). Every workflow passes `lint-work
 | [`guard-tests.yml`](workflows/guard.md#testing-a-change) | Self-test of `guard.yml`: `run` follows the state of the pull request | PR touching it, by hand |
 | [`label-dispatch-tests.yml`](workflows/label-dispatch.md#testing-a-change) | Self-test of the mapping label → workflow of `label-dispatch.yml` | PR or push touching it, by hand |
 | [`ci-main-tests.yml`](workflows/ci-on-main.md#testing-a-change-to-this-mechanism) | Self-test of the changes-only decision (`scripts/ci-main`) | PR or push touching it, by hand |
+| [`select-gpu-tests.yml`](workflows/select-gpu-runner.md#rules) | Self-test of the GPU runner choice (`scripts/select-gpu`) | PR or push touching it, by hand |
 | [`breakage-tests.yml`](workflows/breakage-suite.md#tests) | Self-test of the breakage report (`scripts/breakage`) | PR or push touching it, by hand |
 | [`update-readme-tests.yml`](workflows/update-readme.md#how-it-is-built) | Self-test of the README generation (`scripts/update-readme`) | PR or push touching it, by hand |
 | [`shared-tests.yml`](principles.md) | Self-test of the code shared by the tools (`scripts/shared`); the tests of each tool also run on a change there | PR or push touching it, by hand |
