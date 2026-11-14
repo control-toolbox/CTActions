@@ -22,10 +22,13 @@ the job summary, one PR comment per group kept up to date, one artifact. Caller:
   `stable` (its newest tag, a beta included). The cell runs the package's tests (`test`)
   or builds its docs (`doc`) with the package under test `dev`ed, and writes its result
   (status, tested ref, the version of this package it resolved) as a file. A failure does
-  not fail the job.
+  not fail the job. Script: [`scripts/breakage/cell.jl`](../../scripts/breakage/cell.jl).
 - **`report`**, once: gathers the cells in a table, writes `breakage.toml` (artifact
   `breakage-<group>`) and the summary, and comments on the PR, updating its own comment
-  (found by the marker `<!-- ct-breakage:<group> -->`).
+  (found by the marker `<!-- ct-breakage:<group> -->`). Scripts:
+  [`report.jl`](../../scripts/breakage/report.jl) (the table, the verdict, the two versions
+  read from the base commit and the PR) and [`pr.jl`](../../scripts/breakage/pr.jl) (the
+  pull request, the run on the base commit, the comment).
 
 **On a release PR** (the `version` of `Project.toml` changes), the report checks
 [`REL1`](https://github.com/control-toolbox/ct-conventions/blob/main/rules/release.md#rel1--version-numbers-follow-semver-as-pkg-reads-it):
@@ -128,9 +131,13 @@ test) and the files written; the consumers (each place a package may be loaded f
 name, archived repositories, forks, exclusions, a repository that cannot be read being an
 error and not an empty list, nothing to test being an empty list and not an error, the
 declared targets and their validation, the command line,
-the ecosystem as it was read on 2026-10-19). The reading of GitHub is replaced by a fake,
-as in the release tests. `breakage-tests.yml` runs them when the script or the workflow
-change. The `plan` and `break` jobs themselves are exercised by the callers.
+the ecosystem as it was read on 2026-10-19); a cell (the ref picked for `latest`, `stable`
+or a given ref, no tag, a ref that does not exist, a failed clone, the file written, the
+environment given to the Julia of the cell); the pull request (its base and fork, the
+baseline run outside a pull request, the comment updated or created). Git, `gh` and the
+Julia of a cell are replaced by fakes, as in the release tests. `breakage-tests.yml` runs
+them when the scripts or the workflow change. Only the wiring of the jobs is left to the
+callers' runs.
 
 ## Superseded runs
 

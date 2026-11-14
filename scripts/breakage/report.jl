@@ -1,7 +1,8 @@
 # The report of a breakage run: one table for every downstream package tested, and on a
 # release PR, the REL1 check of ct-conventions against the run on the base commit.
 #
-# usage: julia report.jl CELLS OUT --expected N [--baseline BASELINE] [--base-version V0 --head-version V1]
+# usage: julia report.jl CELLS OUT --expected N [--baseline BASELINE]
+#                        [--base-version V0 --head-version V1 | --base-sha SHA]
 #
 # CELLS holds one TOML file per tested cell (name, owner, version = "latest" | "stable",
 # break = "test" | "doc", tag, compat, status = "pass" | "fail" | "no_tag", job), written
@@ -13,7 +14,9 @@
 # downstream package, in its **stable** column (its last release), passes on the base
 # (BASELINE, the `breakage.toml` of the run on the base commit) and fails with the PR: the
 # version must then be breaking (REL1). A release PR also fails when the comparison cannot
-# be made: no baseline, or cells missing. Exit code 0, 1 (blocked), 2 (usage). Stdlib only.
+# be made: no baseline, or cells missing. `--base-sha` reads V0 from the Project.toml of
+# that commit (git, in the current directory) and V1 from ./Project.toml.
+# Exit code 0, 1 (blocked), 2 (usage). Stdlib only.
 
 using TOML
 
@@ -105,15 +108,23 @@ function summary(group, sha, cells, v)
     return String(take!(io))
 end
 
+"The version of the Project.toml of commit `sha` and of ./Project.toml, as strings."
+function versions_at(sha)
+    base = TOML.parse(read(`git show $sha:Project.toml`, String))["version"]
+    return (base, TOML.parsefile("Project.toml")["version"])
+end
+
 "Parse the arguments, write the report; return the exit code."
 function report_main(args)
     args = collect(String, args)
     opt(name) = (i = findfirst(==("--$name"), args); i === nothing ? nothing : (x = args[i+1]; deleteat!(args, i:i+1); x))
     expected = opt("expected"); baseline_path = opt("baseline")
     v0 = opt("base-version"); v1 = opt("head-version")
+    base_sha = opt("base-sha")
+    base_sha === nothing || isempty(base_sha) || ((v0, v1) = versions_at(base_sha))
     group = something(opt("group"), "packages"); sha = something(opt("sha"), "")
     (length(args) == 2 && expected !== nothing) ||
-        (println(stderr, "usage: julia report.jl CELLS OUT --expected N [--group G] [--sha SHA] [--baseline FILE] [--base-version V0 --head-version V1]"); return 2)
+        (println(stderr, "usage: julia report.jl CELLS OUT --expected N [--group G] [--sha SHA] [--baseline FILE] [--base-version V0 --head-version V1 | --base-sha SHA]"); return 2)
     cells = read_cells(args[1])
     baseline = baseline_path === nothing || !isfile(baseline_path) ? nothing :
                get(TOML.parsefile(baseline_path), "cell", [])

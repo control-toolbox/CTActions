@@ -75,9 +75,9 @@ moves to a script. One entry point per tool, with subcommands (`release.jl statu
 helpers (`versions.jl`) of `release` and `breakage` (CTActions#160).
 
 **Exceptions, to fix.**
-- Long inline shell:
-  `breakage-suite.yml` (≈102), `release.yml` (≈98, mostly wiring around `release.jl`)
-  (CTActions#161; `update-readme.yml` is done: `scripts/update-readme`, tested).
+- Long inline shell: `release.yml` (≈98, mostly wiring around `release.jl`) (CTActions#161;
+  done: `update-readme.yml`, `scripts/update-readme`; `breakage-suite.yml`,
+  `scripts/breakage/cell.jl` and `pr.jl`).
 - `release/finish.jl` (≈410 lines) plans every phase of a release; it is the most
   likely to need splitting.
 
