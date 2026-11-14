@@ -1,8 +1,12 @@
 name: Select GPU runner
 
 # Picks the self-hosted GPU runner a job should run on: `preferred` (kkt) unless it is
-# offline, else `fallback` (occidata). Only "offline" matters: a busy `preferred` runner
-# is waited for, since a queued job on kkt still finishes before a cold occidata one.
+# offline, else `fallback` (occidata). With `when_busy: 'wait'` (the default, ci-gpu.yml)
+# only "offline" matters: a busy `preferred` runner is waited for, since a queued job on
+# kkt still finishes before a cold occidata one. With `when_busy: 'skip'`
+# (documentation.yml) a runner counts only if it is online and idle, and the output `skip`
+# says when neither is: a queued GPU pass would hold the docs of the next commits
+# (CTActions#174).
 #
 # The state of the organization's runners is read with a one-hour token minted by the
 # GitHub App ct-runners (organization permission "Self-hosted runners: read", nothing
@@ -10,6 +14,7 @@ name: Select GPU runner
 # token or the API call fails, the fallback is chosen, with a warning: slower, but it
 # never leaves a job queued for a runner that is not there.
 #
+# The decision is scripts/select-gpu/pick.sh, tested by scripts/select-gpu/test.sh.
 # The choice is made once, when this job runs; a runner that goes offline afterwards
 # leaves the job queued (the caller's timeout bounds it).
 
@@ -26,6 +31,16 @@ on:
         required: false
         default: 'occidata'
         type: string
+      when_busy:
+        description: "'wait' (default): a busy runner is waited for; 'skip': only an online and idle runner counts, else the output `skip` is 'true'"
+        required: false
+        default: 'wait'
+        type: string
+      ctactions_ref:
+        description: "Ref of CTActions whose scripts the job runs (main; a branch to test a change)"
+        required: false
+        default: main
+        type: string
     secrets:
       CT_RUNNERS_CLIENT_ID:
         required: false
@@ -33,8 +48,11 @@ on:
         required: false
     outputs:
       runner:
-        description: "The chosen runner label, e.g. 'kkt'"
+        description: "The chosen runner label, e.g. 'kkt'; empty when `skip` is 'true'"
         value: ${{ jobs.select.outputs.runner }}
+      skip:
+        description: "'true' when, with `when_busy: 'skip'`, no runner is online and idle; 'false' otherwise"
+        value: ${{ jobs.select.outputs.skip }}
       runs_on_matrix:
         description: "For ci.yml's `runs_on`: one self-hosted runner, e.g. '[[\"kkt\"]]'"
         value: ${{ jobs.select.outputs.runs_on_matrix }}
@@ -52,9 +70,16 @@ jobs:
     timeout-minutes: 5
     outputs:
       runner: ${{ steps.pick.outputs.runner }}
+      skip: ${{ steps.pick.outputs.skip }}
       runs_on_matrix: ${{ steps.pick.outputs.runs_on_matrix }}
       runs_on_labels: ${{ steps.pick.outputs.runs_on_labels }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: control-toolbox/CTActions
+          ref: ${{ inputs.ctactions_ref }}
+          path: .ctactions
+
       # continue-on-error: a missing or revoked key must not fail the job, the fallback
       # is the answer then (see the warning of the next step).
       - name: Mint a runners-read token (ct-runners App)
@@ -67,30 +92,42 @@ jobs:
           owner: ${{ github.repository_owner }}
           permission-organization-self-hosted-runners: read
 
+      - name: Read the state of the runners
+        id: state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          ORG: ${{ github.repository_owner }}
+          FALLBACK: ${{ inputs.fallback }}
+        run: |
+          set -uo pipefail
+          runners=""
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::warning::No ct-runners token (secrets CT_RUNNERS_* missing, or the key was rejected): cannot read the state of the runners, using '$FALLBACK'"
+          elif ! runners=$(gh api "orgs/$ORG/actions/runners" --paginate \
+                 --jq '.runners[] | {labels: [.labels[].name], status, busy}' 2>"$RUNNER_TEMP/err" | jq -sc .); then
+            echo "::warning::Could not list the runners of $ORG ($(head -c 200 "$RUNNER_TEMP/err")): is the ct-runners App installed on this organization with 'Self-hosted runners: read'? Using '$FALLBACK'"
+            runners=""
+          fi
+          echo "runners=$runners" >> "$GITHUB_OUTPUT"
+
       - name: Pick the runner
         id: pick
         shell: bash
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
           PREFERRED: ${{ inputs.preferred }}
           FALLBACK: ${{ inputs.fallback }}
-          ORG: ${{ github.repository_owner }}
+          WHEN_BUSY: ${{ inputs.when_busy }}
+          RUNNERS: ${{ steps.state.outputs.runners }}
         run: |
-          set -uo pipefail
-          chosen="$FALLBACK"
-          if [[ -z "$GH_TOKEN" ]]; then
-            echo "::warning::No ct-runners token (secrets CT_RUNNERS_* missing, or the key was rejected): cannot read the state of '$PREFERRED', using '$FALLBACK'"
-          elif ! states=$(gh api "orgs/$ORG/actions/runners" --paginate \
-                 --jq ".runners[] | select(any(.labels[]; .name == \"$PREFERRED\")) | .status" 2>"$RUNNER_TEMP/err"); then
-            echo "::warning::Could not list the runners of $ORG ($(head -c 200 "$RUNNER_TEMP/err")): is the ct-runners App installed on this organization with 'Self-hosted runners: read'? Using '$FALLBACK'"
-          elif grep -qx online <<<"$states"; then
-            chosen="$PREFERRED"
-          else
-            echo "::notice::'$PREFERRED' is offline: using '$FALLBACK'"
-          fi
-          echo "Chosen GPU runner: $chosen"
+          set -euo pipefail
+          result=$(bash .ctactions/scripts/select-gpu/pick.sh)
+          runner=$(sed -n 's/^runner=//p' <<< "$result")
+          skip=$(sed -n 's/^skip=//p' <<< "$result")
+          echo "::notice::$(sed -n 's/^reason=//p' <<< "$result")"
           {
-            echo "runner=$chosen"
-            echo "runs_on_matrix=[[\"$chosen\"]]"
-            echo "runs_on_labels=[\"$chosen\"]"
+            echo "runner=$runner"
+            echo "skip=$skip"
+            echo "runs_on_matrix=[[\"$runner\"]]"
+            echo "runs_on_labels=[\"$runner\"]"
           } >> "$GITHUB_OUTPUT"

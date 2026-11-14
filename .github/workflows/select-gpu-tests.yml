@@ -1,0 +1,29 @@
+name: Select GPU runner tests
+
+# Self-test of select-gpu-runner.yml (docs/workflows/select-gpu-runner.md): the tests of
+# its decision, which runner or none (scripts/select-gpu/test.sh).
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/select-gpu-runner.yml'
+      - '.github/workflows/select-gpu-tests.yml'
+      - 'scripts/select-gpu/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/select-gpu-runner.yml'
+      - '.github/workflows/select-gpu-tests.yml'
+      - 'scripts/select-gpu/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - run: bash scripts/select-gpu/test.sh

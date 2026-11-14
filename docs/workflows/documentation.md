@@ -107,10 +107,14 @@ move to `gpu_runner: 'auto'`.
 ### Choosing the GPU runner
 
 `gpu_runner: 'auto'` adds a job `select-gpu` between `build` and `build-gpu`
-([`select-gpu-runner.yml`](select-gpu-runner.md)): `kkt` unless it is offline, else
-`occidata`. Only *offline* matters: a busy `kkt` is waited for. The caller passes the
-secrets `CT_RUNNERS_CLIENT_ID` and `CT_RUNNERS_PRIVATE_KEY`; without them the fallback is used. Size `gpu_timeout_minutes`
-for the fallback (a cold `occidata` build takes ~38 min).
+([`select-gpu-runner.yml`](select-gpu-runner.md), `when_busy: 'skip'`): `kkt` if it is
+online and idle, else `occidata` if it is online and idle, else **no GPU pass** for this
+run: the site published by `build` stays, as when the pass fails. A pass is not queued for
+a busy runner, since a queued pass holds the concurrency group of the caller (see
+[ordering](#ordering-the-deployments)) and the runs of the next commits would wait for it
+(CTActions#174). The caller passes the secrets `CT_RUNNERS_CLIENT_ID` and
+`CT_RUNNERS_PRIVATE_KEY`; without them the fallback is used, and waited for. Size
+`gpu_timeout_minutes` for the fallback (a cold `occidata` build takes ~38 min).
 
 ### Ordering the deployments
 
@@ -129,6 +133,15 @@ While a run is in progress, GitHub keeps only the newest pending run of the grou
 burst of merges builds the first and the last commit. Tags carry their own ref and never
 wait for `main`. Queuing rather than cancelling on `main` avoids killing a Julia process
 on the self-hosted runner (see [Labels](../conventions/labels.md#the-types-list-without-opened)).
+
+The group is held by the whole run, GPU pass included. A pass queued for a busy runner
+would therefore make the next runs wait, their CPU `build` too, possibly for hours (a
+queued job has no timeout of its own). That is why `select-gpu` skips the pass when no
+GPU runner is online and idle ([choosing the GPU runner](#choosing-the-gpu-runner)). A run
+that is stuck anyway (a runner taken between the choice and the start of the pass) can be
+cancelled by hand: its `build-gpu` has not started, so no process is killed. A queued job
+may ignore `gh run cancel`; `gh api -X POST repos/<repo>/actions/runs/<id>/force-cancel`
+ends it.
 
 ## Superseded runs
 

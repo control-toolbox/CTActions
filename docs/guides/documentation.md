@@ -38,10 +38,10 @@ rebuilds with the preview. The preview is removed once the pull request is close
 ## Docs with real GPU output
 
 OptimalControl.jl and CTSolvers.jl publish examples run on a GPU. Their `Documentation.yml`
-sets `gpu_runner` (`'auto'`: `kkt` unless offline, else `occidata`): on `main` and tags,
-after the normal build has **already published**, a second job rebuilds on the GPU runner
-and redeploys. If it fails or waits too long, the published site stays. Never on a pull
-request. Such a caller also sets a `concurrency` group per ref, so that an older GPU pass
+sets `gpu_runner` (`'auto'`: `kkt` if online and idle, else `occidata` if online and idle,
+else no GPU pass for that run): on `main` and tags, after the normal build has **already
+published**, a second job rebuilds on the GPU runner and redeploys. If it fails, waits too
+long or finds no idle runner, the published site stays. Never on a pull request. Such a caller also sets a `concurrency` group per ref, so that an older GPU pass
 never redeploys over a newer build ([ordering the deployments](../workflows/documentation.md#ordering-the-deployments)).
 
 ## Setting up a package

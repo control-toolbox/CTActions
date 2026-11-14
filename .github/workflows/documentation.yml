@@ -19,7 +19,7 @@ on:
       # long SLURM queue (self-hosted GPU boxes are not always immediately
       # available) the already-published site from `build` is simply left in place.
       gpu_runner:
-        description: "Self-hosted GPU runner labels for a docs-build upgrade pass (JSON array, e.g. '[\"occidata\"]'), or 'auto': kkt unless it is offline, else occidata (needs the CT_RUNNERS_* secrets). Empty (default) disables the pass entirely."
+        description: "Self-hosted GPU runner labels for a docs-build upgrade pass (JSON array, e.g. '[\"occidata\"]'), or 'auto': kkt if online and idle, else occidata if online and idle, else no pass (needs the CT_RUNNERS_* secrets). Empty (default) disables the pass entirely."
         required: false
         default: ''
         type: string
@@ -167,9 +167,12 @@ jobs:
   # rationale. Never on the critical path of publishing: it only starts once
   # `build` has already deployed, and `continue-on-error: true` means its outcome
   # never fails the workflow either way.
-  # With `gpu_runner: 'auto'`, `select-gpu` first picks kkt unless it is offline, else
-  # occidata (select-gpu-runner.yml). Chosen once `build` is done, i.e. as late as
-  # possible, since `build` can take a while.
+  # With `gpu_runner: 'auto'`, `select-gpu` picks kkt if it is online and idle, else
+  # occidata if it is online and idle, else skips the pass (`when_busy: 'skip'`,
+  # select-gpu-runner.yml). A pass queued for a busy runner would hold the concurrency
+  # group of the caller, and the runs of the next commits, CPU build included, would wait
+  # for it (CTActions#174). Chosen once `build` is done, i.e. as late as possible, since
+  # `build` can take a while.
   select-gpu:
     needs: build
     # `!cancelled()`: `changes` is skipped on a tag or a manual run, and the default
@@ -179,18 +182,22 @@ jobs:
       !cancelled() && needs.build.result == 'success' &&
       inputs.gpu_runner == 'auto' && github.event_name != 'pull_request' && !github.event.inputs.pr
     uses: control-toolbox/CTActions/.github/workflows/select-gpu-runner.yml@main
+    with:
+      when_busy: skip
+      ctactions_ref: ${{ inputs.ctactions_ref }}
     secrets:
       CT_RUNNERS_CLIENT_ID: ${{ secrets.CT_RUNNERS_CLIENT_ID }}
       CT_RUNNERS_PRIVATE_KEY: ${{ secrets.CT_RUNNERS_PRIVATE_KEY }}
 
   build-gpu:
     # `always()`: `select-gpu` is skipped unless `gpu_runner` is 'auto', and a skipped
-    # need would skip this job too.
+    # need would skip this job too. With 'auto', `skip` is 'true' when no GPU runner is
+    # online and idle: the site published by `build` stays, as when the pass fails.
     needs: [build, select-gpu]
     if: >
       always() && needs.build.result == 'success' &&
       inputs.gpu_runner != '' && github.event_name != 'pull_request' && !github.event.inputs.pr &&
-      (inputs.gpu_runner != 'auto' || needs.select-gpu.result == 'success')
+      (inputs.gpu_runner != 'auto' || (needs.select-gpu.result == 'success' && needs.select-gpu.outputs.skip != 'true'))
     runs-on: ${{ fromJSON(inputs.gpu_runner == 'auto' && needs.select-gpu.outputs.runs_on_labels || inputs.gpu_runner) }}
     timeout-minutes: ${{ inputs.gpu_timeout_minutes }}
     continue-on-error: true
