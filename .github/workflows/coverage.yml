@@ -7,6 +7,11 @@ on:
         required: false
         default: false
         type: boolean
+      test_args:
+        description: "Arguments string forwarded to julia-runtest's test_args, as in ci.yml (e.g. an opt-in test environment the coverage must include). Empty by default (no arguments)."
+        required: false
+        type: string
+        default: ''
       ctactions_ref:
         description: "Ref of CTActions whose scripts the `changes` job runs (main; a branch to test a change)"
         required: false
@@ -75,6 +80,8 @@ jobs:
 
       # 🧱 Exécuter les tests
       - uses: julia-actions/julia-runtest@latest
+        with:
+          test_args: ${{ inputs.test_args }}
 
       # 📊 Générer les fichiers de couverture
       - uses: julia-actions/julia-processcoverage@latest

@@ -32,6 +32,7 @@ jobs:
 | Input | Default | Meaning |
 | --- | --- | --- |
 | `use_ct_registry` | `false` | Add `ct-registry` (needs `SSH_KEY`) |
+| `test_args` | `''` | Forwarded to `Pkg.test`, as in [`ci.yml`](ci.md): for instance a test environment that the default run leaves out (opt-in) and that the coverage must include |
 
 | Secret | |
 | --- | --- |
