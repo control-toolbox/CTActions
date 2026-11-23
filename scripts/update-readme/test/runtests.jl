@@ -30,6 +30,7 @@ const KW = (package="Pkg", repo="org/Pkg.jl", doc_url="https://doc.example/Pkg.j
         readme, _ = render("<!-- INCLUDE_BADGES: Release, CI License -->\n", "", "", ""; KW...)
         rows = split(readme, "\n"; keepempty=false)
         @test rows[1] == "| **Category** | **Badge** |"
+        @test rows[2] == "|:----------------------|:----------|"   # explicit alignment (SITE19)
         @test length(rows) == 5
         @test startswith(rows[3], "| **Release / Version** |")
         @test startswith(rows[4], "| **CI / Build** |")

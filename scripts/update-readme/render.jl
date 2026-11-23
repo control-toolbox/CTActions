@@ -39,7 +39,7 @@ end
 
 "The badge table for the categories named in `<!-- INCLUDE_BADGES: A,B -->`."
 function badge_table(list, package, repo, doc_url, citation)
-    rows = ["| **Category** | **Badge** |", "|-----------------------|-----------|"]
+    rows = ["| **Category** | **Badge** |", "|:----------------------|:----------|"]
     for name in split(list, r"[,\s]+"; keepempty=false)
         row = badge_row(name, package, repo, doc_url, citation)
         row === nothing || push!(rows, row)
