@@ -161,7 +161,7 @@ jobs:
         id: repo
         run: echo "name=${GITHUB_REPOSITORY#*/}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/create-github-app-token@v3.3.0
+      - uses: actions/create-github-app-token@v3.4.0
         id: app
         with:
           client-id: ${{ secrets.CT_RELEASE_CLIENT_ID }}
@@ -234,7 +234,7 @@ jobs:
         id: repo
         run: echo "name=${GITHUB_REPOSITORY#*/}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/create-github-app-token@v3.3.0
+      - uses: actions/create-github-app-token@v3.4.0
         id: app
         with:
           client-id: ${{ secrets.CT_RELEASE_CLIENT_ID }}
@@ -297,7 +297,7 @@ jobs:
           [ "$NEXT" = register-beta ] && name="$name,ct-registry"
           echo "names=$name" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/create-github-app-token@v3.3.0
+      - uses: actions/create-github-app-token@v3.4.0
         id: app
         with:
           client-id: ${{ secrets.CT_RELEASE_CLIENT_ID }}
